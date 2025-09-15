@@ -84,6 +84,23 @@ shopt -u nullglob
 # --- Logs
 [ -f "$DATA/logs/impresiones.xml" ] || echo "<impresiones/>" > "$DATA/logs/impresiones.xml"
 
+# ======================= REINTEGROS =======================
+# Si hay imágenes en el repo, semillas hacia /data (solo las faltantes)
+if [ -d "static/REINTEGROS" ]; then
+  shopt -s nullglob
+  for f in static/REINTEGROS/*.{png,PNG,jpg,JPG,jpeg,JPEG,webp,WEBP,svg,SVG}; do
+    [ -e "$f" ] || continue
+    bn="$(basename "$f")"
+    [ -f "$DATA/REINTEGROS/$bn" ] || cp "$f" "$DATA/REINTEGROS/$bn"
+  done
+  shopt -u nullglob
+fi
+
+# Enlace para servir siempre desde /data
+rm -rf static/REINTEGROS || true
+ln -s "$DATA/REINTEGROS" static/REINTEGROS
+# ==========================================================
+
 # 3) Enlaces (symlinks) para que la app SIEMPRE escriba en /data
 
 # Logs de la app
@@ -122,3 +139,4 @@ ln -s "$DATA/EXPORTS" static/EXPORTS
 echo "==> Persistencia lista. Iniciando Gunicorn…"
 # Timeout alto para generación de planillas pesadas
 exec gunicorn app:app --bind 0.0.0.0:${PORT:-10000} --workers 2 --timeout 1200
+
