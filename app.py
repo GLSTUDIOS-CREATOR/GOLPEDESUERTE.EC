@@ -707,7 +707,6 @@ def editar_usuario(nombre):
 
 
 
-# ================== IMPORTS ==================
 import os, random, csv, math, shutil, unicodedata
 from io import BytesIO, StringIO
 from datetime import datetime, date
@@ -1004,7 +1003,8 @@ def _append_log_impresion_planilla(
             total_b = ''
         add('total_boletos', total_b)
         try:
-            tp = int(math.ceil(int(total_b) / 40.0)) if total_b != '' else ''
+            # >>> CAMBIO: 40.0 → 20.0
+            tp = int(math.ceil(int(total_b) / 20.0)) if total_b != '' else ''
         except Exception:
             tp = ''
         add('total_planillas', tp)
@@ -1646,7 +1646,8 @@ def impresion():
                 desde=inicio, hasta=fin,
                 fecha_planilla=fecha_p,
                 lote_text=f"{inicio}-{fin}",
-                excedente=1 if ((fin - inicio + 1) % 40) != 0 else 0
+                # >>> CAMBIO: % 40 → % 20
+                excedente=1 if ((fin - inicio + 1) % 20) != 0 else 0
             )
         except Exception as e:
             print('[WARN] No se pudo escribir en impresiones.xml (planilla-range):', e)
@@ -1785,9 +1786,7 @@ def impresion_zip():
     return descargar_zip()
 
 # ================== MAIN ==================
-if __name__ == '__main__':
-    # debug=False evita doble ejecución del reloader
-    app.run(host='0.0.0.0', port=5000, debug=False, threaded=True)
+
 
 
 
