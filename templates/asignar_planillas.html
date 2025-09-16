@@ -56,6 +56,7 @@
     .btn{background:var(--brand);color:#fff;padding:10px 20px;border-radius:10px;font-weight:800;border:none;cursor:pointer;transition:transform .08s}
     .btn:hover{transform:translateY(-1px)}
     .btn-sec{background:#0ea5e9}
+    .btn[disabled]{opacity:.7;cursor:not-allowed}
 
     .alert{padding:12px 16px;border:1px solid #ffd0d0;color:#b72a2a;background:#ffecec;border-radius:10px;display:none;max-width:700px;margin:0 auto 12px}
     .alert.show{display:block}
@@ -63,7 +64,7 @@
     .panel{margin-top:14px;border-radius:16px;background:#f7f8fd;box-shadow:0 2px 16px #dedcf61c;padding:0}
     table{width:100%;border-collapse:separate;border-spacing:0}
     th,td{padding:14px 10px}
-    thead tr{background:#f0f0fc}
+    thead tr{background:#f0f0fc;position:sticky;top:0;z-index:1}
     tbody tr{border-bottom:1px solid #e8e7fa}
     tbody td{background:#fff;vertical-align:middle}
     .vendedor{font-weight:800}
@@ -73,13 +74,25 @@
     .pill small{opacity:.9}
     .pill .del{background:transparent;border:none;color:#fff;cursor:pointer;font-size:1.1em}
     tfoot td{background:#edeaff;font-weight:900}
+
+    /* Loading overlay */
+    .overlay{
+      position:fixed;inset:0;background:rgba(255,255,255,.65);display:none;align-items:center;justify-content:center;z-index:60
+    }
+    .overlay.show{display:flex}
+    .spinner{width:40px;height:40px;border:3px solid #c7cdfa;border-top-color:#5b6fe6;border-radius:50%;animation:spin .8s linear infinite}
+    @keyframes spin{to{transform:rotate(360deg)}}
+
+    /* Helper text under inputs */
+    .help{width:100%;text-align:center;color:#7b7a96;font-size:.9em;margin:-8px 0 8px}
+    .help strong{color:#23213b}
   </style>
 </head>
 <body>
 
 <div class="layout">
   <!-- Sidebar -->
-  <aside class="sidebar" id="sidebar">
+  <aside class="sidebar" id="sidebar" aria-label="Menú lateral de GL Bingo">
     <div class="sb-head">
       <img class="sb-logo" src="{{ url_for('static', filename='img/logo.png') }}" alt="GL Studios">
       <div class="sb-title">GL Bingo</div>
@@ -104,7 +117,7 @@
 
   <!-- Main -->
   <main>
-    <button class="toggle" id="toggleSidebar"><i class="bi bi-list"></i> Menú</button>
+    <button class="toggle" id="toggleSidebar" aria-label="Abrir menú"><i class="bi bi-list"></i> Menú</button>
 
     <div class="main-card">
       <img src="{{ url_for('static', filename='img/logo.png') }}" alt="GL Studios Logo" class="logo-gl">
@@ -112,30 +125,40 @@
       <div class="subtitle">Solo se asignan planillas de <b>boletos impresos</b> (por <b>serie</b> y <b>fecha de sorteo</b>).</div>
 
       <!-- Chips resumen por SERIE+FECHA -->
-      <div class="chips" id="chips">
+      <div class="chips" id="chips" role="status" aria-live="polite">
         <div class="chip i"><i class="bi bi-printer"></i> Impresas (serie): <span class="v" id="impresasSerie">{{ impresas_serie }}</span></div>
-        <div class="chip a"><i class="bi bi-clipboard2-check"></i> Asignadas (serie): <span class="v" id="asignadasSerie">{{ asignadas_serie }}</span></div>
+        <div class="chip a"><i class="bi bi-clipboard2-check"></i> Asignadas (serie): <span class="v" id="asignadas_serie">{{ asignadas_serie }}</span></div>
         <div class="chip b"><i class="bi bi-file-minus"></i> En blanco (serie): <span class="v" id="blancoSerie">{{ blanco_serie }}</span></div>
         <div class="chip"><i class="bi bi-grid-3x3-gap"></i> Boletos/planilla: <span class="v">{{ boletos_por_planilla }}</span></div>
       </div>
 
       <!-- Alerta -->
-      <div id="alerta" class="alert"></div>
+      <div id="alerta" class="alert" role="alert"></div>
 
       <!-- Formulario -->
-      <form class="form-row" id="form-asignar" autocomplete="off">
-        <select id="vendedor-select" name="vendedor" required>
+      <form class="form-row" id="form-asignar" autocomplete="off" novalidate>
+        <select id="vendedor-select" name="vendedor" required aria-label="Vendedor">
           <option value="">Seleccione vendedor</option>
           {% for v in vendedores %}
             <option value="{{ v.nombre }}|{{ v.apellido }}|{{ v.seudonimo }}">{{ v.nombre }} {{ v.apellido }} ({{ v.seudonimo }})</option>
           {% endfor %}
         </select>
 
-        <input type="text" name="planillas" id="planillas-input" placeholder="Planillas (ej: 1,2 o 1-5)" autocomplete="off">
+        <input type="text"
+               name="planillas"
+               id="planillas-input"
+               placeholder="Planillas (ej: 1,2 o 1-5)"
+               inputmode="numeric"
+               pattern="^[0-9,\-\s]+$"
+               title="Use números, comas y guiones (ej: 1,2,5-7)"
+               autocomplete="off"
+               aria-label="Lista de planillas a asignar">
 
-        <input type="date" name="fecha" id="fecha-input" value="{{ fecha_seleccionada }}">
+        <div class="help">Formato: <strong>1,2,5-7</strong> (se normaliza automáticamente, sin duplicados).</div>
 
-        <select id="serie-select" name="serie_archivo" required>
+        <input type="date" name="fecha" id="fecha-input" value="{{ fecha_seleccionada }}" aria-label="Fecha de sorteo">
+
+        <select id="serie-select" name="serie_archivo" required aria-label="Serie a asignar">
           {% if series_impresas|length == 0 %}
             <option value="">— Sin series impresas en {{ fecha_seleccionada }} —</option>
           {% else %}
@@ -145,21 +168,21 @@
           {% endif %}
         </select>
 
-        <button type="submit" class="btn">Asignar</button>
+        <button type="submit" class="btn" id="btn-asignar"><i class="bi bi-plus-square"></i> Asignar</button>
         <button type="button" class="btn btn-sec" onclick="location.href='/impresion'"><i class="bi bi-printer"></i> Ir a Impresión</button>
       </form>
 
       <!-- Filtros de vista -->
       <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:center;margin:8px 0 14px">
         <label>Ver día:
-          <select id="fecha-select">
+          <select id="fecha-select" aria-label="Cambiar día">
             {% for f in fechas_disponibles %}
               <option value="{{ f }}" {% if f==fecha_seleccionada %}selected{% endif %}>{{ f }}</option>
             {% endfor %}
           </select>
         </label>
         <label>Serie:
-          <select id="serie-select-view">
+          <select id="serie-select-view" aria-label="Cambiar serie">
             {% if series_impresas|length == 0 %}
               <option value="">—</option>
             {% else %}
@@ -173,42 +196,120 @@
       </div>
 
       <!-- Tabla -->
-      <div id="tabla-asignaciones" class="panel">
+      <div id="tabla-asignaciones" class="panel" aria-live="polite">
         {% include 'tabla_asignaciones.html' %}
       </div>
     </div>
   </main>
 </div>
 
+<!-- Loading overlay -->
+<div class="overlay" id="loading"><div class="spinner" aria-hidden="true"></div></div>
+
 <script>
+  // --- UI helpers ---
   const sb = document.getElementById('sidebar');
   document.getElementById('toggleSidebar')?.addEventListener('click', ()=> sb.classList.toggle('show'));
+
+  const $ = (sel)=>document.querySelector(sel);
 
   function showError(msg){
     const a = document.getElementById('alerta');
     a.textContent = msg; a.classList.add('show');
     setTimeout(()=>a.classList.remove('show'), 5000);
   }
+  function showLoading(flag){ document.getElementById('loading').classList.toggle('show', !!flag); }
 
   function updateChips(counters){
     if(!counters) return;
     document.getElementById('impresasSerie').textContent  = counters.impresas_serie ?? document.getElementById('impresasSerie').textContent;
-    document.getElementById('asignadasSerie').textContent = counters.asignadas_serie ?? document.getElementById('asignadasSerie').textContent;
+    document.getElementById('asignadas_serie').textContent = counters.asignadas_serie ?? document.getElementById('asignadas_serie').textContent;
     document.getElementById('blancoSerie').textContent    = counters.blanco_serie ?? document.getElementById('blancoSerie').textContent;
+  }
+
+  // --- Normalizador de rangos ---
+  function parsePlanillas(raw){
+    if(!raw) return [];
+    const txt = String(raw).replace(/[;|]/g, ',').replace(/–/g,'-').replace(/\s+/g,'');
+    const out = new Set();
+    for(const part of txt.split(',')){
+      if(!part) continue;
+      if(part.includes('-')){
+        const [a,b] = part.split('-').map(n=>parseInt(n,10)).filter(n=>Number.isFinite(n));
+        if(Number.isFinite(a) && Number.isFinite(b)){
+          const from = Math.min(a,b), to = Math.max(a,b);
+          for(let n=from;n<=to;n++) out.add(n);
+        }
+      }else{
+        const n = parseInt(part,10);
+        if(Number.isFinite(n)) out.add(n);
+      }
+    }
+    return Array.from(out).sort((x,y)=>x-y);
+  }
+  function compactRanges(nums){
+    if(!nums.length) return '';
+    nums = [...nums].sort((a,b)=>a-b);
+    const blocks=[];
+    let s=nums[0], p=nums[0];
+    for(let i=1;i<nums.length;i++){
+      const n=nums[i];
+      if(n===p+1){ p=n; continue; }
+      blocks.push(s===p? String(s) : `${s}-${p}`); s=n; p=n;
+    }
+    blocks.push(s===p? String(s) : `${s}-${p}`);
+    return blocks.join(',');
+  }
+
+  // Normaliza en blur
+  const planillasInput = document.getElementById('planillas-input');
+  planillasInput.addEventListener('blur', ()=>{
+    const arr = parsePlanillas(planillasInput.value);
+    planillasInput.value = compactRanges(arr);
+  });
+
+  // Pre-validación antes de enviar
+  function precheck(){
+    const vendedor = document.getElementById('vendedor-select').value;
+    const serie = document.getElementById('serie-select').value;
+    const fecha = document.getElementById('fecha-input').value;
+    if(!vendedor) { showError('Seleccione un vendedor.'); return false; }
+    if(!serie)    { showError('Seleccione una serie.'); return false; }
+    if(!fecha)    { showError('Seleccione una fecha.'); return false; }
+
+    const arr = parsePlanillas(planillasInput.value);
+    if(arr.length===0){ showError('Ingrese al menos una planilla.'); return false; }
+
+    const maxPlanillas = parseInt(document.getElementById('impresasSerie').textContent || '0', 10) || 0;
+    const fuera = arr.filter(n => n<1 || n>maxPlanillas);
+    if(fuera.length){
+      showError(`Hay planillas fuera de rango (1 a ${maxPlanillas}): ${compactRanges(fuera)}`);
+      return false;
+    }
+    return true;
   }
 
   // Submit asignación
   document.getElementById('form-asignar').addEventListener('submit', async (e)=>{
     e.preventDefault();
+    planillasInput.value = compactRanges(parsePlanillas(planillasInput.value));
+    if(!precheck()) return;
+
     const fd = new FormData(e.target);
+    const btn = document.getElementById('btn-asignar');
+    btn.disabled = true; showLoading(true);
     try{
       const r = await fetch('/asignar-planillas', {method:'POST', body:fd});
       const j = await r.json();
       if(!j.ok){ showError(j.error||'No se pudo asignar'); return; }
       document.getElementById('tabla-asignaciones').innerHTML = j.tbody;
       updateChips(j.contadores);
-      document.getElementById('planillas-input').value='';
-    }catch(err){ showError('Error de red'); }
+      planillasInput.value='';
+    }catch(err){
+      showError('Error de red al asignar.');
+    }finally{
+      btn.disabled = false; showLoading(false);
+    }
   });
 
   // Cambios de fecha/serie en la vista ⇒ recargar con QS
@@ -227,8 +328,12 @@
   document.addEventListener('click', async (e)=>{
     const btn = e.target.closest('.del');
     if(!btn) return;
-    const row = btn.closest('.pill');
-    btn.disabled = true;
+
+    const num = btn.dataset.numero;
+    const vend = btn.dataset.seudonimo || (btn.dataset.nombre||'') + ' ' + (btn.dataset.apellido||'');
+    if(!confirm(`¿Eliminar la planilla #${num} asignada a ${vend}?`)) return;
+
+    btn.disabled = true; showLoading(true);
     try{
       const res = await fetch('/eliminar_planilla', {
         method:'POST',
@@ -246,9 +351,14 @@
       if(j.ok){
         document.getElementById('tabla-asignaciones').innerHTML = j.tbody;
         updateChips(j.contadores);
+      }else{
+        showError(j.error || 'No se pudo eliminar.');
       }
-    }catch(_){ showError('No se pudo eliminar'); }
-    finally{ btn.disabled = false; }
+    }catch(_){
+      showError('Error de red al eliminar.');
+    }finally{
+      btn.disabled = false; showLoading(false);
+    }
   });
 </script>
 </body>
