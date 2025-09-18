@@ -1,6 +1,6 @@
 <?xml version='1.0' encoding='utf-8'?>
 <figuras>
-  <figura nombre="5TA LINEA" fecha="2025-09-18 02:04:51" centro_bloqueado="1">
+  <figura nombre="5TA LINEA" fecha="2025-09-18 02:11:24" centro_bloqueado="1">
     <celda idx="1" color="#FFFFFF" pos="B1" />
     <celda idx="2" color="#FFFFFF" pos="I1" />
     <celda idx="3" color="#FFFFFF" pos="N1" />
