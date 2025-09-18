@@ -1,2 +1,30 @@
 <?xml version='1.0' encoding='utf-8'?>
-<figuras />
+<figuras>
+  <figura nombre="5TA LINEA" fecha="2025-09-18 02:04:51" centro_bloqueado="1">
+    <celda idx="1" color="#FFFFFF" pos="B1" />
+    <celda idx="2" color="#FFFFFF" pos="I1" />
+    <celda idx="3" color="#FFFFFF" pos="N1" />
+    <celda idx="4" color="#FFFFFF" pos="G1" />
+    <celda idx="5" color="#FFFFFF" pos="O1" />
+    <celda idx="6" color="#FFFFFF" pos="B2" />
+    <celda idx="7" color="#FFFFFF" pos="I2" />
+    <celda idx="8" color="#FFFFFF" pos="N2" />
+    <celda idx="9" color="#FFFFFF" pos="G2" />
+    <celda idx="10" color="#FFFFFF" pos="O2" />
+    <celda idx="11" color="#FFFFFF" pos="B3" />
+    <celda idx="12" color="#FFFFFF" pos="I3" />
+    <celda idx="13" color="#FFFFFF" pos="N3" />
+    <celda idx="14" color="#FFFFFF" pos="G3" />
+    <celda idx="15" color="#FFFFFF" pos="O3" />
+    <celda idx="16" color="#FFFFFF" pos="B4" />
+    <celda idx="17" color="#FFFFFF" pos="I4" />
+    <celda idx="18" color="#FFFFFF" pos="N4" />
+    <celda idx="19" color="#FFFFFF" pos="G4" />
+    <celda idx="20" color="#FFFFFF" pos="O4" />
+    <celda idx="21" color="#FF0000" pos="B5" />
+    <celda idx="22" color="#FF0000" pos="I5" />
+    <celda idx="23" color="#FF0000" pos="N5" />
+    <celda idx="24" color="#FF0000" pos="G5" />
+    <celda idx="25" color="#FF0000" pos="O5" />
+  </figura>
+</figuras>

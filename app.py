@@ -5669,6 +5669,357 @@ def api_vendedores_ranking():
     return jsonify(ok=True, items=sorted(agg.values(), key=lambda x: (-x["vendidos"], x["devueltos"])))
 
 
+
+
+
+#JUEGO #
+
+# =========================== #JUEGO (Blueprint) ===========================
+# Pega esto DESPUÉS de crear 'app = Flask(__name__)'
+from flask import Blueprint, render_template, jsonify, request, redirect, url_for, session
+import os, json, xml.etree.ElementTree as ET
+from datetime import datetime, date
+
+juego_bp = Blueprint("juego", __name__, url_prefix="/juego")
+
+# Rutas de archivos (en static/db)
+_BASE_DIR   = os.path.dirname(os.path.abspath(__file__))
+_STATIC_DIR = os.path.join(_BASE_DIR, "static")
+_DB_DIR     = os.path.join(_STATIC_DIR, "db")
+_XML_PATH   = os.path.join(_DB_DIR, "datos_bingo.xml")
+_HIST_PATH  = os.path.join(_DB_DIR, "historial.json")
+os.makedirs(_DB_DIR, exist_ok=True)
+
+# ---- Helpers (prefijo _jg_ para no chocar con otros) ----
+def _jg_hist_read():
+    try:
+        with open(_HIST_PATH, "r", encoding="utf-8") as f:
+            d = json.load(f)
+        return [int(x) for x in d.get("stack", []) if 1 <= int(x) <= 75]
+    except Exception:
+        return []
+
+def _jg_hist_write(stack):
+    with open(_HIST_PATH, "w", encoding="utf-8") as f:
+        json.dump({"stack": [int(x) for x in stack], "ts": datetime.utcnow().isoformat()},
+                  f, ensure_ascii=False, indent=2)
+
+def _jg_ensure_xml_base():
+    if not os.path.exists(_XML_PATH):
+        root = ET.Element("bingo")
+        balotas = ET.SubElement(root, "balotas")
+        for n in range(1, 76):
+            ET.SubElement(balotas, "balota", numero=str(n), estado="", ultimo="")
+        ET.SubElement(root, "ultimos5").text = ""
+        ET.SubElement(root, "totalMarcadas").text = "0"
+        ET.SubElement(root, "ultimoMarcado").text = ""
+        ET.ElementTree(root).write(_XML_PATH, encoding="utf-8", xml_declaration=True)
+
+def _jg_xml_write_from_stack(stack):
+    _jg_ensure_xml_base()
+    tree = ET.parse(_XML_PATH); root = tree.getroot()
+    balotas_el = root.find("balotas")
+    marked = set(int(x) for x in stack)
+    last = stack[-1] if stack else None
+
+    for b in balotas_el.findall("balota"):
+        b.set("estado", ""); b.set("ultimo", "")
+    for b in balotas_el.findall("balota"):
+        n = int(b.get("numero"))
+        if n in marked:
+            b.set("estado", str(n))
+        if n == 1:
+            b.set("ultimo", str(last) if last is not None else "")
+
+    root.find("ultimos5").text = ",".join(str(x) for x in stack[-5:]) if stack else ""
+    root.find("totalMarcadas").text = str(len(marked))
+    root.find("ultimoMarcado").text = (str(last) if last is not None else "")
+    tree.write(_XML_PATH, encoding="utf-8", xml_declaration=True)
+
+def _jg_ensure_files():
+    if not os.path.exists(_HIST_PATH):
+        _jg_hist_write([])
+    _jg_ensure_xml_base()
+
+# ---------------- VISTAS / API DEL JUEGO (todas bajo /juego) ----------------
+@juego_bp.route("/")
+def juego_ui():
+    _jg_ensure_files()
+    # Si tu app usa sesión, respétala:
+    if 'usuario' in session or not globals().get("require_session"):
+        return render_template("juego.html")  # usa tu plantilla
+    return redirect(url_for("login"))
+
+@juego_bp.get("/estado.json")
+def juego_estado_json():
+    _jg_ensure_files()
+    s = _jg_hist_read()
+    return jsonify(ok=True, stack=s, last=(s[-1] if s else None), total=len(s), ultimos5=s[-5:])
+
+@juego_bp.post("/marcar")
+def juego_marcar():
+    _jg_ensure_files()
+    data = request.get_json(silent=True) or {}
+    numero = str(data.get("numero","")).strip()
+    if not numero.isdigit():
+        return jsonify(success=False, error="Número inválido"), 400
+    n = int(numero)
+    if n < 1 or n > 75:
+        return jsonify(success=False, error="Rango 1–75"), 400
+    stack = _jg_hist_read()
+    if n not in stack:                  # NO alternar con clic
+        stack.append(n)
+        _jg_hist_write(stack)
+        _jg_xml_write_from_stack(stack)
+    return jsonify(success=True, stack=stack)
+
+@juego_bp.post("/reversa")
+def juego_reversa():
+    _jg_ensure_files()
+    data = request.get_json(silent=True) or {}
+    stack = _jg_hist_read()
+    if str(data.get("all","")).lower() in ("1","true","si","sí","yes"):
+        stack = []
+    else:
+        try: k = int(data.get("k", 1))
+        except Exception: k = 1
+        k = max(1, min(k, len(stack)))
+        stack = stack[:-k]
+    _jg_hist_write(stack)
+    _jg_xml_write_from_stack(stack)
+    return jsonify(success=True, stack=stack)
+
+@juego_bp.post("/reset")
+def juego_reset():
+    _jg_ensure_files()
+    _jg_hist_write([]); _jg_xml_write_from_stack([])
+    return jsonify(success=True)
+
+@juego_bp.post("/activar_stinger")
+def juego_activar_stinger():
+    _jg_ensure_files()
+    data = request.get_json(silent=True) or {}
+    numero = str(data.get("numero","")).strip()
+    if not numero:
+        return jsonify(success=False, error="numero requerido"), 400
+    tree = ET.parse(_XML_PATH); root = tree.getroot()
+    st = root.find("stinger") or ET.SubElement(root, "stinger")
+    st.text = numero
+    tree.write(_XML_PATH, encoding="utf-8", xml_declaration=True)
+    return jsonify(success=True)
+
+# ===================== Figuras del sorteo (por fecha) ======================
+
+# Archivos/ubicaciones
+_FIGS_DEFAULT_XML   = os.path.join(_DB_DIR, "figuras_del_dia.xml")
+_FIGS_DATED_DIR     = os.path.join(_DB_DIR, "figuras")     # opcional: /static/db/figuras/AAAA-MM-DD.xml
+_FIGS_ESTADOS_JSON  = os.path.join(_DB_DIR, "figuras_estado.json")
+_SORTEO_JSON_CANDID = [
+    os.path.join(_DB_DIR, "sorteo.json"),
+    os.path.join(_DB_DIR, "config_sorteo.json"),
+]
+
+def _jg_json_read(path):
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return None
+
+def _jg_estados_load():
+    d = _jg_json_read(_FIGS_ESTADOS_JSON)
+    return d if isinstance(d, dict) else {}
+
+def _jg_estados_save(data: dict):
+    os.makedirs(_DB_DIR, exist_ok=True)
+    with open(_FIGS_ESTADOS_JSON, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
+def _jg_get_sorteo_fecha() -> str:
+    """Obtiene fecha de sorteo desde JSON conocidos; acepta 'DD/MM/YYYY' o 'YYYY-MM-DD'. Si no hay, hoy."""
+    def _to_iso(s: str) -> str:
+        s = (s or "").strip()
+        if not s:
+            return ""
+        if "/" in s:  # DD/MM/YYYY
+            try:
+                d, m, y = s.split("/")
+                return f"{y}-{int(m):02d}-{int(d):02d}"
+            except Exception:
+                pass
+        return s  # ya viene ISO o formato similar
+
+    for p in _SORTEO_JSON_CANDID:
+        js = _jg_json_read(p)
+        if isinstance(js, dict):
+            for k in ("fecha", "fecha_sorteo", "date"):
+                if js.get(k):
+                    iso = _to_iso(str(js[k]))
+                    if iso:
+                        return iso
+    return date.today().isoformat()
+
+def _jg_pick_figuras_xml(fecha: str) -> str:
+    """
+    Busca XML de figuras en varios lugares conocidos, en este orden:
+      1) static/db/figuras/YYYY-MM-DD.xml
+      2) static/db/figuras_del_dia.xml
+      3) DATA/figuras/YYYY-MM-DD.xml
+      4) DATA/figuras_del_dia.xml
+      5) DATA/bingo/figuras_del_dia.xml
+    Devuelve el primero que exista.
+    """
+    candidatos = [
+        os.path.join(_DB_DIR, "figuras", f"{fecha}.xml"),
+        os.path.join(_DB_DIR, "figuras_del_dia.xml"),
+    ]
+    _DATA_DIR = os.path.join(_BASE_DIR, "DATA")
+    if os.path.isdir(_DATA_DIR):
+        candidatos += [
+            os.path.join(_DATA_DIR, "figuras", f"{fecha}.xml"),
+            os.path.join(_DATA_DIR, "figuras_del_dia.xml"),
+            os.path.join(_DATA_DIR, "bingo", "figuras_del_dia.xml"),
+        ]
+    for path in candidatos:
+        if os.path.exists(path):
+            return path
+    return ""
+
+def _jg_load_figuras_xml(fecha: str):
+    """
+    Lee figuras de un XML: <figura nombre="..." valor="123" estado="...">...</figura>
+    Devuelve: [{nombre, valor, estado}]
+    """
+    path = _jg_pick_figuras_xml(fecha)
+    if not path:
+        return []
+    try:
+        tree = ET.parse(path); root = tree.getroot()
+        out = []
+        for f in root.findall("figura"):
+            nombre = (f.attrib.get("nombre") or "").strip()
+            valor  = f.attrib.get("valor") or f.attrib.get("premio") or "0"
+            estado = (f.attrib.get("estado") or "").strip()
+            try:
+                valor = int(valor)
+            except Exception:
+                try: valor = float(valor)
+                except Exception: valor = 0
+            if nombre:
+                out.append({"nombre": nombre, "valor": valor, "estado": estado})
+        return out
+    except Exception:
+        return []
+
+def _jg_merge_estados_por_fecha(fecha: str, figuras: list):
+    """Aplica estado guardado (figuras_estado.json) sobre el estado del XML."""
+    estados = _jg_estados_load()
+    saved = estados.get(fecha, {}) if isinstance(estados.get(fecha), dict) else {}
+    out = []
+    for it in figuras or []:
+        nombre = (it.get("nombre") or "").strip()
+        est_xml = (it.get("estado") or "").strip()
+        est_saved = (saved.get(nombre) or "").strip()
+        out.append({
+            "nombre": nombre,
+            "valor": it.get("valor", 0),
+            "estado": est_saved or est_xml or ""
+        })
+    return out
+
+# --- FECHA que usará el cliente si no manda ?fecha= ---
+@juego_bp.get("/sorteo_fecha")
+def juego_sorteo_fecha():
+    return jsonify({"fecha": _jg_get_sorteo_fecha()})
+
+# --- Figuras por fecha para el juego ---
+@juego_bp.get("/figuras-para-juego")
+def juego_figuras_para_juego():
+    fecha = (request.args.get("fecha") or "").strip() or _jg_get_sorteo_fecha()
+    figs_xml = _jg_load_figuras_xml(fecha)
+    figs     = _jg_merge_estados_por_fecha(fecha, figs_xml)
+    return jsonify({"ok": True, "fecha": fecha, "figuras": figs})
+
+# --- Guardar estado de una figura por fecha ---
+@juego_bp.post("/figura-estado")
+def juego_figura_estado():
+    data   = request.get_json(silent=True) or {}
+    fecha  = (data.get("fecha") or "").strip() or _jg_get_sorteo_fecha()
+    nombre = (data.get("nombre") or "").strip()
+    estado = (data.get("estado") or "").strip()  # 'se-quedo' | 'se-fue' | ''
+    if not nombre:
+        return jsonify({"ok": False, "error": "nombre requerido"}), 400
+    est = _jg_estados_load()
+    est.setdefault(fecha, {})
+    if estado:
+        est[fecha][nombre] = estado
+    else:
+        est[fecha].pop(nombre, None)
+    _jg_estados_save(est)
+    return jsonify({"ok": True})
+
+# ---- Compatibilidad con endpoints previos (/juego/figuras y /juego/figuras/estado) ----
+@juego_bp.get("/figuras")
+def juego_figuras_legacy():
+    """Compat: usa la fecha del sorteo por defecto."""
+    fecha = _jg_get_sorteo_fecha()
+    figs_xml = _jg_load_figuras_xml(fecha)
+    figs     = _jg_merge_estados_por_fecha(fecha, figs_xml)
+    return jsonify({"ok": True, "fecha": fecha, "figuras": figs})
+
+@juego_bp.post("/figuras/estado")
+def juego_figuras_estado_legacy():
+    """Compat: guarda estado usando la fecha del sorteo actual."""
+    data   = request.get_json(silent=True) or {}
+    nombre = (data.get("nombre") or "").strip()
+    estado = (data.get("estado") or "").strip()
+    if not nombre:
+        return jsonify({"ok": False, "error": "nombre requerido"}), 400
+    fecha = _jg_get_sorteo_fecha()
+    est = _jg_estados_load()
+    est.setdefault(fecha, {})
+    if estado:
+        est[fecha][nombre] = estado
+    else:
+        est[fecha].pop(nombre, None)
+    _jg_estados_save(est)
+    return jsonify({"ok": True, "fecha": fecha})
+
+# ---- Alias /api/* por si tu HTML usa ese prefijo (sin romper nada) ----
+@juego_bp.get("/api/figuras-para-juego")
+def _alias_api_figuras_para_juego():
+    return juego_figuras_para_juego()
+
+@juego_bp.post("/api/figura-estado")
+def _alias_api_figura_estado():
+    return juego_figura_estado()
+
+@juego_bp.get("/api/sorteo/fecha")
+def _alias_api_sorteo_fecha():
+    return juego_sorteo_fecha()
+
+# ---- Endpoint de debug para verificar la ruta real del XML de figuras ----
+@juego_bp.get("/debug/figuras-origen")
+def juego_debug_figuras_origen():
+    fecha = (request.args.get("fecha") or "").strip() or _jg_get_sorteo_fecha()
+    path = _jg_pick_figuras_xml(fecha)
+    existe = os.path.exists(path) if path else False
+    return jsonify({"fecha": fecha, "path": path or "(no encontrado)", "exists": existe})
+
+# Registrar blueprint (hazlo UNA VEZ)
+app.register_blueprint(juego_bp)
+# ======================== FIN #JUEGO (Blueprint) ============================
+
+
+
+
+# ================== FIN JUEGO ==================
+
+
+
+
+
+
 if __name__ == "__main__":
     import os
     port = int(os.environ.get("PORT", 5000))
