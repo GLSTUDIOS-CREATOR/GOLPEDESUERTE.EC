@@ -5681,9 +5681,10 @@ import os, json, xml.etree.ElementTree as ET
 from datetime import datetime, date
 import re
 
+# --------------------------- Blueprint principal ---------------------------
 juego_bp = Blueprint("juego", __name__, url_prefix="/juego")
 
-# Rutas de archivos (en static/db)
+# Rutas base
 _BASE_DIR   = os.path.dirname(os.path.abspath(__file__))
 _STATIC_DIR = os.path.join(_BASE_DIR, "static")
 _DB_DIR     = os.path.join(_STATIC_DIR, "db")
@@ -5691,7 +5692,7 @@ _XML_PATH   = os.path.join(_DB_DIR, "datos_bingo.xml")
 _HIST_PATH  = os.path.join(_DB_DIR, "historial.json")
 os.makedirs(_DB_DIR, exist_ok=True)
 
-# ---- Helpers (prefijo _jg_ para no chocar con otros) ----
+# ------------------------------- Helpers -----------------------------------
 def _jg_hist_read():
     try:
         with open(_HIST_PATH, "r", encoding="utf-8") as f:
@@ -5742,7 +5743,7 @@ def _jg_ensure_files():
         _jg_hist_write([])
     _jg_ensure_xml_base()
 
-# ---------------- VISTAS / UI JUEGO ----------------
+# ------------------------------ Vistas juego -------------------------------
 @juego_bp.route("/")
 def juego_ui():
     _jg_ensure_files()
@@ -5808,11 +5809,7 @@ def juego_activar_stinger():
     tree.write(_XML_PATH, encoding="utf-8", xml_declaration=True)
     return jsonify(success=True)
 
-# ===================== Figuras del sorteo (por fecha) ======================
-
-# Archivos/ubicaciones
-_FIGS_DEFAULT_XML   = os.path.join(_DB_DIR, "figuras_del_dia.xml")
-_FIGS_DATED_DIR     = os.path.join(_DB_DIR, "figuras")  # /static/db/figuras/AAAA-MM-DD.xml
+# ------------------------- Figuras por fecha de sorteo ----------------------
 _FIGS_ESTADOS_JSON  = os.path.join(_DB_DIR, "figuras_estado.json")
 _SORTEO_JSON_CANDID = [
     os.path.join(_DB_DIR, "sorteo.json"),
@@ -5839,7 +5836,7 @@ def _to_iso_date(s: str) -> str:
     s = (s or "").strip()
     if not s:
         return ""
-    if "/" in s:      # DD/MM/YYYY
+    if "/" in s:  # DD/MM/YYYY
         try:
             d, m, y = s.split("/")
             return f"{y}-{int(m):02d}-{int(d):02d}"
@@ -5863,14 +5860,16 @@ def _jg_pick_figuras_xml(fecha: str) -> str:
     Busca XML de figuras en varios lugares conocidos, en este orden:
       1) static/db/figuras/YYYY-MM-DD.xml
       2) static/db/figuras_del_dia.xml
-      3) DATA/figuras/YYYY-MM-DD.xml
-      4) DATA/figuras_del_dia.xml
-      5) DATA/bingo/figuras_del_dia.xml
+      3) static/db/datos_figuras.xml            <-- incluido por tus logs
+      4) DATA/figuras/YYYY-MM-DD.xml
+      5) DATA/figuras_del_dia.xml
+      6) DATA/bingo/figuras_del_dia.xml
     Devuelve el primero que exista.
     """
     candidatos = [
         os.path.join(_DB_DIR, "figuras", f"{fecha}.xml"),
         os.path.join(_DB_DIR, "figuras_del_dia.xml"),
+        os.path.join(_DB_DIR, "datos_figuras.xml"),
     ]
     _DATA_DIR = os.path.join(_BASE_DIR, "DATA")
     if os.path.isdir(_DATA_DIR):
@@ -5885,25 +5884,19 @@ def _jg_pick_figuras_xml(fecha: str) -> str:
     return ""
 
 def _parse_chip_text(txt: str):
-    """
-    Acepta 'STA LINEA — 100' o 'STA LINEA - 100' o 'STA LINEA 100' y devuelve (nombre, valor)
-    """
+    """'STA LINEA — 100' | 'STA LINEA - 100' | 'STA LINEA 100' → {'nombre','valor'}"""
     s = (txt or "").strip()
     if not s:
         return None
-    # reemplazar guiones largos/medios
     s = s.replace("—", "-").replace("–", "-")
     m = re.match(r"^(.*?)[\s\-:]+(\d+(\.\d+)?)\s*$", s)
     if m:
         nombre = m.group(1).strip()
         valor  = m.group(2)
-        try:
-            valor = int(float(valor))
-        except Exception:
-            valor = 0
+        try: valor = int(float(valor))
+        except Exception: valor = 0
         if nombre:
             return {"nombre": nombre, "valor": valor, "estado": ""}
-    # si no, todo como nombre, valor 0
     return {"nombre": s, "valor": 0, "estado": ""}
 
 def _jg_load_figuras_json_desde_sorteo(fecha: str):
@@ -5916,7 +5909,6 @@ def _jg_load_figuras_json_desde_sorteo(fecha: str):
         js = _jg_json_read(p)
         if not isinstance(js, dict):
             continue
-        # si el JSON tiene fecha distinta, igual lo usamos como fuente global
         for key in ("figuras", "figuras_personalizadas", "figuras_jugar", "figuras_del_dia"):
             arr = js.get(key)
             if not arr:
@@ -5939,10 +5931,7 @@ def _jg_load_figuras_json_desde_sorteo(fecha: str):
     return []
 
 def _jg_load_figuras(fecha: str):
-    """
-    Carga figuras desde XML (múltiples ubicaciones) o, si no hay XML, desde el JSON de sorteo.
-    """
-    # 1) XML
+    """Carga figuras desde XML (prioridad) o desde JSON de sorteo."""
     xml_path = _jg_pick_figuras_xml(fecha)
     if xml_path:
         try:
@@ -5963,11 +5952,9 @@ def _jg_load_figuras(fecha: str):
                 return out, xml_path, "xml"
         except Exception:
             pass
-    # 2) JSON sorteo
     out = _jg_load_figuras_json_desde_sorteo(fecha)
     if out:
         return out, "(sorteo.json)", "json"
-    # 3) vacío
     return [], "(no encontrado)", "none"
 
 def _jg_merge_estados_por_fecha(fecha: str, figuras: list):
@@ -5985,12 +5972,11 @@ def _jg_merge_estados_por_fecha(fecha: str, figuras: list):
         })
     return out
 
-# --- FECHA que usará el cliente si no manda ?fecha= ---
+# --------------------------- Endpoints figuras ------------------------------
 @juego_bp.get("/sorteo_fecha")
 def juego_sorteo_fecha():
     return jsonify({"fecha": _jg_get_sorteo_fecha()})
 
-# --- Figuras por fecha para el juego ---
 @juego_bp.get("/figuras-para-juego")
 def juego_figuras_para_juego():
     fecha = (request.args.get("fecha") or "").strip() or _jg_get_sorteo_fecha()
@@ -5998,7 +5984,6 @@ def juego_figuras_para_juego():
     figs = _jg_merge_estados_por_fecha(fecha, figs_raw)
     return jsonify({"ok": True, "fecha": fecha, "figuras": figs, "origen": origen, "tipo": origen_tipo})
 
-# --- Guardar estado de una figura por fecha ---
 @juego_bp.post("/figura-estado")
 def juego_figura_estado():
     data   = request.get_json(silent=True) or {}
@@ -6041,20 +6026,27 @@ def juego_figuras_estado_legacy():
     _jg_estados_save(est)
     return jsonify({"ok": True, "fecha": fecha})
 
-# ---- Alias /api/* por si tu HTML usa ese prefijo ----
-@juego_bp.get("/api/figuras-para-juego")
-def _alias_api_figuras_para_juego():
+# ----------------------- Alias /api y /sorteo/fecha ------------------------
+api_bp  = Blueprint("juego_api",  __name__, url_prefix="/api")
+flat_bp = Blueprint("juego_flat", __name__, url_prefix="/")
+
+@api_bp.get("/figuras-para-juego")
+def _api_figs():
     return juego_figuras_para_juego()
 
-@juego_bp.post("/api/figura-estado")
-def _alias_api_figura_estado():
+@api_bp.post("/figura-estado")
+def _api_fig_estado():
     return juego_figura_estado()
 
-@juego_bp.get("/api/sorteo/fecha")
-def _alias_api_sorteo_fecha():
+@api_bp.get("/sorteo/fecha")
+def _api_sorteo_fecha():
     return juego_sorteo_fecha()
 
-# ---- Endpoint de debug para verificar la ruta real ----
+@flat_bp.get("/sorteo/fecha")
+def _flat_sorteo_fecha():
+    return juego_sorteo_fecha()
+
+# --------------------------- Debug de origen -------------------------------
 @juego_bp.get("/debug/figuras-origen")
 def juego_debug_figuras_origen():
     fecha = (request.args.get("fecha") or "").strip() or _jg_get_sorteo_fecha()
@@ -6066,8 +6058,10 @@ def juego_debug_figuras_origen():
         "cant_figuras": len(figs_raw)
     })
 
-# Registrar blueprint (hazlo UNA VEZ)
+# ----------------------- Registrar blueprints (UNA VEZ) --------------------
 app.register_blueprint(juego_bp)
+app.register_blueprint(api_bp)
+app.register_blueprint(flat_bp)
 # ======================== FIN #JUEGO (Blueprint) ============================
 
 
