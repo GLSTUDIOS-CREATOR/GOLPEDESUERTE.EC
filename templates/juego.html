@@ -75,7 +75,7 @@
       border:1px solid #0001; box-shadow:0 2px 8px rgba(0,0,0,.25)}
     .ball.marked{color:#1b1202; background:radial-gradient(120% 120% at 50% 10%, #fff3cf 0%, var(--gold) 55%, #f1b938 100%);
       box-shadow:0 2px 10px rgba(0,0,0,.25), 0 0 0 2px #0002 inset, 0 0 18px 3px rgba(255,208,98,.45)}
-    .ball.last{color:#2a0c11; background:radial-gradient(120% 120% at 50% 8%, #ffd5d8 0%, var(--redSoft) 45%, var(--red) 100%)}
+    .ball.last{color:#2a0c11; background:radial-gradient(120% 120% at 50% 8%, #ffd5d8 0%, var(--redSoft) 45%, #ff1f2d 100%)}
 
     .lock{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:linear-gradient(180deg,rgba(7,12,22,.72),rgba(7,12,22,.72));border-radius:18px;backdrop-filter:blur(2px);color:#d7def1;font-weight:900;letter-spacing:.3px;font-size:20px}
     .lock .tag{background:#182747;border:1px solid #26406e;padding:10px 14px;border-radius:14px;display:flex;gap:10px;align-items:center}
@@ -116,9 +116,15 @@
     .subbar{display:flex; gap:12px; align-items:center; justify-content:space-between; margin-bottom:12px}
     .subbar-actions{display:flex; gap:8px; align-items:center}
     .spn-grid{display:grid; gap:10px; grid-template-columns: repeat(5, 1fr)}
-    .spn-cell{background:linear-gradient(#ffffff,#e9eef6); color:#0e1a2f; border:1px solid #0002; border-radius:12px; min-height:72px; display:flex; align-items:center; justify-content:center; font-weight:900; font-size:clamp(22px, 2.6vw, 34px); box-shadow:0 2px 8px rgba(0,0,0,.25); position:relative}
+    .spn-cell{background:linear-gradient(#ffffff,#e9eef6); color:#0e1a2f; border:1px solid #0002; border-radius:12px; min-height:86px; display:flex; align-items:center; justify-content:center; font-weight:900; font-size:clamp(22px, 2.6vw, 34px); box-shadow:0 2px 8px rgba(0,0,0,.25); position:relative; padding:10px}
     .spn-cell .label{position:absolute; top:6px; left:8px; font-size:11px; font-weight:800; opacity:.6}
     .spn-num{font-variant-numeric:tabular-nums; letter-spacing:.5px}
+    .spn-actions{position:absolute; bottom:8px; right:8px; display:flex; gap:6px}
+    .spn-actions .mini{border:0; border-radius:10px; padding:6px 10px; font-weight:800; cursor:pointer}
+    .mini.launch{background:#23d18b; color:#05271c}
+    .mini.lock{background:#2a1114; color:#ffb5b9; border:1px solid #7f1e26; cursor:not-allowed}
+    .spn-cell.used{opacity:.7}
+    .spn-cell.used::after{content:'🔒'; position:absolute; top:8px; right:10px; font-size:14px; opacity:.9}
 
     /* ===== VISOR FULL (20) ===== */
     .spn-full.hidden{display:none}
@@ -127,28 +133,52 @@
     .spn-title{text-align:center; font-weight:900; font-size:clamp(22px, 3vw, 36px); margin-bottom:16px; color:#8cc9ff}
     .spn-grid.large .spn-cell{min-height:92px; font-size:clamp(28px, 3.2vw, 44px)}
 
-    /* ===== PLAYER SPINNER ÚNICO ===== */
+    /* ===== PLAYER SPINNER ÚNICO (clean overlay) ===== */
     .solo.hidden{display:none}
-    .solo{position:fixed; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:18px;
-      background: radial-gradient(120% 120% at 50% 10%, #0b1530 0%, #060b18 65%, #04070f 100%)}
+    .solo{
+      position:fixed; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:18px;
+      /* Fondo transparente con degradado azul (overlay) */
+      background: radial-gradient(120% 120% at 50% 10%,
+                  rgba(18,36,64,.70) 0%,
+                  rgba(11,18,32,.40) 45%,
+                  rgba(6,11,24,.20) 70%,
+                  rgba(4,7,15,0) 100%);
+      pointer-events:auto;
+    }
     .solo .title3d{
       font-weight:900; letter-spacing:.18em; text-transform:uppercase;
-      font-size: clamp(24px, 4.2vw, 56px); color:#e8f4ff;
+      font-size: clamp(28px, 5vw, 64px); color:#e8f4ff;
       text-shadow: 0 4px 0 #3a6fb8, 0 8px 0 #274e82, 0 12px 20px rgba(0,0,0,.45);
       filter: drop-shadow(0 6px 16px rgba(23,92,200,.45));
+      margin-bottom: 8px;
     }
-    .solo .card{width:min(720px, 92vw); border-radius:22px; padding:26px 24px; border:1px solid #ffffff1a;
-      background: linear-gradient(180deg, #0f1f3f, #0b1630); box-shadow: 0 20px 60px rgba(0,0,0,.45), inset 0 0 40px #0003}
-    .solo .screen{display:flex; align-items:center; justify-content:center; height:180px; border-radius:18px;
-      background:linear-gradient(#ffffff,#e9eef6); color:#0d1a32; border:1px solid #0002; box-shadow: inset 0 0 0 2px #0001, 0 10px 30px rgba(0,0,0,.35)}
-    .solo .digits{font-variant-numeric:tabular-nums; font-weight:900; letter-spacing:.06em; font-size: clamp(62px, 10vw, 128px)}
-    .solo .toolbar{display:flex; gap:10px; justify-content:space-between; margin-top:14px; flex-wrap:wrap}
-    .solo .btnLg{border:0; border-radius:14px; padding:12px 16px; font-weight:900; cursor:pointer; box-shadow:var(--ring)}
-    .solo .gen{background:#172a4b; color:#e8eef8; border:1px solid #274e82}
-    .solo .lan{background:#23d18b; color:#05271c}
-    .solo .copy{background:#162542; color:#e8eef8; border:1px solid #ffffff20}
-    .solo .meta{display:flex; gap:10px; align-items:center; justify-content:space-between; margin-top:10px; font-weight:800; opacity:.9}
-    .solo .badgeUsed{display:inline-flex; align-items:center; gap:8px; background:#2a1114; color:#ffb5b9; border:1px solid #7f1e26; border-radius:999px; padding:8px 10px; font-weight:900}
+    .solo .card{
+      width:min(900px, 92vw); border-radius:26px; padding:22px 24px;
+      border:1px solid #ffffff26;
+      background: linear-gradient(180deg, rgba(15,31,63,.55), rgba(11,22,48,.35));
+      box-shadow: 0 20px 60px rgba(0,0,0,.45), inset 0 0 40px #0003
+    }
+    .solo .screen{
+      display:flex; flex-direction:column; align-items:center; justify-content:center;
+      min-height: 220px; border-radius:18px;
+      background:transparent; color:#e8eef8; padding:10px;
+      border:1px solid #ffffff1f;
+    }
+    .solo .digits{display:flex; gap:18px; align-items:center; justify-content:center}
+    .solo .d{
+      width:clamp(80px,10.5vw,140px); height:clamp(112px,14vw,168px);
+      display:flex; align-items:center; justify-content:center;
+      background:linear-gradient(#ffffff,#e9eef6);
+      color:#0d1a32; border:1px solid #0002; border-radius:18px;
+      font-weight:900; font-size:clamp(56px,8.4vw,128px);
+      box-shadow: inset 0 0 0 2px #0001, 0 10px 30px rgba(0,0,0,.35);
+      font-variant-numeric:tabular-nums;
+      user-select:none;
+    }
+    /* Ocultar por completo toolbar/meta en el modo limpio */
+    .solo .toolbar, .solo .meta { display:none !important; }
+    /* Área clickeable para lanzar */
+    .solo .clickhelp{margin-top:10px; font-weight:800; opacity:.7; display:none}
   </style>
 </head>
 <body>
@@ -250,7 +280,7 @@
               </div>
             </div>
             <div id="gridSpinners" class="spn-grid"></div>
-            <p class="hint" style="margin-top:10px">Sugerencia: usa “Abrir en ventana” o copia la URL para vMix.</p>
+            <p class="hint" style="margin-top:10px">Sugerencia: desde aquí puedes <b>lanzar</b> uno por uno. Si ya fue lanzado, queda bloqueado.</p>
           </div>
           <div class="modal-foot">
             <button class="btn ghost" data-close-modal>Cerrar</button>
@@ -266,14 +296,18 @@
         </div>
       </div>
 
-      <!-- PLAYER SPINNER ÚNICO -->
+      <!-- PLAYER SPINNER ÚNICO (Overlay limpio) -->
       <div id="soloSpin" class="solo hidden">
-        <div class="title3d">SPINNERS</div>
         <div class="card">
-          <div id="soloScreen" class="screen">
-            <div id="soloDigits" class="digits">••••</div>
+          <div class="screen" id="soloScreen">
+            <div class="title3d">SPINNERS</div>
+            <div id="soloDigits" class="digits" title="Click para lanzar">
+              <span class="d">0</span><span class="d">0</span><span class="d">0</span><span class="d">0</span>
+            </div>
+            <div class="clickhelp">Click / Space = Lanzar · G = Generar</div>
           </div>
-          <div class="toolbar">
+          <!-- Toolbar/meta ocultas en modo limpio (se mantienen en DOM para compatibilidad) -->
+          <div class="toolbar" style="display:none">
             <div style="display:flex;gap:8px;flex-wrap:wrap">
               <button id="btnGen" class="btnLg gen">⚙ Generar</button>
               <button id="btnLan" class="btnLg lan">🚀 Lanzar</button>
@@ -283,7 +317,7 @@
               <a id="lnkBack" href="/juego/" class="btnLg copy">↩ Volver</a>
             </div>
           </div>
-          <div class="meta">
+          <div class="meta" style="display:none">
             <div>Fecha: <b id="soloFecha">—</b></div>
             <div>Índice: <b id="soloIdx">0</b> / 20</div>
             <div id="soloUsedBadge" class="badgeUsed" style="display:none">🔒 Enviado</div>
@@ -299,9 +333,9 @@
     const $ = s => document.querySelector(s);
     const qsAll = (s,root=document)=> Array.from(root.querySelectorAll(s));
     const sleep = ms => new Promise(r=>setTimeout(r, ms));
-    const bust  = () => `&_=${Date.now()}`; // cache-buster
+    const bust  = () => `&_=${Date.now()}`;
 
-    /* =============== Juego base =============== */
+    /* ====== Juego (sin cambios) ====== */
     let running=false, timer=null, secs=0, stack=[];
     const seg=$('#seg'), tot=$('#tot'), last6El=$('#last6'), ultimoCircle=$('#ultimoCircle'),
           grid=$('#grid'), lockEl=$('#lock'), histEl=$('#hist');
@@ -366,14 +400,11 @@
       const r=await fetch('/juego/reset',{method:'POST'}); const j=await r.json();
       if(j.success){ stack=[]; render(); secs=0; updateSecondsUI(); stop(); }
     }
-    function start(){
-      if(running) return;
-      running=true; setLockedUI(false);
+    function start(){ if(running) return; running=true; setLockedUI(false);
       $('#start').disabled=true; $('#stop').disabled=false;
       timer=setInterval(()=>{ secs++; updateSecondsUI(); },1000);
     }
-    function stop(){
-      running=false; setLockedUI(true);
+    function stop(){ running=false; setLockedUI(true);
       $('#start').disabled=false; $('#stop').disabled=true;
       if(timer){clearInterval(timer); timer=null;}
     }
@@ -387,7 +418,7 @@
       await fetch('/juego/activar_stinger',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({numero:n})});
     });
 
-    /* =============== Figuras =============== */
+    /* ====== Figuras (sin cambios) ====== */
     async function resolverFecha(){
       try{ const r=await fetch('/juego/sorteo_fecha'); if(r.ok){ const j=await r.json(); if(j.fecha) return j.fecha; } }catch(_){}
       return new Date().toISOString().slice(0,10);
@@ -419,7 +450,7 @@
     }
     $('#btnRefrescarFig')?.addEventListener('click', loadFiguras);
 
-    /* =============== Spinners (20 y visor) =============== */
+    /* ====== Spinners (20 y acciones desde modal) ====== */
     const modalSpn = $('#spinnerModal'), gridSpinners=$('#gridSpinners'),
           btnSpinners=$('#btnSpinners'), btnRefreshSpn=$('#btnRefreshSpn'),
           btnOpenWindowSpn=$('#btnOpenWindowSpn'), lnkFullUrlSpn=$('#lnkFullUrlSpn');
@@ -454,167 +485,174 @@
       try{ const r2=await fetch('/juego/estado.json'+bust()); const j2=await r2.json(); if(Array.isArray(j2.spinners)) return j2.spinners.slice(0,20);}catch(_){}
       return new Array(20).fill('');
     }
-    function renderSpinnersGrid(container, values){
+
+    // persistencia compartida de usados (modal/visor)
+    function storeBase(fecha){ return `soloSpin:${fecha}`; }
+    function loadUsed(fecha){ try{ const raw = localStorage.getItem(storeBase(fecha)+':used'); if(raw) return new Set(JSON.parse(raw)); }catch(_){ } return new Set(); }
+    function saveUsed(fecha, set){ localStorage.setItem(storeBase(fecha)+':used', JSON.stringify(Array.from(set))); }
+
+    async function renderSpinnersGridWithActions(container){
+      const valores = await fetchSpinnersSafe();
+      const fecha = await resolverFecha();
+      const usados = loadUsed(fecha);
+
       container.innerHTML='';
-      values.forEach((val,idx)=>{
+      valores.forEach((val,idx)=>{
+        const i = idx; const valor = (val||'').toString().padStart(4,'•');
         const cell=document.createElement('div'); cell.className='spn-cell';
-        cell.innerHTML=`<div class="label">#${idx+1}</div><div class="spn-num">${(val||'').toString().padStart(4,'•')}</div>`;
+        if (usados.has(i)) cell.classList.add('used');
+        cell.innerHTML=
+          `<div class="label">#${i+1}</div>
+           <div class="spn-num">${valor}</div>
+           <div class="spn-actions">
+             <button class="mini ${usados.has(i)?'lock':'launch'}">${usados.has(i)?'🔒 Enviado':'🚀 Lanzar'}</button>
+           </div>`;
+        const btn = cell.querySelector('button');
+
+        btn.onclick = ()=>{
+          if (usados.has(i)){
+            const ok = confirm('Este spinner ya fue lanzado. ¿Deseas volver a lanzarlo?');
+            if (!ok) return;
+            usados.delete(i); saveUsed(fecha, usados);
+          }
+          const url = SOLO_URL + `&i=${i}`;
+          window.open(url, 'SoloSpinner', 'width=900,height=650');
+        };
+
         container.appendChild(cell);
       });
     }
-    async function loadSpinnersInto(container){ const vals=await fetchSpinnersSafe(); renderSpinnersGrid(container, vals); }
-    function openModalSpinners(){ modalSpn.classList.remove('hidden'); loadSpinnersInto(gridSpinners); }
+
+    function openModalSpinners(){ modalSpn.classList.remove('hidden'); renderSpinnersGridWithActions(gridSpinners); }
     function closeModalSpinners(){ modalSpn.classList.add('hidden'); }
     btnSpinners?.addEventListener('click', openModalSpinners);
-    btnRefreshSpn?.addEventListener('click', ()=>loadSpinnersInto(gridSpinners));
-    btnOpenWindowSpn?.addEventListener('click', ()=> window.open(VISOR20_URL,'SpinnersViewer','width=980,height=700'));
+    btnRefreshSpn?.addEventListener('click', ()=>renderSpinnersGridWithActions(gridSpinners));
+    btnOpenWindowSpn?.addEventListener('click', ()=> window.open(VISOR20_URL,'SpinnersViewer','width=1100,height=760'));
     modalSpn?.querySelectorAll('[data-close-modal]').forEach(el=> el.addEventListener('click', closeModalSpinners));
+    window.addEventListener('focus', ()=> !modalSpn.classList.contains('hidden') && renderSpinnersGridWithActions(gridSpinners));
 
-    // visor 20 en pantalla aparte (evita await suelto)
+    // Visor 20
     function isMode20(){ return new URL(location.href).searchParams.get('spinners') === '1'; }
     async function bootFull20(){
       document.querySelector('.layout')?.classList.add('hidden');
-      spnFull.classList.remove('hidden');
-      await loadSpinnersInto(spnFullGrid);
-      setInterval(()=>loadSpinnersInto(spnFullGrid), 3000);
+      $('#SpinnersFullView').classList.remove('hidden');
+      const valores = await fetchSpinnersSafe();
+      const fecha = await resolverFecha();
+      const usados = loadUsed(fecha);
+      const grid = $('#spnFullGrid'); grid.innerHTML='';
+      valores.forEach((val,idx)=>{
+        const cell=document.createElement('div'); cell.className='spn-cell';
+        if (usados.has(idx)) cell.classList.add('used');
+        cell.innerHTML=`<div class="label">#${idx+1}</div><div class="spn-num">${(val||'').toString().padStart(4,'•')}</div>`;
+        grid.appendChild(cell);
+      });
+      setTimeout(bootFull20, 3000);
     }
     if (isMode20()) bootFull20();
 
-    // abrir player único
-    $('#btnSoloSpin')?.addEventListener('click', ()=> window.open(SOLO_URL, 'SoloSpinner', 'width=820,height=560'));
+    // botón de acceso rápido al visor único (sin índice)
+    $('#btnSoloSpin')?.addEventListener('click', ()=> window.open(SOLO_URL, 'SoloSpinner', 'width=900,height=650'));
 
-    /* =============== PLAYER ÚNICO (Tambola + bloqueo) =============== */
+    /* ====== PLAYER ÚNICO (overlay limpio) ====== */
     function isSolo(){ return new URL(location.href).searchParams.get('spin') === '1'; }
-    const soloRoot = $('#soloSpin'), soloDigits = $('#soloDigits'), soloFecha = $('#soloFecha'), soloIdx = $('#soloIdx'), soloUsedBadge = $('#soloUsedBadge');
+    const soloDigits = $('#soloDigits'), soloScreen = $('#soloScreen');
     let SOLO_LIST = new Array(20).fill(''), SOLO_I=0, SOLO_USED=new Set();
 
+    const DIGS = 4;
+    function setSoloDigits(str){
+      const s = (str ?? '').padStart(DIGS, '0').slice(-DIGS);
+      const boxes = qsAll('.d', soloDigits);
+      for(let i=0;i<DIGS;i++) boxes[i].textContent = s[i];
+    }
     function kBase(fecha){ return `soloSpin:${fecha}`; }
-    function loadUsed(fecha){
-      try{ const raw = localStorage.getItem(kBase(fecha)+':used'); if(raw){ return new Set(JSON.parse(raw)); } }catch(_){}
-      return new Set();
-    }
-    function saveUsed(fecha){
-      localStorage.setItem(kBase(fecha)+':used', JSON.stringify(Array.from(SOLO_USED)));
-    }
-    function saveIdx(fecha){
-      localStorage.setItem(kBase(fecha)+':idx', String(SOLO_I));
-    }
-    function readIdx(fecha){
-      const v = parseInt(localStorage.getItem(kBase(fecha)+':idx')||'0',10);
-      return Number.isFinite(v) ? v : 0;
-    }
+    function loadUsedSolo(fecha){ try{ const raw = localStorage.getItem(kBase(fecha)+':used'); if(raw){ return new Set(JSON.parse(raw)); } }catch(_){ } return new Set(); }
+    function saveUsedSolo(fecha){ localStorage.setItem(kBase(fecha)+':used', JSON.stringify(Array.from(SOLO_USED))); }
+    function saveIdx(fecha){ localStorage.setItem(kBase(fecha)+':idx', String(SOLO_I)); }
+    function readIdx(fecha){ const v = parseInt(localStorage.getItem(kBase(fecha)+':idx')||'0',10); return Number.isFinite(v) ? v : 0; }
 
-    function formatted(i){
-      const v = (SOLO_LIST[i]||'').trim();
-      return v ? v.padStart(4,'0') : '••••';
-    }
-    function isAvailable(i){
-      const has = !!(SOLO_LIST[i]||'').trim();
-      return has && !SOLO_USED.has(i);
-    }
+    function targetForIndex(i){ const v = (SOLO_LIST[i]||'').trim(); return v ? v.padStart(4,'0') : ''; }
+    function isAvailable(i){ const has = !!targetForIndex(i); return has && !SOLO_USED.has(i); }
     function nextAvailableFrom(start){
       const n = SOLO_LIST.length;
       for(let step=0; step<n; step++){
         const j = (start + step) % n;
         if (isAvailable(j)) return j;
-      }
-      return -1; // no hay disponibles
+      } return -1;
     }
 
-    function updateSoloUI(){
-      const cur = SOLO_I >= 0 ? formatted(SOLO_I) : '—';
-      soloDigits.textContent = cur;
-      soloIdx.textContent = (SOLO_I>=0? (SOLO_I+1):0);
-      soloUsedBadge.style.display = SOLO_I>=0 && SOLO_USED.has(SOLO_I) ? 'inline-flex' : 'none';
-      // deshabilitar botones si no hay disponibles
-      const anyLeft = nextAvailableFrom(SOLO_I>=0?SOLO_I:0) !== -1;
-      $('#btnGen').disabled = !anyLeft;
-      $('#btnLan').disabled = (SOLO_I<0);
-    }
-
-    // Generar: ir al siguiente índice libre (no usado y con valor)
-    function soloGenerar(){
-      const f = soloFecha.textContent.trim();
-      const j = nextAvailableFrom((SOLO_I+1) % SOLO_LIST.length);
-      if (j === -1){
-        soloDigits.textContent = 'FIN';
-        $('#btnGen').disabled = true; $('#btnLan').disabled = true;
-        return;
-      }
-      SOLO_I = j; saveIdx(f); updateSoloUI();
-    }
-
-    // Animación tambola: avanzar número por número hasta el objetivo con easing
-    async function tambolaCountTo(targetStr){
-      // target 0..9999
-      const target = parseInt(targetStr,10);
-      let cur = Math.floor(Math.random()*10000); // arranque aleatorio
-      const steps = 70;                 // más pasos → sensación de giro
-      const minDelay = 14, maxDelay=120;// easing
+    async function rollDigitTo(el, targetDigit, extraTurns=1){
+      let cur = /^\d$/.test(el.textContent) ? parseInt(el.textContent,10) : 0;
+      const to = parseInt(targetDigit,10);
+      const steps = extraTurns*10 + ((to - cur + 10) % 10);
       for(let s=0; s<steps; s++){
-        cur = (cur + 1) % 10000;
-        const txt = cur.toString().padStart(4,'0');
-        soloDigits.textContent = txt;
-        const t = minDelay + (maxDelay-minDelay) * Math.pow(s/steps, 2); // ease-out
+        cur = (cur+1) % 10;
+        el.textContent = String(cur);
+        const t = 30 + Math.min(200, s*3);
         await sleep(t);
       }
-      // frenada fina hasta el objetivo exacto
-      while (cur !== target){
-        cur = (cur + 1) % 10000;
-        soloDigits.textContent = cur.toString().padStart(4,'0');
-        await sleep(110);
-      }
+    }
+    async function tambolaRollTo(targetStr){
+      const t = targetStr.padStart(DIGS,'0').slice(-DIGS);
+      const boxes = qsAll('.d', soloDigits);
+      for(let i=0;i<DIGS;i++){ await rollDigitTo(boxes[i], t[i], 2+i); }
+      setSoloDigits(t); // asegura que quede visible
     }
 
-    // Lanzar: animación y bloqueo del índice actual
-    async function soloLanzar(){
-      if (SOLO_I < 0) return;
-      const f = soloFecha.textContent.trim();
-      const val = (SOLO_LIST[SOLO_I]||'').trim().padStart(4,'0');
-      if (!val) return;
-      if (SOLO_USED.has(SOLO_I)) { updateSoloUI(); return; }
+    function updateSoloUI(fecha){
+      if (SOLO_I>=0 && SOLO_USED.has(SOLO_I)) setSoloDigits(targetForIndex(SOLO_I));
+      else setSoloDigits('0000');
+      saveIdx(fecha);
+    }
 
-      $('#btnGen').disabled = true; $('#btnLan').disabled = true;
-
-      await tambolaCountTo(val);  // ← animación con el número del XML
-
-      // bloquear para no repetir
-      SOLO_USED.add(SOLO_I);
-      saveUsed(f);
-
-      // badge y siguiente disponible
-      soloUsedBadge.style.display = 'inline-flex';
+    async function soloGenerar(){
+      const f = await resolverFecha();
       const next = nextAvailableFrom((SOLO_I+1) % SOLO_LIST.length);
-      SOLO_I = (next === -1) ? -1 : next;
+      if (next !== -1){ SOLO_I = next; updateSoloUI(f); }
+    }
+    async function soloLanzar(){
+      const f = await resolverFecha();
+      if (SOLO_I < 0) return;
+      const target = targetForIndex(SOLO_I);
+      if (!target) return;
+      if (SOLO_USED.has(SOLO_I)){
+        const ok = confirm('Este spinner ya fue lanzado. ¿Deseas volver a lanzarlo?');
+        if (!ok) return;
+        SOLO_USED.delete(SOLO_I); saveUsedSolo(f);
+      }
+      await tambolaRollTo(target);
+      SOLO_USED.add(SOLO_I); saveUsedSolo(f);
+      // no movemos el índice: queda el número mostrado
       saveIdx(f);
-      updateSoloUI();
     }
 
-    // UI botones y URL
-    $('#btnCopyUrl')?.addEventListener('click', ()=>{
-      const url = location.origin + location.pathname + '?spin=1';
-      navigator.clipboard?.writeText(url);
-      $('#btnCopyUrl').textContent = '✅ URL copiada'; setTimeout(()=>$('#btnCopyUrl').textContent='🔗 Copiar URL', 1600);
-    });
-    $('#btnGen')?.addEventListener('click', soloGenerar);
-    $('#btnLan')?.addEventListener('click', soloLanzar);
-
-    function isSolo(){ return new URL(location.href).searchParams.get('spin') === '1'; }
     async function bootSolo(){
-      SOLO_LIST = await fetchSpinnersSafe();              // lee de JSON/XML
-      const f = await resolverFecha(); soloFecha.textContent = f;
-      SOLO_USED = loadUsed(f);                            // indices ya usados
-      SOLO_I = readIdx(f);                                // último índice visto
-      if (!isAvailable(SOLO_I)) SOLO_I = nextAvailableFrom(SOLO_I);
-      updateSoloUI();
+      SOLO_LIST = await fetchSpinnersSafe();
+      const f = await resolverFecha();
+      SOLO_USED = loadUsedSolo(f);
+      const url = new URL(location.href);
+      const qI = parseInt(url.searchParams.get('i')||'-1',10);
+      if (Number.isFinite(qI) && qI>=0 && qI<SOLO_LIST.length){ SOLO_I = qI; }
+      else { SOLO_I = readIdx(f); if (!isAvailable(SOLO_I)) SOLO_I = nextAvailableFrom(SOLO_I); }
+      updateSoloUI(f);
+
+      // interacciones mínimas: click / Space = lanzar, G = generar
+      soloScreen.addEventListener('click', soloLanzar);
+      window.addEventListener('keydown', e=>{
+        if (e.code==='Space'){ e.preventDefault(); soloLanzar(); }
+        else if (e.key==='g' || e.key==='G'){ e.preventDefault(); soloGenerar(); }
+      });
     }
-    if (isSolo()){
+
+    /* ====== Montaje de modos ====== */
+    if (new URL(location.href).searchParams.get('spinners') === '1'){
+      // visor 20 ya se inicia en bootFull20()
+    } else if (new URL(location.href).searchParams.get('spin') === '1'){
       document.querySelector('.layout')?.classList.add('hidden');
-      soloRoot.classList.remove('hidden');
+      $('#soloSpin').classList.remove('hidden');
       bootSolo();
     }
 
-    /* ====== Boot ====== */
+    /* ====== Boot general ====== */
     setLockedUI(true);
     cargar();
     loadFiguras();
