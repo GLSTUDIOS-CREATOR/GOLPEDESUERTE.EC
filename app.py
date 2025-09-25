@@ -5030,6 +5030,16 @@ def write_vmix_reintegro(fecha, reinteg_name):
     _write_xml_both(ET.ElementTree(root), VMIX_REINTEGRO_REL)
 
 # ---------------- Rutas ----------------
+
+from flask import render_template, request
+
+@app.route("/juego/spinner_overlay")
+def spinner_overlay():
+    return render_template("spinner_overlay.html")
+
+
+
+
 @app.route("/")
 def root():
     return redirect(url_for("sorteo", fecha=date.today().isoformat()))
