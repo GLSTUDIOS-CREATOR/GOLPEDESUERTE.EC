@@ -7,20 +7,12 @@
   <style>
     :root{
       --bg:#0b1220; --panel:#0f1b33; --card:#0e182c; --ink:#e8eef8; --muted:#ffffff22;
-      --brand:#64b5ff; --gold:#ffd061;
-      --red:#ff1f2d; --redSoft:#ff6b73;
-      --ok:#23d18b; --warn:#ffb84d; --danger:#ff5364;
-      --ring:0 10px 30px rgba(0,0,0,.35);
-
+      --brand:#64b5ff; --gold:#ffd061; --red:#ff1f2d; --redSoft:#ff6b73;
+      --ok:#23d18b; --warn:#ffb84d; --danger:#ff5364; --ring:0 10px 30px rgba(0,0,0,.35);
       --pill-fs: clamp(14px, 1.5vw, 19px);
-      --pill-padY: 12px; --pill-padX: 16px;
-
-      --ball: clamp(38px, 4.3vw, 66px);
-      --ball-fs: clamp(14px, 1.65vw, 22px);
-      --chip: clamp(42px, 5.3vw, 60px);
-      --chip-fs: clamp(15px, 1.6vw, 21px);
-      --last: clamp(68px, 8.4vw, 102px);
-      --last-fs: clamp(30px, 3.8vw, 44px);
+      --ball: clamp(38px, 4.3vw, 66px); --ball-fs: clamp(14px, 1.65vw, 22px);
+      --chip: clamp(42px, 5.3vw, 60px); --chip-fs: clamp(15px, 1.6vw, 21px);
+      --last: clamp(68px, 8.4vw, 102px); --last-fs: clamp(30px, 3.8vw, 44px);
     }
     *{box-sizing:border-box}
     html,body{height:100%}
@@ -40,17 +32,16 @@
     nav li a:hover{background:#111e39}
     .logout{margin:8px;padding:10px 14px;border-radius:10px;text-decoration:none;text-align:center;color:#f3b4b4;background:#3a0e14;border:1px solid #611f29}
 
-    /* ===== CABECERA ===== */
     header{padding:20px 22px;border-bottom:1px solid #0f1d36;background:linear-gradient(180deg,#122440,#0f1b33)}
     .status{display:flex;gap:16px;flex-wrap:wrap;align-items:center;justify-content:space-between}
     .chips{display:flex;gap:16px;flex-wrap:wrap;align-items:center}
     .pill{
       display:inline-flex;align-items:center;gap:10px;
       background:#0c182e;border:1px solid var(--muted);color:#e9f0fb;border-radius:999px;
-      padding:var(--pill-padY) var(--pill-padX);font-weight:800;box-shadow:var(--ring);font-size:var(--pill-fs)
+      padding:12px 16px;font-weight:800;box-shadow:var(--ring);font-size:var(--pill-fs)
     }
     .pill a{color:#8cc9ff;text-decoration:none}
-    .pill.metric{padding: calc(var(--pill-padY) + 4px) calc(var(--pill-padX) + 6px); font-size: clamp(18px, 2.2vw, 26px); letter-spacing:.2px;}
+    .pill.metric{font-size: clamp(18px, 2.2vw, 26px); padding: 16px 20px}
 
     .last-wrap{display:flex;align-items:center;gap:16px}
     .last-ball{
@@ -64,13 +55,10 @@
 
     .last6{display:flex;gap:12px;align-items:center;background:#0c182e;border:1px solid var(--muted);
       border-radius:999px;padding:12px 16px;font-weight:800;box-shadow:var(--ring);overflow-x:auto}
-    .last6::-webkit-scrollbar{height:8px}
     .chip6{min-width:var(--chip); height:var(--chip); border-radius:999px; display:flex; align-items:center; justify-content:center; font-weight:900; font-size:var(--chip-fs);
       background:linear-gradient(#fff,#eaf0ff); color:#0e1a2f; border:1px solid #0001; box-shadow:0 2px 8px rgba(0,0,0,.25)}
-    .chip6.live{background:radial-gradient(120% 120% at 50% 8%, #ffd5d8 0%, var(--redSoft) 45%, var(--red) 100%); color:#2a0c11; box-shadow:0 2px 10px rgba(0,0,0,.25),0 0 0 2px #0002 inset,0 0 24px 6px rgba(255,31,45,.45); animation:slideIn .35s ease-out}
-    @keyframes slideIn{from{transform:translateY(-6px);opacity:.45}to{transform:none;opacity:1}}
+    .chip6.live{background:radial-gradient(120% 120% at 50% 8%, #ffd5d8 0%, var(--redSoft) 45%, var(--red) 100%); color:#2a0c11}
 
-    /* ===== CONTROLES ===== */
     .controls{display:flex;gap:12px;align-items:center;flex-wrap:wrap;padding:14px 22px}
     .btn{border:0;border-radius:12px;font-weight:900;padding:10px 14px;cursor:pointer;box-shadow:var(--ring);transition:transform .06s ease,filter .15s ease}
     .btn:active{transform:translateY(1px)}
@@ -78,26 +66,21 @@
     .ghost{background:#162542;color:#e8eef8;border:1px solid var(--muted)}
     .spacer{flex:1}
 
-    /* ===== TABLERO ===== */
     .main{padding:0 22px 26px}
     .board{position:relative;background:linear-gradient(180deg,#0f1b33,#0e182c);border:1px solid var(--muted);border-radius:18px;padding:18px;box-shadow:var(--ring)}
     .grid-wrap{overflow-x:auto}
     .grid{display:grid; gap:12px; grid-template-columns: repeat(auto-fit, minmax(var(--ball), 1fr)); min-width: 720px;}
     .ball{width:var(--ball); height:var(--ball); border-radius:999px; display:flex; align-items:center; justify-content:center;
       color:#0f1b33; background:linear-gradient(#ffffff,#e9eef6); font-weight:900; font-size:var(--ball-fs); cursor:pointer; user-select:none;
-      border:1px solid #0001; box-shadow:0 2px 8px rgba(0,0,0,.25); transition:transform .08s, box-shadow .2s, background .2s}
-    .ball:hover{transform:translateY(-1px)}
+      border:1px solid #0001; box-shadow:0 2px 8px rgba(0,0,0,.25)}
     .ball.marked{color:#1b1202; background:radial-gradient(120% 120% at 50% 10%, #fff3cf 0%, var(--gold) 55%, #f1b938 100%);
       box-shadow:0 2px 10px rgba(0,0,0,.25), 0 0 0 2px #0002 inset, 0 0 18px 3px rgba(255,208,98,.45)}
-    .ball.last{color:#2a0c11; background:radial-gradient(120% 120% at 50% 8%, #ffd5d8 0%, var(--redSoft) 45%, var(--red) 100%);
-      box-shadow:0 2px 10px rgba(0,0,0,.25), 0 0 0 2px #0002 inset, 0 0 22px 6px rgba(255,31,45,.55); animation:pulse 1s ease-out 1}
-    @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(255,31,45,.6)}100%{box-shadow:0 0 0 18px rgba(255,31,45,0)}}
+    .ball.last{color:#2a0c11; background:radial-gradient(120% 120% at 50% 8%, #ffd5d8 0%, var(--redSoft) 45%, var(--red) 100%)}
 
     .lock{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:linear-gradient(180deg,rgba(7,12,22,.72),rgba(7,12,22,.72));border-radius:18px;backdrop-filter:blur(2px);color:#d7def1;font-weight:900;letter-spacing:.3px;font-size:20px}
     .lock .tag{background:#182747;border:1px solid #26406e;padding:10px 14px;border-radius:14px;display:flex;gap:10px;align-items:center}
     .hint{margin-top:8px;opacity:.85;font-size:14px}
 
-    /* ===== FIGURAS DEL DÍA ===== */
     .figs-wrap{padding:0 22px 20px}
     .figs{background:linear-gradient(180deg,#0f1b33,#0e182c);border:1px solid var(--muted);border-radius:18px;padding:16px;box-shadow:var(--ring)}
     .figs h3{margin:0 0 12px;font-size:18px;display:flex;align-items:center;gap:10px}
@@ -110,12 +93,7 @@
     .btn-xs{border:1px solid #ffffff1f;background:#172a4b;color:#e8eef8;padding:8px 10px;border-radius:10px;font-weight:800;cursor:pointer}
     .btn-xs.ok{background:#143826;border-color:#1e7f57}
     .btn-xs.no{background:#3a1520;border-color:#7f1e26}
-    .btn-xs:active{transform:translateY(1px)}
-    /* <-- nuevo: mini toolbar para mostrar la fecha activa */
-    .fig-toolbar{display:flex;gap:8px;align-items:center;justify-content:space-between;margin:6px 0 10px}
-    .fig-toolbar .pill{padding:6px 10px;font-size:13px}
 
-    /* ===== HISTORIAL ===== */
     .history-wrap{padding:0 22px 28px}
     .history{background:linear-gradient(180deg,#0f1b33,#0e182c);border:1px solid var(--muted);border-radius:18px;padding:16px;box-shadow:var(--ring)}
     .history h3{margin:0 0 10px;font-size:16px;opacity:.9}
@@ -125,11 +103,56 @@
     .order{position:absolute; top:2px; left:4px; font-size:9px; font-weight:800; opacity:.6}
 
     @media (max-width:980px){ .layout{grid-template-columns:1fr} nav{display:none} .fig-item{grid-template-columns:1fr .6fr .6fr 1fr}}
+
+    /* ===== MODAL SPINNERS ===== */
+    .modal.hidden{display:none}
+    .modal{position:fixed; inset:0; display:grid; place-items:center; z-index:9999}
+    .modal-backdrop{position:absolute; inset:0; background:rgba(0,0,0,.6); backdrop-filter:blur(3px)}
+    .modal-card{position:relative; width:min(980px, 92vw); max-height:88vh; background:#0c182e; border:1px solid var(--muted); border-radius:16px; box-shadow:var(--ring); display:flex; flex-direction:column}
+    .modal-head{display:flex; align-items:center; justify-content:space-between; padding:12px 14px; border-bottom:1px solid var(--muted); background:#0f1b33}
+    .modal-body{padding:14px; overflow:auto}
+    .modal-foot{display:flex; justify-content:flex-end; gap:10px; padding:12px 14px; border-top:1px solid var(--muted); background:#0f1b33}
+    .iconbtn{border:0; background:#162542; color:#e8eef8; width:34px; height:34px; border-radius:10px; cursor:pointer; font-size:20px; line-height:1}
+    .subbar{display:flex; gap:12px; align-items:center; justify-content:space-between; margin-bottom:12px}
+    .subbar-actions{display:flex; gap:8px; align-items:center}
+    .spn-grid{display:grid; gap:10px; grid-template-columns: repeat(5, 1fr)}
+    .spn-cell{background:linear-gradient(#ffffff,#e9eef6); color:#0e1a2f; border:1px solid #0002; border-radius:12px; min-height:72px; display:flex; align-items:center; justify-content:center; font-weight:900; font-size:clamp(22px, 2.6vw, 34px); box-shadow:0 2px 8px rgba(0,0,0,.25); position:relative}
+    .spn-cell .label{position:absolute; top:6px; left:8px; font-size:11px; font-weight:800; opacity:.6}
+    .spn-num{font-variant-numeric:tabular-nums; letter-spacing:.5px}
+
+    /* ===== VISOR FULL (20) ===== */
+    .spn-full.hidden{display:none}
+    .spn-full{position:fixed; inset:0; background:radial-gradient(80% 80% at 50% 0%, #122440 0%, #0b1220 60%, #090f1a 100%); z-index:9998; display:flex; align-items:center; justify-content:center}
+    .spn-full-wrap{width:min(1200px, 92vw); padding:20px}
+    .spn-title{text-align:center; font-weight:900; font-size:clamp(22px, 3vw, 36px); margin-bottom:16px; color:#8cc9ff}
+    .spn-grid.large .spn-cell{min-height:92px; font-size:clamp(28px, 3.2vw, 44px)}
+
+    /* ===== PLAYER SPINNER ÚNICO ===== */
+    .solo.hidden{display:none}
+    .solo{position:fixed; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:18px;
+      background: radial-gradient(120% 120% at 50% 10%, #0b1530 0%, #060b18 65%, #04070f 100%)}
+    .solo .title3d{
+      font-weight:900; letter-spacing:.18em; text-transform:uppercase;
+      font-size: clamp(24px, 4.2vw, 56px); color:#e8f4ff;
+      text-shadow: 0 4px 0 #3a6fb8, 0 8px 0 #274e82, 0 12px 20px rgba(0,0,0,.45);
+      filter: drop-shadow(0 6px 16px rgba(23,92,200,.45));
+    }
+    .solo .card{width:min(720px, 92vw); border-radius:22px; padding:26px 24px; border:1px solid #ffffff1a;
+      background: linear-gradient(180deg, #0f1f3f, #0b1630); box-shadow: 0 20px 60px rgba(0,0,0,.45), inset 0 0 40px #0003}
+    .solo .screen{display:flex; align-items:center; justify-content:center; height:180px; border-radius:18px;
+      background:linear-gradient(#ffffff,#e9eef6); color:#0d1a32; border:1px solid #0002; box-shadow: inset 0 0 0 2px #0001, 0 10px 30px rgba(0,0,0,.35)}
+    .solo .digits{font-variant-numeric:tabular-nums; font-weight:900; letter-spacing:.06em; font-size: clamp(62px, 10vw, 128px)}
+    .solo .toolbar{display:flex; gap:10px; justify-content:space-between; margin-top:14px; flex-wrap:wrap}
+    .solo .btnLg{border:0; border-radius:14px; padding:12px 16px; font-weight:900; cursor:pointer; box-shadow:var(--ring)}
+    .solo .gen{background:#172a4b; color:#e8eef8; border:1px solid #274e82}
+    .solo .lan{background:#23d18b; color:#05271c}
+    .solo .copy{background:#162542; color:#e8eef8; border:1px solid #ffffff20}
+    .solo .meta{display:flex; gap:10px; align-items:center; justify-content:space-between; margin-top:10px; font-weight:800; opacity:.9}
+    .solo .badgeUsed{display:inline-flex; align-items:center; gap:8px; background:#2a1114; color:#ffb5b9; border:1px solid #7f1e26; border-radius:999px; padding:8px 10px; font-weight:900}
   </style>
 </head>
 <body>
   <div class="layout">
-    <!-- Sidebar -->
     <nav>
       <div class="brand">
         <img src="{{ url_for('static', filename='img/logo.png') }}" alt="">
@@ -153,21 +176,17 @@
       <a class="logout" href="{{ url_for('logout') }}">⏻ Cerrar sesión</a>
     </nav>
 
-    <!-- Main -->
     <main>
       <header>
         <div class="status">
           <div class="chips">
             <div class="pill metric">⏱ Segundos: <b id="seg">0</b></div>
             <div class="pill metric">🔢 Total: <b id="tot">0</b></div>
-
             <div class="last-wrap">
               <div class="pill">🎯 Última Balota</div>
               <div id="ultimoCircle" class="last-ball">–</div>
             </div>
-
             <div class="last6" id="last6"><span style="opacity:.85;white-space:nowrap">Últimas 6:</span></div>
-
             <div class="pill">XML: <a href="/static/db/datos_bingo.xml" target="_blank">/static/db/datos_bingo.xml</a></div>
           </div>
         </div>
@@ -178,6 +197,8 @@
         <button id="stop"  class="btn stop" disabled>⛔ FINALIZAR JUEGO</button>
         <button id="reset" class="btn reset">🔁 RESET</button>
         <div class="spacer"></div>
+        <button id="btnSpinners" class="btn ghost">🎰 Spinners</button>
+        <button id="btnSoloSpin" class="btn ghost">🎯 Spinner 1 a 1</button>
         <button id="rev1"   class="btn ghost">↩ Reversa 1</button>
         <button id="revn"   class="btn ghost">↩ Reversa N…</button>
         <button id="revall" class="btn ghost">↩ Reversa TODO</button>
@@ -188,46 +209,105 @@
           <div class="grid-wrap"><div id="grid" class="grid"></div></div>
           <div id="lock" class="lock"><div class="tag">🔒 Juego bloqueado · Presiona <b>INICIAR JUEGO</b></div></div>
         </div>
-        <div class="hint">Para corregir usa <b>Reversa</b>; el clic no desmarca. El atributo <code>ultimo</code> se guarda solo en la balota 1.</div>
+        <div class="hint">Para corregir usa <b>Reversa</b>; el clic no desmarca.</div>
       </div>
 
-      <!-- ===== FIGURAS DEL DÍA ===== -->
+      <!-- FIGURAS -->
       <div class="figs-wrap">
         <div class="figs">
           <h3>🧩 Figuras del día (en juego)</h3>
-
-          <!-- NUEVO: barra mínima mostrando la fecha activa -->
           <div class="fig-toolbar">
             <div class="pill">Fecha de sorteo: <b id="figFecha">—</b></div>
             <button class="btn" id="btnRefrescarFig">⟳ Actualizar</button>
           </div>
-          <!-- /NUEVO -->
-
-          <div id="figList" class="fig-list">
-            <!-- Se llena por JS -->
-          </div>
+          <div id="figList" class="fig-list"></div>
         </div>
       </div>
 
-      <!-- ===== HISTORIAL ===== -->
+      <!-- HISTORIAL -->
       <div class="history-wrap">
         <div class="history">
           <h3>Historial de números marcados (orden de salida)</h3>
           <div id="hist" class="history-list"></div>
         </div>
       </div>
+
+      <!-- MODAL SPINNERS 20 -->
+      <div id="spinnerModal" class="modal hidden" aria-hidden="true">
+        <div class="modal-backdrop" data-close-modal></div>
+        <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="mdlTitleSpn">
+          <div class="modal-head">
+            <h3 id="mdlTitleSpn">🎰 Spinners del día</h3>
+            <button class="iconbtn" title="Cerrar" data-close-modal>&times;</button>
+          </div>
+          <div class="modal-body">
+            <div class="subbar">
+              <div class="pill">Fuente: <b>/juego/spinners</b> (fallback: XML en /static/db)</div>
+              <div class="subbar-actions">
+                <button id="btnRefreshSpn" class="btn-xs">⟳ Actualizar</button>
+                <button id="btnOpenWindowSpn" class="btn-xs">🗔 Abrir en ventana</button>
+                <a id="lnkFullUrlSpn" class="btn-xs" target="_blank" href="#">🔗 Abrir visor (URL)</a>
+              </div>
+            </div>
+            <div id="gridSpinners" class="spn-grid"></div>
+            <p class="hint" style="margin-top:10px">Sugerencia: usa “Abrir en ventana” o copia la URL para vMix.</p>
+          </div>
+          <div class="modal-foot">
+            <button class="btn ghost" data-close-modal>Cerrar</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- VISOR FULL (20) -->
+      <div id="SpinnersFullView" class="spn-full hidden">
+        <div class="spn-full-wrap">
+          <div class="spn-title">🎰 Spinners</div>
+          <div id="spnFullGrid" class="spn-grid large"></div>
+        </div>
+      </div>
+
+      <!-- PLAYER SPINNER ÚNICO -->
+      <div id="soloSpin" class="solo hidden">
+        <div class="title3d">SPINNERS</div>
+        <div class="card">
+          <div id="soloScreen" class="screen">
+            <div id="soloDigits" class="digits">••••</div>
+          </div>
+          <div class="toolbar">
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <button id="btnGen" class="btnLg gen">⚙ Generar</button>
+              <button id="btnLan" class="btnLg lan">🚀 Lanzar</button>
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <button id="btnCopyUrl" class="btnLg copy">🔗 Copiar URL</button>
+              <a id="lnkBack" href="/juego/" class="btnLg copy">↩ Volver</a>
+            </div>
+          </div>
+          <div class="meta">
+            <div>Fecha: <b id="soloFecha">—</b></div>
+            <div>Índice: <b id="soloIdx">0</b> / 20</div>
+            <div id="soloUsedBadge" class="badgeUsed" style="display:none">🔒 Enviado</div>
+          </div>
+        </div>
+      </div>
+      <!-- /PLAYER -->
     </main>
   </div>
 
   <script>
-    /* ================== Estado anterior (juego) ================== */
-    let running=false, timer=null, secs=0, stack=[];
+    /* =============== Helpers =============== */
     const $ = s => document.querySelector(s);
+    const qsAll = (s,root=document)=> Array.from(root.querySelectorAll(s));
+    const sleep = ms => new Promise(r=>setTimeout(r, ms));
+    const bust  = () => `&_=${Date.now()}`; // cache-buster
+
+    /* =============== Juego base =============== */
+    let running=false, timer=null, secs=0, stack=[];
     const seg=$('#seg'), tot=$('#tot'), last6El=$('#last6'), ultimoCircle=$('#ultimoCircle'),
-          grid=$('#grid'), lockEl=$('#lock'), histEl=$('#hist'),
-          figListEl = $('#figList');
+          grid=$('#grid'), lockEl=$('#lock'), histEl=$('#hist');
 
     function updateSecondsUI(){ seg.textContent = String(secs); }
+    function setLockedUI(on){ lockEl.style.display = on ? 'flex' : 'none'; }
 
     function render(){
       const last = stack.at(-1);
@@ -238,16 +318,15 @@
         d.className = isMarked ? (n===last ? 'ball marked last' : 'ball marked') : 'ball';
         d.textContent=n; d.onclick=()=>marcar(n);
         grid.appendChild(d);
-        if(n===last) setTimeout(()=>d.style.animation='none', 1000);
       }
       tot.textContent = stack.length;
       ultimoCircle.textContent = last ?? '–';
 
       const ult6 = stack.slice(-6).reverse();
-      last6El.querySelectorAll('.chip6').forEach(e=>e.remove());
-      ult6.forEach((num,i)=>{
+      last6El.innerHTML = '<span style="opacity:.85;white-space:nowrap">Últimas 6:</span>';
+      ult6.forEach(num=>{
         const b=document.createElement('div');
-        b.className='chip6 live'; b.textContent=num; b.style.animationDelay=(i*0.03)+'s';
+        b.className='chip6 live'; b.textContent=num;
         last6El.appendChild(b);
       });
 
@@ -260,11 +339,11 @@
       });
     }
 
-    function setLockedUI(on){ lockEl.style.display = on ? 'flex' : 'none'; }
-
     async function cargar(){
-      const r=await fetch('/juego/estado.json'); const j=await r.json();
-      if(j.ok){ stack=(j.stack||[]).map(Number); render(); }
+      try{
+        const r=await fetch('/juego/estado.json'); const j=await r.json();
+        if(j.ok){ stack=(j.stack||[]).map(Number); render(); }
+      }catch(_){}
     }
 
     async function marcar(n){
@@ -272,11 +351,7 @@
       if(stack.includes(n)) return;
       const r=await fetch('/juego/marcar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({numero:n})});
       const j=await r.json();
-      if(j.success){
-        stack=j.stack.map(Number);
-        secs=0; updateSecondsUI();
-        render();
-      }
+      if(j.success){ stack=j.stack.map(Number); secs=0; updateSecondsUI(); render(); }
     }
     async function reversaK(k){
       const r=await fetch('/juego/reversa',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({k})});
@@ -291,7 +366,6 @@
       const r=await fetch('/juego/reset',{method:'POST'}); const j=await r.json();
       if(j.success){ stack=[]; render(); secs=0; updateSecondsUI(); stop(); }
     }
-
     function start(){
       if(running) return;
       running=true; setLockedUI(false);
@@ -303,149 +377,247 @@
       $('#start').disabled=false; $('#stop').disabled=true;
       if(timer){clearInterval(timer); timer=null;}
     }
-
-    ultimoCircle.addEventListener('click', async ()=>{
-      const n=stack.at(-1); if(!n) return;
-      await fetch('/juego/activar_stinger',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({numero:n})});
-      ultimoCircle.style.filter='brightness(1.2)'; setTimeout(()=>ultimoCircle.style.filter='',180);
-    });
-
     $('#start').onclick=start; $('#stop').onclick=stop; $('#reset').onclick=resetJuego;
     $('#rev1').onclick=()=>reversaK(1);
-    $('#revn').onclick=()=>{ const k=parseInt(prompt('¿Cuántas balotas quieres reversar?','1'),10); if(Number.isFinite(k)&&k>0) reversaK(k); };
+    $('#revn').onclick=()=>{ const k=parseInt(prompt('¿Cuántas balotas reversar?','1'),10); if(Number.isFinite(k)&&k>0) reversaK(k); };
     $('#revall').onclick=reversaAll;
 
-    /* ================== FIGURAS DEL DÍA ================== */
-    let figuras = []; // [{nombre, valor, estado}]
+    $('#ultimoCircle').addEventListener('click', async ()=>{
+      const n=stack.at(-1); if(!n) return;
+      await fetch('/juego/activar_stinger',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({numero:n})});
+    });
 
-    // NUEVO: obtiene la fecha del sorteo desde ?fecha=... o /api/sorteo/fecha, y la muestra
-    function getFechaSorteo(){
-      const u = new URL(location.href);
-      const f = u.searchParams.get('fecha');
-      if (f) return f;
-      return null; // intentaremos preguntar al backend
-    }
+    /* =============== Figuras =============== */
     async function resolverFecha(){
-      const f = getFechaSorteo();
-      if (f) return f;
+      try{ const r=await fetch('/juego/sorteo_fecha'); if(r.ok){ const j=await r.json(); if(j.fecha) return j.fecha; } }catch(_){}
+      return new Date().toISOString().slice(0,10);
+    }
+    async function loadFiguras(){
+      const fecha = await resolverFecha();
+      $('#figFecha').textContent = fecha;
       try{
-        const r = await fetch('/api/sorteo/fecha');     // si existe, la usamos
-        if(r.ok){ const j=await r.json(); if(j.fecha) return j.fecha; }
-      }catch(e){}
-      return new Date().toISOString().slice(0,10);      // fallback: hoy
+        const r = await fetch('/juego/figuras'); const j = await r.json();
+        const figs = (j.figuras||[]);
+        const el=$('#figList'); el.innerHTML='';
+        if(!figs.length){ el.innerHTML='<div class="pill" style="opacity:.85">No hay figuras cargadas.</div>'; return; }
+        figs.forEach(f=>{
+          const row=document.createElement('div'); row.className='fig-item';
+          const stay=(f.estado||'').toLowerCase()!=='se-fue';
+          row.innerHTML=`<div class="fig-name">${f.nombre}</div><div>💰 Valor: <b>${f.valor}</b></div>
+          <div><span class="badge ${stay?'ok':'no'}">${stay?'Se quedó':'Se fue'}</span></div>
+          <div style="display:flex;gap:8px">
+            <button class="btn-xs ok">Se quedó</button>
+            <button class="btn-xs no">Se fue</button>
+          </div>`;
+          const [bOk,bNo]=row.querySelectorAll('button');
+          const badge=row.querySelector('.badge');
+          bOk.onclick=async()=>{ await fetch('/juego/figuras/estado',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({nombre:f.nombre,estado:'se-quedo'})}); badge.className='badge ok'; badge.textContent='Se quedó'; };
+          bNo.onclick=async()=>{ await fetch('/juego/figuras/estado',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({nombre:f.nombre,estado:'se-fue'})});   badge.className='badge no'; badge.textContent='Se fue';   };
+          el.appendChild(row);
+        });
+      }catch(_){}
     }
-    async function mostrarFechaToolbar(){
-      const f = await resolverFecha();
-      const span = document.getElementById('figFecha');
-      if(span) span.textContent = f;
-      return f;
+    $('#btnRefrescarFig')?.addEventListener('click', loadFiguras);
+
+    /* =============== Spinners (20 y visor) =============== */
+    const modalSpn = $('#spinnerModal'), gridSpinners=$('#gridSpinners'),
+          btnSpinners=$('#btnSpinners'), btnRefreshSpn=$('#btnRefreshSpn'),
+          btnOpenWindowSpn=$('#btnOpenWindowSpn'), lnkFullUrlSpn=$('#lnkFullUrlSpn');
+    const spnFull = $('#SpinnersFullView'), spnFullGrid = $('#spnFullGrid');
+
+    const VISOR20_URL = location.origin + location.pathname + '?spinners=1';
+    const SOLO_URL    = location.origin + location.pathname + '?spin=1';
+    if (lnkFullUrlSpn) lnkFullUrlSpn.href = VISOR20_URL;
+
+    async function fetchSpinnersJSON(){
+      const r = await fetch('/juego/spinners?fmt=json'+bust());
+      if(!r.ok) throw 0;
+      const j = await r.json(); if(!Array.isArray(j.spinners)) throw 0;
+      return j.spinners.slice(0,20);
     }
-
-    function renderFiguras(){
-      figListEl.innerHTML='';
-      if(!figuras.length){
-        const empty = document.createElement('div');
-        empty.className='pill'; empty.style.opacity=.85;
-        empty.textContent='No hay figuras cargadas.';
-        figListEl.appendChild(empty); return;
-      }
-      figuras.forEach(f=>{
-        const row = document.createElement('div');
-        row.className='fig-item';
-
-        const name = document.createElement('div');
-        name.className='fig-name'; name.textContent = f.nombre;
-
-        const val  = document.createElement('div');
-        val.innerHTML = `💰 Valor: <b>${f.valor}</b>`;
-
-        const st   = document.createElement('div');
-        const badge= document.createElement('span');
-        badge.className='badge ' + (f.estado==='se-fue' ? 'no' : 'ok');
-        badge.textContent = (f.estado==='se-fue' ? 'Se fue' : 'Se quedó');
-        st.appendChild(badge);
-
-        const actions = document.createElement('div');
-        const bOk = document.createElement('button');
-        bOk.className='btn-xs ok'; bOk.textContent='Se quedó';
-        bOk.onclick = async ()=> {
-          const fecha = document.getElementById('figFecha').textContent.trim();
-          await setFiguraEstado(f.nombre, 'se-quedo', fecha, badge);
-        };
-
-        const bNo = document.createElement('button');
-        bNo.className='btn-xs no'; bNo.style.marginLeft='8px'; bNo.textContent='Se fue';
-        bNo.onclick = async ()=> {
-          const fecha = document.getElementById('figFecha').textContent.trim();
-          await setFiguraEstado(f.nombre, 'se-fue', fecha, badge);
-        };
-
-        actions.appendChild(bOk); actions.appendChild(bNo);
-
-        row.appendChild(name); row.appendChild(val); row.appendChild(st); row.appendChild(actions);
-        figListEl.appendChild(row);
+    async function fetchXML(url){
+      const r = await fetch(url + (url.includes('?')?'&':'?') + '_=' + Date.now());
+      if(!r.ok) throw 0;
+      const xml = new DOMParser().parseFromString(await r.text(), "text/xml");
+      const out=[];
+      xml.querySelectorAll('n').forEach(n=>{
+        const v = (n.getAttribute('v') || n.textContent || '').replace(/\D/g,'').slice(0,4);
+        out.push(v? v.padStart(4,'0') : '');
+      });
+      return (out.concat(Array(20).fill(''))).slice(0,20);
+    }
+    async function fetchSpinnersSafe(){
+      try{ return await fetchSpinnersJSON(); }catch(_){}
+      try{ return await fetchXML('/static/db/vmix_spinners.xml'); }catch(_){}
+      try{ return await fetchXML('/data-db/vmix_spinners.xml'); }catch(_){}
+      try{ return await fetchXML('/static/db/spinners.xml'); }catch(_){}
+      try{ const r2=await fetch('/juego/estado.json'+bust()); const j2=await r2.json(); if(Array.isArray(j2.spinners)) return j2.spinners.slice(0,20);}catch(_){}
+      return new Array(20).fill('');
+    }
+    function renderSpinnersGrid(container, values){
+      container.innerHTML='';
+      values.forEach((val,idx)=>{
+        const cell=document.createElement('div'); cell.className='spn-cell';
+        cell.innerHTML=`<div class="label">#${idx+1}</div><div class="spn-num">${(val||'').toString().padStart(4,'•')}</div>`;
+        container.appendChild(cell);
       });
     }
+    async function loadSpinnersInto(container){ const vals=await fetchSpinnersSafe(); renderSpinnersGrid(container, vals); }
+    function openModalSpinners(){ modalSpn.classList.remove('hidden'); loadSpinnersInto(gridSpinners); }
+    function closeModalSpinners(){ modalSpn.classList.add('hidden'); }
+    btnSpinners?.addEventListener('click', openModalSpinners);
+    btnRefreshSpn?.addEventListener('click', ()=>loadSpinnersInto(gridSpinners));
+    btnOpenWindowSpn?.addEventListener('click', ()=> window.open(VISOR20_URL,'SpinnersViewer','width=980,height=700'));
+    modalSpn?.querySelectorAll('[data-close-modal]').forEach(el=> el.addEventListener('click', closeModalSpinners));
 
-    async function loadFiguras(){
-      const fecha = await mostrarFechaToolbar();                       // <-- nuevo
-      try{
-        // preferimos el nuevo endpoint por fecha
-        const r = await fetch(`/api/figuras-para-juego?fecha=${encodeURIComponent(fecha)}`);
-        if(!r.ok) throw new Error('no 200');
-        const j = await r.json();
-        figuras = (j.figuras||[]).map(x=>({ nombre:x.nombre, valor:x.valor, estado:x.estado||'' }));
-      }catch(e){
-        // fallback a los endpoints antiguos si aún no creaste la API nueva
-        try{
-          const r2 = await fetch('/juego/figuras');
-          const j2 = await r2.json();
-          figuras = (j2.figuras||[]).map(x=>({ nombre:x.nombre, valor:x.valor, estado:x.estado||'' }));
-        }catch(_){
-          figuras = [
-            {nombre:'Cartón lleno', valor:300, estado:''},
-            {nombre:'Cuatro esquinas', valor:80, estado:''},
-            {nombre:'Letra T', valor:120, estado:'se-fue'}
-          ];
-        }
-      }
-      renderFiguras();
+    // visor 20 en pantalla aparte (evita await suelto)
+    function isMode20(){ return new URL(location.href).searchParams.get('spinners') === '1'; }
+    async function bootFull20(){
+      document.querySelector('.layout')?.classList.add('hidden');
+      spnFull.classList.remove('hidden');
+      await loadSpinnersInto(spnFullGrid);
+      setInterval(()=>loadSpinnersInto(spnFullGrid), 3000);
+    }
+    if (isMode20()) bootFull20();
+
+    // abrir player único
+    $('#btnSoloSpin')?.addEventListener('click', ()=> window.open(SOLO_URL, 'SoloSpinner', 'width=820,height=560'));
+
+    /* =============== PLAYER ÚNICO (Tambola + bloqueo) =============== */
+    function isSolo(){ return new URL(location.href).searchParams.get('spin') === '1'; }
+    const soloRoot = $('#soloSpin'), soloDigits = $('#soloDigits'), soloFecha = $('#soloFecha'), soloIdx = $('#soloIdx'), soloUsedBadge = $('#soloUsedBadge');
+    let SOLO_LIST = new Array(20).fill(''), SOLO_I=0, SOLO_USED=new Set();
+
+    function kBase(fecha){ return `soloSpin:${fecha}`; }
+    function loadUsed(fecha){
+      try{ const raw = localStorage.getItem(kBase(fecha)+':used'); if(raw){ return new Set(JSON.parse(raw)); } }catch(_){}
+      return new Set();
+    }
+    function saveUsed(fecha){
+      localStorage.setItem(kBase(fecha)+':used', JSON.stringify(Array.from(SOLO_USED)));
+    }
+    function saveIdx(fecha){
+      localStorage.setItem(kBase(fecha)+':idx', String(SOLO_I));
+    }
+    function readIdx(fecha){
+      const v = parseInt(localStorage.getItem(kBase(fecha)+':idx')||'0',10);
+      return Number.isFinite(v) ? v : 0;
     }
 
-    async function setFiguraEstado(nombre, estado, fecha, badgeEl){
-      // Optimista en UI
-      const i = figuras.findIndex(f=>f.nombre===nombre);
-      if(i>=0){ figuras[i].estado = estado; }
-      if(badgeEl){
-        badgeEl.className = 'badge ' + (estado==='se-fue'?'no':'ok');
-        badgeEl.textContent = (estado==='se-fue'?'Se fue':'Se quedó');
+    function formatted(i){
+      const v = (SOLO_LIST[i]||'').trim();
+      return v ? v.padStart(4,'0') : '••••';
+    }
+    function isAvailable(i){
+      const has = !!(SOLO_LIST[i]||'').trim();
+      return has && !SOLO_USED.has(i);
+    }
+    function nextAvailableFrom(start){
+      const n = SOLO_LIST.length;
+      for(let step=0; step<n; step++){
+        const j = (start + step) % n;
+        if (isAvailable(j)) return j;
       }
-      try{
-        // Preferimos guardar por fecha
-        const r = await fetch('/api/figura-estado',{
-          method:'POST', headers:{'Content-Type':'application/json'},
-          body: JSON.stringify({fecha, nombre, estado})
-        });
-        if(!r.ok) throw new Error('no 200');
-      }catch(e){
-        // fallback al endpoint anterior si aún no existe el nuevo
-        try{
-          await fetch('/juego/figuras/estado',{
-            method:'POST', headers:{'Content-Type':'application/json'},
-            body: JSON.stringify({nombre, estado})
-          });
-        }catch(_){}
+      return -1; // no hay disponibles
+    }
+
+    function updateSoloUI(){
+      const cur = SOLO_I >= 0 ? formatted(SOLO_I) : '—';
+      soloDigits.textContent = cur;
+      soloIdx.textContent = (SOLO_I>=0? (SOLO_I+1):0);
+      soloUsedBadge.style.display = SOLO_I>=0 && SOLO_USED.has(SOLO_I) ? 'inline-flex' : 'none';
+      // deshabilitar botones si no hay disponibles
+      const anyLeft = nextAvailableFrom(SOLO_I>=0?SOLO_I:0) !== -1;
+      $('#btnGen').disabled = !anyLeft;
+      $('#btnLan').disabled = (SOLO_I<0);
+    }
+
+    // Generar: ir al siguiente índice libre (no usado y con valor)
+    function soloGenerar(){
+      const f = soloFecha.textContent.trim();
+      const j = nextAvailableFrom((SOLO_I+1) % SOLO_LIST.length);
+      if (j === -1){
+        soloDigits.textContent = 'FIN';
+        $('#btnGen').disabled = true; $('#btnLan').disabled = true;
+        return;
+      }
+      SOLO_I = j; saveIdx(f); updateSoloUI();
+    }
+
+    // Animación tambola: avanzar número por número hasta el objetivo con easing
+    async function tambolaCountTo(targetStr){
+      // target 0..9999
+      const target = parseInt(targetStr,10);
+      let cur = Math.floor(Math.random()*10000); // arranque aleatorio
+      const steps = 70;                 // más pasos → sensación de giro
+      const minDelay = 14, maxDelay=120;// easing
+      for(let s=0; s<steps; s++){
+        cur = (cur + 1) % 10000;
+        const txt = cur.toString().padStart(4,'0');
+        soloDigits.textContent = txt;
+        const t = minDelay + (maxDelay-minDelay) * Math.pow(s/steps, 2); // ease-out
+        await sleep(t);
+      }
+      // frenada fina hasta el objetivo exacto
+      while (cur !== target){
+        cur = (cur + 1) % 10000;
+        soloDigits.textContent = cur.toString().padStart(4,'0');
+        await sleep(110);
       }
     }
 
-    /* ================== BOOT ================== */
+    // Lanzar: animación y bloqueo del índice actual
+    async function soloLanzar(){
+      if (SOLO_I < 0) return;
+      const f = soloFecha.textContent.trim();
+      const val = (SOLO_LIST[SOLO_I]||'').trim().padStart(4,'0');
+      if (!val) return;
+      if (SOLO_USED.has(SOLO_I)) { updateSoloUI(); return; }
+
+      $('#btnGen').disabled = true; $('#btnLan').disabled = true;
+
+      await tambolaCountTo(val);  // ← animación con el número del XML
+
+      // bloquear para no repetir
+      SOLO_USED.add(SOLO_I);
+      saveUsed(f);
+
+      // badge y siguiente disponible
+      soloUsedBadge.style.display = 'inline-flex';
+      const next = nextAvailableFrom((SOLO_I+1) % SOLO_LIST.length);
+      SOLO_I = (next === -1) ? -1 : next;
+      saveIdx(f);
+      updateSoloUI();
+    }
+
+    // UI botones y URL
+    $('#btnCopyUrl')?.addEventListener('click', ()=>{
+      const url = location.origin + location.pathname + '?spin=1';
+      navigator.clipboard?.writeText(url);
+      $('#btnCopyUrl').textContent = '✅ URL copiada'; setTimeout(()=>$('#btnCopyUrl').textContent='🔗 Copiar URL', 1600);
+    });
+    $('#btnGen')?.addEventListener('click', soloGenerar);
+    $('#btnLan')?.addEventListener('click', soloLanzar);
+
+    function isSolo(){ return new URL(location.href).searchParams.get('spin') === '1'; }
+    async function bootSolo(){
+      SOLO_LIST = await fetchSpinnersSafe();              // lee de JSON/XML
+      const f = await resolverFecha(); soloFecha.textContent = f;
+      SOLO_USED = loadUsed(f);                            // indices ya usados
+      SOLO_I = readIdx(f);                                // último índice visto
+      if (!isAvailable(SOLO_I)) SOLO_I = nextAvailableFrom(SOLO_I);
+      updateSoloUI();
+    }
+    if (isSolo()){
+      document.querySelector('.layout')?.classList.add('hidden');
+      soloRoot.classList.remove('hidden');
+      bootSolo();
+    }
+
+    /* ====== Boot ====== */
     setLockedUI(true);
     cargar();
     loadFiguras();
-
-    // botón refrescar figuras
-    const btnRef = document.getElementById('btnRefrescarFig');
-    if (btnRef) btnRef.addEventListener('click', loadFiguras);
   </script>
 </body>
 </html>

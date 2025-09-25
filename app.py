@@ -4632,22 +4632,13 @@ def pagos_descargar_recibo(rid):
 
 
 
-
-
-
-# -*- coding: utf-8 -*-
-# GL Bingo - Sorteo → genera múltiples XML separados para vMix
+#SORTEOS CODIGOS GENERALES #
 
 # -*- coding: utf-8 -*-
-# GL Bingo — Sorteo (solo XML + HTML)
-# -*- coding: utf-8 -*-
-# GL Bingo — Sorteo (solo XML + HTML)
-# -*- coding: utf-8 -*-
-# Sorteo (solo XML + HTML) — GL Bingo
-# -*- coding: utf-8 -*-
-# GL Bingo — Sorteo + XMLs vMix (presentación y tablero 2 columnas, orden fijo B1..O5)
+# GL Bingo — Sorteo + XMLs vMix (ventas, figuras, spinners, reintegro)
+# Versión unificada: guarda XMLs en DATA/static/db y espejo en static/db
 
-from flask import Flask, render_template, request, jsonify, redirect, url_for
+from flask import Flask, render_template, request, jsonify, redirect, url_for, send_from_directory
 import os, re
 from datetime import date, datetime
 import xml.etree.ElementTree as ET
@@ -4655,36 +4646,74 @@ import xml.etree.ElementTree as ET
 
 app.secret_key = "glbingo"
 
-BASE_DIR   = os.path.dirname(os.path.abspath(__file__))
-STATIC_DIR = os.path.join(BASE_DIR, "static")
-DB_DIR     = os.path.join(STATIC_DIR, "db")
-LOGS_DIR   = os.path.join(STATIC_DIR, "LOGS")
-os.makedirs(DB_DIR, exist_ok=True)
-os.makedirs(LOGS_DIR, exist_ok=True)
+# -------------------- Paths base --------------------
+BASE_DIR    = os.path.dirname(os.path.abspath(__file__))
+STATIC_DIR  = os.path.join(BASE_DIR, "static")
+DATA_DIR    = os.path.join(BASE_DIR, "DATA")                 # carpeta de datos viva
+DB_STATIC   = os.path.join(STATIC_DIR, "db")                 # espejo servible por /static/db/...
+DB_DATA     = os.path.join(DATA_DIR, "static", "db")         # **principal** para Juego
 
+# asegurar directorios
+for d in (STATIC_DIR, DB_STATIC, DATA_DIR, DB_DATA, os.path.join(DB_DATA, "spinners"), os.path.join(STATIC_DIR, "LOGS")):
+    os.makedirs(d, exist_ok=True)
+
+LOGS_DIR = os.path.join(STATIC_DIR, "LOGS")  # tus logs ya están bajo static
+
+# --------------- Helpers de escritura ---------------
+def _write_xml_both(tree: ET.ElementTree, relpath: str):
+    """Escribe el XML tanto en DATA/static/db/<relpath> como en static/db/<relpath>."""
+    # destino en DATA
+    dst_data   = os.path.join(DB_DATA, relpath)
+    os.makedirs(os.path.dirname(dst_data), exist_ok=True)
+    tree.write(dst_data, encoding="utf-8", xml_declaration=True)
+    # espejo en STATIC
+    dst_static = os.path.join(DB_STATIC, relpath)
+    os.makedirs(os.path.dirname(dst_static), exist_ok=True)
+    tree.write(dst_static, encoding="utf-8", xml_declaration=True)
+    return {"data": dst_data, "static": dst_static}
+
+def _write_text_both(text: str, relpath: str):
+    dst_data   = os.path.join(DB_DATA, relpath)
+    dst_static = os.path.join(DB_STATIC, relpath)
+    os.makedirs(os.path.dirname(dst_data), exist_ok=True)
+    os.makedirs(os.path.dirname(dst_static), exist_ok=True)
+    with open(dst_data, "w", encoding="utf-8") as f:   f.write(text)
+    with open(dst_static, "w", encoding="utf-8") as f: f.write(text)
+    return {"data": dst_data, "static": dst_static}
+
+# --------------- Rutas de archivos (relativas) ---------------
 # Entradas
-FIGS_XML        = os.path.join(DB_DIR,  "figuras_por_fecha.xml")
-ASIG_XML        = os.path.join(DB_DIR,  "asignaciones.xml")
-IMP_XML         = os.path.join(LOGS_DIR, "impresiones.xml")
-CATALOGO_FIGXML = os.path.join(DB_DIR,  "datos_figuras.xml")  # opcional (figuras dibujadas)
+FIGS_XML_REL        = "figuras_por_fecha.xml"
+ASIG_XML_REL        = "asignaciones.xml"
+IMP_XML_PATH        = os.path.join(LOGS_DIR, "impresiones.xml")  # ya estabas en static/LOGS
+CATALOGO_FIGXML_REL = "datos_figuras.xml"                        # opcional
 
-# Salidas vMix
-VMIX_VENTAS_XML      = os.path.join(DB_DIR, "vmix_ventas.xml")
-VMIX_FIG_NOMB_XML    = os.path.join(DB_DIR, "vmix_figuras_nombres.xml")
-VMIX_FIG_COLORES_XML = os.path.join(DB_DIR, "vmix_figuras_colores.xml")
-VMIX_FIG_GRID_XML    = os.path.join(DB_DIR, "vmix_figuras.xml")          # 25 celdas
-VMIX_SPINNERS_XML    = os.path.join(DB_DIR, "vmix_spinners.xml")
-VMIX_REINTEGRO_XML   = os.path.join(DB_DIR, "vmix_reintegro.xml")
+# Salidas vMix (todas en /db)
+VMIX_VENTAS_REL       = "vmix_ventas.xml"
+VMIX_FIG_NOMB_REL     = "vmix_figuras_nombres.xml"
+VMIX_FIG_COLORES_REL  = "vmix_figuras_colores.xml"
+VMIX_FIG_GRID_REL     = "vmix_figuras.xml"            # 25 celdas
+VMIX_SPINNERS_REL     = "vmix_spinners.xml"           # PRIORIDAD para Juego
+STD_SPINNERS_REL      = "spinners.xml"                # Fallback para Juego
+VMIX_REINTEGRO_REL    = "vmix_reintegro.xml"
 
-# NUEVOS pedidos
-XML_FIGURAS_LISTA = os.path.join(DB_DIR, "xml_figuras_lista.xml")  # presentación (25 columnas)
-XML_FIGURAS_2COL  = os.path.join(DB_DIR, "xml_figuras.xml")        # tablero (2 columnas)
+# Nuevos pedidos
+XML_FIGURAS_LISTA_REL = "xml_figuras_lista.xml"       # presentación (25 columnas)
+XML_FIGURAS_2COL_REL  = "xml_figuras.xml"             # tablero (2 columnas)
+SPINNERS_HIST_DIR_REL = "spinners"                    # carpeta para YYYY-MM-DD.xml
 
-# Colores del tablero
+# Para leer entradas, preferimos DATA si existe; fallback a STATIC
+def _in_db_existing(relname: str) -> str:
+    p_data   = os.path.join(DB_DATA, relname)
+    p_static = os.path.join(DB_STATIC, relname)
+    if os.path.exists(p_data):   return p_data
+    if os.path.exists(p_static): return p_static
+    return p_data  # por defecto apuntamos a DATA
+
+# --------------- Constantes de tablero ---------------
 COLOR_ON  = "#ff0037"
 COLOR_OFF = "#E8E8E8"
 
-# Orden POS por índice 1..25 (fila-primero) para el catálogo
 POS_25_ROW = [
     "B1","I1","N1","G1","O1",
     "B2","I2","N2","G2","O2",
@@ -4692,8 +4721,6 @@ POS_25_ROW = [
     "B4","I4","N4","G4","O4",
     "B5","I5","N5","G5","O5",
 ]
-
-# Orden que vMix espera para la tabla: B1..B5, I1..I5, N1..N5, G1..G5, O1..O5 (columna-primero)
 POS_25_COL = [
     "B1","B2","B3","B4","B5",
     "I1","I2","I3","I4","I5",
@@ -4703,7 +4730,6 @@ POS_25_COL = [
 ]
 
 # ---------------- Utils ----------------
-
 def _parse_float(x):
     try:
         return float(str(x).replace(",", "."))
@@ -4725,12 +4751,18 @@ def code_for(name: str) -> str:
     if n.startswith("TABLA LLENA 4"): return "TL4"
     return re.sub(r"[^A-Z0-9]", "", n)[:4] or "FIG"
 
-# ---------------- Lecturas ----------------
+def _san4(v: str) -> str:
+    """Normaliza string a 4 dígitos (0-9). Vacío => ''."""
+    if v is None: return ""
+    v = re.sub(r"\D", "", str(v))[:4]
+    return v.zfill(4) if v else ""
 
+# ---------------- Lecturas ----------------
 def get_figuras_del_dia(fecha):
     """TL1..TL4 + resto (nombre/valor) desde figuras_por_fecha.xml."""
     tl = [0.0, 0.0, 0.0, 0.0]
     resto = []
+    FIGS_XML = _in_db_existing(FIGS_XML_REL)
     if not os.path.exists(FIGS_XML):
         return tl, resto
     root = ET.parse(FIGS_XML).getroot()
@@ -4751,6 +4783,7 @@ def get_figuras_del_dia(fecha):
 
 def get_asignaciones_del_dia(fecha):
     filas = []
+    ASIG_XML = _in_db_existing(ASIG_XML_REL)
     if not os.path.exists(ASIG_XML):
         return filas
     root = ET.parse(ASIG_XML).getroot()
@@ -4788,12 +4821,12 @@ def buscar_vendedor_por_boleto(fecha, boleto):
 
 def get_impresiones_info(fecha):
     serie = "—"; primer = 0; ultimo = 0; total_b = 0; valor_b = 0; rein = "—"
-    if not os.path.exists(IMP_XML):
+    if not os.path.exists(IMP_XML_PATH):
         return dict(
             serie_detectada=serie, primer_boleto=str(primer), ultimo_boleto=str(ultimo),
             boletos_impresos=_fmt_int(total_b), valor_boleto=_fmt_int(valor_b), reintegro_dia=rein
         )
-    root = ET.parse(IMP_XML).getroot()
+    root = ET.parse(IMP_XML_PATH).getroot()
     primera = None; ultima  = None
     for n in root.findall("impresion"):
         if n.attrib.get("tipo") != "boletos": continue
@@ -4818,10 +4851,10 @@ def get_impresiones_info(fecha):
     )
 
 # --------- Catálogo de figuras dibujadas (opcional) ----------
-
 def load_catalogo_figuras():
     """Índice por código con sus celdas."""
     catalogo = {}
+    CATALOGO_FIGXML = _in_db_existing(CATALOGO_FIGXML_REL)
     if not os.path.exists(CATALOGO_FIGXML):
         return catalogo
     root = ET.parse(CATALOGO_FIGXML).getroot()
@@ -4845,7 +4878,6 @@ def load_catalogo_figuras():
     return catalogo
 
 # ======================== Escritura de XMLs ========================
-
 def grid_colors_for(codigo, catalogo):
     """25 colores ON/OFF para una figura."""
     if codigo in ("TL1","TL2") and codigo not in catalogo:
@@ -4868,7 +4900,7 @@ def write_vmix_ventas(fecha, imp):
     ET.SubElement(root, "ultimo_boleto").text    = imp["ultimo_boleto"]
     ET.SubElement(root, "valor_boleto").text     = _fmt_int(imp["valor_boleto"])
     ET.SubElement(root, "boletos_impresos").text = _fmt_int(imp["boletos_impresos"])
-    ET.ElementTree(root).write(VMIX_VENTAS_XML, encoding="utf-8", xml_declaration=True)
+    _write_xml_both(ET.ElementTree(root), VMIX_VENTAS_REL)
 
 def write_vmix_figuras_listas(fecha, tl, resto):
     """vmix_figuras_nombres.xml y vmix_figuras_colores.xml. Retorna lista ordenada del día."""
@@ -4882,12 +4914,12 @@ def write_vmix_figuras_listas(fecha, tl, resto):
     root = ET.Element("figuras_nombres", {"fecha": fecha})
     for f in fig_elegidas:
         ET.SubElement(root, "fig", {"nombre": f["nombre"], "valor": f["valor"]})
-    ET.ElementTree(root).write(VMIX_FIG_NOMB_XML, encoding="utf-8", xml_declaration=True)
+    _write_xml_both(ET.ElementTree(root), VMIX_FIG_NOMB_REL)
 
     root2 = ET.Element("figuras_colores", {"fecha": fecha})
     for f in fig_elegidas:
         ET.SubElement(root2, "fig", {"nombre": f["nombre"], "valor": f["valor"], "codigo": code_for(f["nombre"]), "color": ""})
-    ET.ElementTree(root2).write(VMIX_FIG_COLORES_XML, encoding="utf-8", xml_declaration=True)
+    _write_xml_both(ET.ElementTree(root2), VMIX_FIG_COLORES_REL)
 
     return fig_elegidas
 
@@ -4904,7 +4936,7 @@ def write_vmix_figuras_grid(fecha, figuras_dia, catalogo):
         cols = grid_colors_for(codigo, catalogo)
         for i, col in enumerate(cols, start=1):
             ET.SubElement(nodo_f, "celda", {"idx": str(i), "color": col, "pos": POS_25_ROW[i-1]})
-    ET.ElementTree(root).write(VMIX_FIG_GRID_XML, encoding="utf-8", xml_declaration=True)
+    _write_xml_both(ET.ElementTree(root), VMIX_FIG_GRID_REL)
 
 def write_xml_figuras_lista_presentacion(fecha, figuras_dia, catalogo):
     """
@@ -4920,15 +4952,12 @@ def write_xml_figuras_lista_presentacion(fecha, figuras_dia, catalogo):
         ET.SubElement(fila, "figuraVALOR").text         = valor
         ET.SubElement(fila, "figuraESTADO").text        = "inactivo"
 
-        # colores (lista idx 1..25, fila-primero) -> dict pos->color
         cols = grid_colors_for(codigo, catalogo)
         pos_to_col = {POS_25_ROW[i]: cols[i] for i in range(25)}
-        # escribir en el ORDEN que vMix espera (columna-primero)
-        for lab in POS_25_COL:
+        for lab in POS_25_COL:  # orden columna-primero
             ET.SubElement(fila, f"figura{lab}").text = pos_to_col[lab]
-
         ident += 1
-    ET.ElementTree(root).write(XML_FIGURAS_LISTA, encoding="utf-8", xml_declaration=True)
+    _write_xml_both(ET.ElementTree(root), XML_FIGURAS_LISTA_REL)
 
 def write_xml_figuras_tablero_2columnas(fecha, figuras_dia):
     """
@@ -4941,23 +4970,66 @@ def write_xml_figuras_tablero_2columnas(fecha, figuras_dia):
     def pack(fig): return f"{fig['nombre']}|{fig['valor']}|inactivo" if fig else ""
     ET.SubElement(fila, "colA").text = pack(a)
     ET.SubElement(fila, "colB").text = pack(b)
-    ET.ElementTree(root).write(XML_FIGURAS_2COL, encoding="utf-8", xml_declaration=True)
+    _write_xml_both(ET.ElementTree(root), XML_FIGURAS_2COL_REL)
 
-def write_vmix_spinners(fecha, spins):
-    root = ET.Element("spinners", {"fecha": fecha})
-    for i, v in enumerate((spins or [])[:20], start=1):
-        v = re.sub(r"\D","", str(v))[:4].zfill(4)
-        ET.SubElement(root, "n", {"i": str(i), "v": v})
-    ET.ElementTree(root).write(VMIX_SPINNERS_XML, encoding="utf-8", xml_declaration=True)
+# ================== Spinners (estándar) ==================
+def make_spinners_tree(vals, fecha_iso: str):
+    root = ET.Element("spinners", {"fecha": fecha_iso})
+    for i in range(20):
+        v = _san4(vals[i] if i < len(vals) else "")
+        n = ET.SubElement(root, "n", {"i": str(i+1)})
+        if v:
+            n.set("v", v)
+    return ET.ElementTree(root)
+
+def save_spinners(vals, fecha_iso: str | None = None):
+    """
+    Guarda spinners en:
+      - vmix_spinners.xml (prioridad para Juego)
+      - spinners.xml      (fallback)
+      - spinners/YYYY-MM-DD.xml (histórico)
+    Y en **ambas ubicaciones**: DATA/static/db y static/db.
+    """
+    if not fecha_iso:
+        fecha_iso = date.today().isoformat()
+    tree = make_spinners_tree(vals, fecha_iso)
+
+    _write_xml_both(tree, VMIX_SPINNERS_REL)
+    _write_xml_both(tree, STD_SPINNERS_REL)
+    # histórico por fecha
+    hist_rel = os.path.join(SPINNERS_HIST_DIR_REL, f"{fecha_iso}.xml")
+    _write_xml_both(tree, hist_rel)
+
+    return {
+        "vmix": os.path.join(DB_DATA, VMIX_SPINNERS_REL),
+        "std":  os.path.join(DB_DATA, STD_SPINNERS_REL),
+        "hist": os.path.join(DB_DATA, hist_rel),
+    }
+
+def read_spinners_current():
+    """Devuelve lista de 20 (4 dígitos) desde vmix_spinners.xml o spinners.xml."""
+    for rel in (VMIX_SPINNERS_REL, STD_SPINNERS_REL):
+        p = _in_db_existing(rel)
+        if os.path.exists(p):
+            try:
+                root = ET.parse(p).getroot()
+                out=[]
+                for n in root.findall(".//n"):
+                    v = n.attrib.get("v") or (n.text or "")
+                    v = _san4(v)
+                    out.append(v if v else "")
+                return (out + [""]*20)[:20]
+            except:
+                pass
+    return [""]*20
 
 def write_vmix_reintegro(fecha, reinteg_name):
     root = ET.Element("reintegro", {"fecha": fecha})
     ET.SubElement(root, "archivo").text = reinteg_name or ""
     ET.SubElement(root, "ruta").text    = "static/REINTEGROS/" + (reinteg_name or "")
-    ET.ElementTree(root).write(VMIX_REINTEGRO_XML, encoding="utf-8", xml_declaration=True)
+    _write_xml_both(ET.ElementTree(root), VMIX_REINTEGRO_REL)
 
 # ---------------- Rutas ----------------
-
 @app.route("/")
 def root():
     return redirect(url_for("sorteo", fecha=date.today().isoformat()))
@@ -4996,6 +5068,20 @@ def api_vend_boleto():
     vendedor = buscar_vendedor_por_boleto(fecha, boleto)
     return jsonify(ok=True, vendedor=vendedor)
 
+# --------- NUEVOS endpoints de spinners ---------
+@app.get("/api/spinners")
+def api_spinners_get():
+    return jsonify(ok=True, spinners=read_spinners_current())
+
+@app.post("/api/spinners/guardar")
+def api_spinners_guardar():
+    data  = request.get_json(silent=True) or {}
+    fecha = data.get("fecha") or date.today().isoformat()
+    vals  = data.get("spinners", [])
+    files = save_spinners(vals, fecha)
+    return jsonify(ok=True, files=files, fecha=fecha)
+
+# --------- Activar sorteo (escribe TODO) ---------
 @app.post("/api/activar-sorteo")
 def sorteo_activar():
     data  = request.get_json(silent=True) or {}
@@ -5023,13 +5109,26 @@ def sorteo_activar():
     # 5) TABLERO (2 columnas)
     write_xml_figuras_tablero_2columnas(fecha, figuras_dia)
 
-    # 6) spinners y reintegro
-    write_vmix_spinners(fecha, spins)
+    # 6) spinners y reintegro (GUARDADO ESTÁNDAR => Juego los ve)
+    save_spinners(spins, fecha)
     write_vmix_reintegro(fecha, imp["reintegro_dia"])
 
     return jsonify(ok=True, mensaje="XMLs generados/reemplazados correctamente.")
 
+# --------- (Opcional) servir DATA por URL para depurar ---------
+@app.route("/data-db/<path:rel>")
+def serve_data_db(rel):
+    """Útil para ver que realmente se escribió en DATA/static/db/."""
+    return send_from_directory(DB_DATA, rel, as_attachment=False)
 
+# ----------------- MAIN -----------------
+if __name__ == "__main__":
+    app.run(debug=True)
+
+
+
+
+#FIN SORTEO #
 
 
 
@@ -5674,395 +5773,507 @@ def api_vendedores_ranking():
 
 #JUEGO #
 
-# =========================== #JUEGO (Blueprint) ===========================
-# Pega esto DESPUÉS de crear 'app = Flask(__name__)'
-from flask import Blueprint, render_template, jsonify, request, redirect, url_for, session
-import os, json, xml.etree.ElementTree as ET
+# ===========================
+#  JUEGO + SPINNERS + FIGURAS
+#  (Blueprint: /juego/*)
+# ===========================
+import os, json, re, xml.etree.ElementTree as ET
 from datetime import datetime, date
-import re
+from flask import Blueprint, jsonify, render_template, request, redirect, url_for, session
 
-# --------------------------- Blueprint principal ---------------------------
-juego_bp = Blueprint("juego", __name__, url_prefix="/juego")
+# -------------------------------------------------------------------
+#  Descubre rutas de datos (respetando tu esquema con DATA_DIR)
+# -------------------------------------------------------------------
+_BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DATA_DIR = globals().get("DATA_DIR", os.path.join(_BASE_DIR, "DATA"))
+DB_DIR = os.path.join(DATA_DIR, "static", "db")
+os.makedirs(DB_DIR, exist_ok=True)
 
-# Rutas base
-_BASE_DIR   = os.path.dirname(os.path.abspath(__file__))
-_STATIC_DIR = os.path.join(_BASE_DIR, "static")
-_DB_DIR     = os.path.join(_STATIC_DIR, "db")
-_XML_PATH   = os.path.join(_DB_DIR, "datos_bingo.xml")
-_HIST_PATH  = os.path.join(_DB_DIR, "historial.json")
-os.makedirs(_DB_DIR, exist_ok=True)
+# Archivos “core” de juego
+BINGO_XML     = os.path.join(DB_DIR, "datos_bingo.xml")
+HIST_JSON     = os.path.join(DB_DIR, "historial.json")
 
-# ------------------------------- Helpers -----------------------------------
-def _jg_hist_read():
-    try:
-        with open(_HIST_PATH, "r", encoding="utf-8") as f:
-            d = json.load(f)
-        return [int(x) for x in d.get("stack", []) if 1 <= int(x) <= 75]
-    except Exception:
-        return []
+# Spinners (prioridad vmix_spinners.xml)
+VMIX_SPINNERS_XML = globals().get("VMIX_SPINNERS_XML", os.path.join(DB_DIR, "vmix_spinners.xml"))
+SPINNERS_XML      = globals().get("SPINNERS_XML",      os.path.join(DB_DIR, "spinners.xml"))
 
-def _jg_hist_write(stack):
-    with open(_HIST_PATH, "w", encoding="utf-8") as f:
-        json.dump({"stack": [int(x) for x in stack], "ts": datetime.utcnow().isoformat()},
-                  f, ensure_ascii=False, indent=2)
-
-def _jg_ensure_xml_base():
-    if not os.path.exists(_XML_PATH):
-        root = ET.Element("bingo")
-        balotas = ET.SubElement(root, "balotas")
-        for n in range(1, 76):
-            ET.SubElement(balotas, "balota", numero=str(n), estado="", ultimo="")
-        ET.SubElement(root, "ultimos5").text = ""
-        ET.SubElement(root, "totalMarcadas").text = "0"
-        ET.SubElement(root, "ultimoMarcado").text = ""
-        ET.ElementTree(root).write(_XML_PATH, encoding="utf-8", xml_declaration=True)
-
-def _jg_xml_write_from_stack(stack):
-    _jg_ensure_xml_base()
-    tree = ET.parse(_XML_PATH); root = tree.getroot()
-    balotas_el = root.find("balotas")
-    marked = set(int(x) for x in stack)
-    last = stack[-1] if stack else None
-
-    for b in balotas_el.findall("balota"):
-        b.set("estado", ""); b.set("ultimo", "")
-    for b in balotas_el.findall("balota"):
-        n = int(b.get("numero"))
-        if n in marked:
-            b.set("estado", str(n))
-        if n == 1:
-            b.set("ultimo", str(last) if last is not None else "")
-
-    root.find("ultimos5").text = ",".join(str(x) for x in stack[-5:]) if stack else ""
-    root.find("totalMarcadas").text = str(len(marked))
-    root.find("ultimoMarcado").text = (str(last) if last is not None else "")
-    tree.write(_XML_PATH, encoding="utf-8", xml_declaration=True)
-
-def _jg_ensure_files():
-    if not os.path.exists(_HIST_PATH):
-        _jg_hist_write([])
-    _jg_ensure_xml_base()
-
-# ------------------------------ Vistas juego -------------------------------
-@juego_bp.route("/")
-def juego_ui():
-    _jg_ensure_files()
-    if 'usuario' in session or not globals().get("require_session"):
-        return render_template("juego.html")
-    return redirect(url_for("login"))
-
-@juego_bp.get("/estado.json")
-def juego_estado_json():
-    _jg_ensure_files()
-    s = _jg_hist_read()
-    return jsonify(ok=True, stack=s, last=(s[-1] if s else None), total=len(s), ultimos5=s[-5:])
-
-@juego_bp.post("/marcar")
-def juego_marcar():
-    _jg_ensure_files()
-    data = request.get_json(silent=True) or {}
-    numero = str(data.get("numero","")).strip()
-    if not numero.isdigit():
-        return jsonify(success=False, error="Número inválido"), 400
-    n = int(numero)
-    if n < 1 or n > 75:
-        return jsonify(success=False, error="Rango 1–75"), 400
-    stack = _jg_hist_read()
-    if n not in stack:
-        stack.append(n)
-        _jg_hist_write(stack)
-        _jg_xml_write_from_stack(stack)
-    return jsonify(success=True, stack=stack)
-
-@juego_bp.post("/reversa")
-def juego_reversa():
-    _jg_ensure_files()
-    data = request.get_json(silent=True) or {}
-    stack = _jg_hist_read()
-    if str(data.get("all","")).lower() in ("1","true","si","sí","yes"):
-        stack = []
-    else:
-        try: k = int(data.get("k", 1))
-        except Exception: k = 1
-        k = max(1, min(k, len(stack)))
-        stack = stack[:-k]
-    _jg_hist_write(stack)
-    _jg_xml_write_from_stack(stack)
-    return jsonify(success=True, stack=stack)
-
-@juego_bp.post("/reset")
-def juego_reset():
-    _jg_ensure_files()
-    _jg_hist_write([]); _jg_xml_write_from_stack([])
-    return jsonify(success=True)
-
-@juego_bp.post("/activar_stinger")
-def juego_activar_stinger():
-    _jg_ensure_files()
-    data = request.get_json(silent=True) or {}
-    numero = str(data.get("numero","")).strip()
-    if not numero:
-        return jsonify(success=False, error="numero requerido"), 400
-    tree = ET.parse(_XML_PATH); root = tree.getroot()
-    st = root.find("stinger") or ET.SubElement(root, "stinger")
-    st.text = numero
-    tree.write(_XML_PATH, encoding="utf-8", xml_declaration=True)
-    return jsonify(success=True)
-
-# ------------------------- Figuras por fecha de sorteo ----------------------
-_FIGS_ESTADOS_JSON  = os.path.join(_DB_DIR, "figuras_estado.json")
-_SORTEO_JSON_CANDID = [
-    os.path.join(_DB_DIR, "sorteo.json"),
-    os.path.join(_DB_DIR, "config_sorteo.json"),
+# Sorteo (para fecha + figuras del día)
+SORTEOS_XML = globals().get("SORTEOS_XML", os.path.join(DB_DIR, "sorteos.xml"))
+SORTEO_JSON_CANDIDATES = [
+    os.path.join(DB_DIR, "sorteo.json"),
+    os.path.join(DB_DIR, "config_sorteo.json")
 ]
 
-def _jg_json_read(path):
+# Figuras (varias ubicaciones válidas)
+FIGURAS_DIR          = os.path.join(DB_DIR, "figuras")
+FIGURAS_DEL_DIA_XML  = os.path.join(DB_DIR, "figuras_del_dia.xml")
+DATOS_FIGURAS_XML    = os.path.join(DB_DIR, "datos_figuras.xml")
+os.makedirs(FIGURAS_DIR, exist_ok=True)
+
+# Estados de figuras (persistidos también en XML de figuras)
+FIG_ESTADOS_JSON = os.path.join(DB_DIR, "figuras_estado.json")  # cache auxiliar opcional
+
+# Wrapper de sesión (si lo tienes en tu app, se respeta)
+require_session = globals().get("require_session", None)
+
+# -------------------------------------------------------------------
+#  Blueprint
+# -------------------------------------------------------------------
+juego_bp = Blueprint("juego", __name__, url_prefix="/juego")
+
+# -------------------------------------------------------------------
+#  Helpers base
+# -------------------------------------------------------------------
+def _json_read(path):
     try:
-        with open(path, "r", encoding="utf-8") as f:
-            return json.load(f)
+        with open(path, "r", encoding="utf-8") as f: return json.load(f)
     except Exception:
         return None
 
-def _jg_estados_load():
-    d = _jg_json_read(_FIGS_ESTADOS_JSON)
-    return d if isinstance(d, dict) else {}
+def _json_write(path, data):
+    try:
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+        return True
+    except Exception:
+        return False
 
-def _jg_estados_save(data: dict):
-    os.makedirs(_DB_DIR, exist_ok=True)
-    with open(_FIGS_ESTADOS_JSON, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
+def _ensure_hist():
+    if not os.path.exists(HIST_JSON):
+        _json_write(HIST_JSON, {"stack": [], "ts": datetime.utcnow().isoformat()})
+
+def _read_stack():
+    _ensure_hist()
+    try:
+        data = _json_read(HIST_JSON) or {}
+        stack = [int(x) for x in data.get("stack", []) if 1 <= int(x) <= 75]
+        return stack
+    except Exception:
+        return []
+
+def _write_stack(stack):
+    _json_write(HIST_JSON, {"stack": [int(x) for x in stack], "ts": datetime.utcnow().isoformat()})
+
+def _ensure_bingo_xml():
+    if os.path.exists(BINGO_XML):
+        return
+    root = ET.Element("bingo")
+    balotas = ET.SubElement(root, "balotas")
+    for n in range(1, 76):
+        ET.SubElement(balotas, "balota", numero=str(n), estado="", ultimo="")
+    ET.SubElement(root, "ultimos5").text = ""
+    ET.SubElement(root, "totalMarcadas").text = "0"
+    ET.SubElement(root, "ultimoMarcado").text = ""
+    ET.ElementTree(root).write(BINGO_XML, encoding="utf-8", xml_declaration=True)
+
+def _sync_bingo_xml_from_stack(stack):
+    _ensure_bingo_xml()
+    tree = ET.parse(BINGO_XML); root = tree.getroot()
+    balotas_el = root.find("balotas")
+    marked = set(int(x) for x in stack)
+    last = stack[-1] if stack else None
+    # limpia
+    for b in balotas_el.findall("balota"):
+        b.set("estado", ""); b.set("ultimo", "")
+    # marca
+    for b in balotas_el.findall("balota"):
+        n = int(b.get("numero"))
+        if n in marked: b.set("estado", str(n))
+        if last is not None and n == last: b.set("ultimo", str(n))
+    # meta
+    root.find("ultimos5").text = ",".join(str(x) for x in stack[-5:]) if stack else ""
+    root.find("totalMarcadas").text = str(len(marked))
+    root.find("ultimoMarcado").text = (str(last) if last is not None else "")
+    tree.write(BINGO_XML, encoding="utf-8", xml_declaration=True)
 
 def _to_iso_date(s: str) -> str:
     s = (s or "").strip()
-    if not s:
-        return ""
-    if "/" in s:  # DD/MM/YYYY
+    if not s: return ""
+    if "/" in s:
         try:
             d, m, y = s.split("/")
             return f"{y}-{int(m):02d}-{int(d):02d}"
         except Exception:
             pass
-    return s  # ya viene ISO o similar
+    try:
+        return str(date.fromisoformat(s))
+    except Exception:
+        return ""
 
-def _jg_get_sorteo_fecha() -> str:
-    for p in _SORTEO_JSON_CANDID:
-        js = _jg_json_read(p)
+def _get_sorteo_fecha() -> str:
+    # 1) JSON
+    for path in SORTEO_JSON_CANDIDATES:
+        js = _json_read(path)
         if isinstance(js, dict):
             for k in ("fecha", "fecha_sorteo", "date"):
                 if js.get(k):
                     iso = _to_iso_date(str(js[k]))
-                    if iso:
-                        return iso
+                    if iso: return iso
+    # 2) XML sorteo activo
+    try:
+        if os.path.exists(SORTEOS_XML):
+            root = ET.parse(SORTEOS_XML).getroot()
+            act = root.find(".//dia[@activo='1']") or root.find(".//dia[@active='1']")
+            if act is not None and (act.get("fecha") or "").strip():
+                return _to_iso_date(act.get("fecha"))
+    except Exception:
+        pass
+    # 3) hoy
     return date.today().isoformat()
 
-def _jg_pick_figuras_xml(fecha: str) -> str:
+# -------------------------------------------------------------------
+#  SPINNERS
+# -------------------------------------------------------------------
+def _read_spinners_list():
     """
-    Busca XML de figuras en varios lugares conocidos, en este orden:
-      1) static/db/figuras/YYYY-MM-DD.xml
-      2) static/db/figuras_del_dia.xml
-      3) static/db/datos_figuras.xml            <-- incluido por tus logs
-      4) DATA/figuras/YYYY-MM-DD.xml
-      5) DATA/figuras_del_dia.xml
-      6) DATA/bingo/figuras_del_dia.xml
-    Devuelve el primero que exista.
+    Devuelve una lista de 20 strings (4 dígitos) leídos desde:
+    1) vmix_spinners.xml (prioridad)
+    2) spinners.xml
+    Si faltan, se completa con ''.
+    Estructuras aceptadas:
+        <spinners><n v="0123"/></spinners>
+        <spinners><n>0123</n></spinners>
     """
-    candidatos = [
-        os.path.join(_DB_DIR, "figuras", f"{fecha}.xml"),
-        os.path.join(_DB_DIR, "figuras_del_dia.xml"),
-        os.path.join(_DB_DIR, "datos_figuras.xml"),
-    ]
-    _DATA_DIR = os.path.join(_BASE_DIR, "DATA")
-    if os.path.isdir(_DATA_DIR):
-        candidatos += [
-            os.path.join(_DATA_DIR, "figuras", f"{fecha}.xml"),
-            os.path.join(_DATA_DIR, "figuras_del_dia.xml"),
-            os.path.join(_DATA_DIR, "bingo", "figuras_del_dia.xml"),
-        ]
-    for path in candidatos:
-        if os.path.exists(path):
-            return path
-    return ""
-
-def _parse_chip_text(txt: str):
-    """'STA LINEA — 100' | 'STA LINEA - 100' | 'STA LINEA 100' → {'nombre','valor'}"""
-    s = (txt or "").strip()
-    if not s:
-        return None
-    s = s.replace("—", "-").replace("–", "-")
-    m = re.match(r"^(.*?)[\s\-:]+(\d+(\.\d+)?)\s*$", s)
-    if m:
-        nombre = m.group(1).strip()
-        valor  = m.group(2)
-        try: valor = int(float(valor))
-        except Exception: valor = 0
-        if nombre:
-            return {"nombre": nombre, "valor": valor, "estado": ""}
-    return {"nombre": s, "valor": 0, "estado": ""}
-
-def _jg_load_figuras_json_desde_sorteo(fecha: str):
-    """
-    Si 'Sorteo' guardó figuras en JSON, intenta cargarlas.
-    Claves aceptadas: figuras, figuras_personalizadas, figuras_jugar, figuras_del_dia.
-    Cada item puede ser string ('Nombre — 100') o dict {'nombre','valor'}.
-    """
-    for p in _SORTEO_JSON_CANDID:
-        js = _jg_json_read(p)
-        if not isinstance(js, dict):
-            continue
-        for key in ("figuras", "figuras_personalizadas", "figuras_jugar", "figuras_del_dia"):
-            arr = js.get(key)
-            if not arr:
-                continue
-            out = []
-            if isinstance(arr, list):
-                for it in arr:
-                    if isinstance(it, str):
-                        parsed = _parse_chip_text(it)
-                        if parsed: out.append(parsed)
-                    elif isinstance(it, dict):
-                        nombre = (it.get("nombre") or "").strip()
-                        valor  = it.get("valor", 0)
-                        try: valor = int(float(valor))
-                        except Exception: valor = 0
-                        if nombre:
-                            out.append({"nombre": nombre, "valor": valor, "estado": ""})
-            if out:
-                return out
-    return []
-
-def _jg_load_figuras(fecha: str):
-    """Carga figuras desde XML (prioridad) o desde JSON de sorteo."""
-    xml_path = _jg_pick_figuras_xml(fecha)
-    if xml_path:
+    for path in (VMIX_SPINNERS_XML, SPINNERS_XML):
         try:
-            tree = ET.parse(xml_path); root = tree.getroot()
+            if not os.path.exists(path): continue
+            root = ET.parse(path).getroot()
             out = []
-            for f in root.findall("figura"):
-                nombre = (f.attrib.get("nombre") or "").strip()
-                valor  = f.attrib.get("valor") or f.attrib.get("premio") or "0"
-                estado = (f.attrib.get("estado") or "").strip()
-                try:
-                    valor = int(valor)
-                except Exception:
-                    try: valor = float(valor)
-                    except Exception: valor = 0
-                if nombre:
-                    out.append({"nombre": nombre, "valor": valor, "estado": estado})
-            if out:
-                return out, xml_path, "xml"
+            for n in root.findall(".//n"):
+                val = (n.attrib.get("v") if hasattr(n, "attrib") else None) or (n.text or "")
+                val = re.sub(r"\D", "", val)[:4]
+                out.append(val.zfill(4) if val else "")
+            out = (out + [""] * 20)[:20]
+            return out
         except Exception:
             pass
-    out = _jg_load_figuras_json_desde_sorteo(fecha)
-    if out:
-        return out, "(sorteo.json)", "json"
-    return [], "(no encontrado)", "none"
+    return [""] * 20
 
-def _jg_merge_estados_por_fecha(fecha: str, figuras: list):
-    estados = _jg_estados_load()
-    saved = estados.get(fecha, {}) if isinstance(estados.get(fecha), dict) else {}
+# -------------------------------------------------------------------
+#  FIGURAS (lectura de valores + estados y escritura a XML)
+# -------------------------------------------------------------------
+def _pick_figuras_xml_for_fecha(fecha: str) -> str:
+    """
+    Orden de búsqueda:
+      1) DB_DIR/figuras/YYYY-MM-DD.xml
+      2) DB_DIR/figuras_del_dia.xml
+      3) DB_DIR/datos_figuras.xml
+    Devuelve el primero que exista. Si ninguno existe, crea figuras_del_dia.xml vacío.
+    """
+    candidates = [
+        os.path.join(FIGURAS_DIR, f"{fecha}.xml"),
+        FIGURAS_DEL_DIA_XML,
+        DATOS_FIGURAS_XML,
+    ]
+    for c in candidates:
+        if os.path.exists(c):
+            return c
+    # crear base vacía (no destruye nada previo)
+    root = ET.Element("figuras")
+    ET.ElementTree(root).write(FIGURAS_DEL_DIA_XML, encoding="utf-8", xml_declaration=True)
+    return FIGURAS_DEL_DIA_XML
+
+def _parse_valor_int(v):
+    try:
+        return int(float(str(v).replace(",", ".").strip()))
+    except Exception:
+        return 0
+
+def _parse_fig_item_from_text(txt: str):
+    """
+    Acepta "NOMBRE  150", "CORTA-2: 200", "FULL - 700"
+    """
+    s = (txt or "").strip()
+    if not s: return None
+    s = s.replace("—", "-").replace("–", "-")
+    m = re.match(r"^(.*?)[\s:\-]+(\d+(\.\d+)?)\s*$", s)
+    if m:
+        nombre = m.group(1).strip()
+        valor  = _parse_valor_int(m.group(2))
+        if nombre:
+            return {"nombre": nombre, "valor": valor}
+    # si no se pudo parsear, deja nombre completo y valor 0
+    return {"nombre": s, "valor": 0}
+
+def _load_figuras_desde_json_o_xml(fecha: str):
+    """
+    Devuelve (figs:list[dict[nombre, valor, estado]], path_xml_usado:str)
+    Prioridad:
+      1) JSON (sorteo.json/config_sorteo.json) claves: figuras_del_dia | figs_del_dia | figuras
+      2) XML (figuras YYYY-MM-DD o figuras_del_dia.xml o datos_figuras.xml)
+    El 'estado' se toma del atributo XML si existe; si no, 'INACTIVO'.
+    """
+    # 1) JSON
+    for path in SORTEO_JSON_CANDIDATES:
+        js = _json_read(path)
+        if isinstance(js, dict):
+            for k in ("figuras_del_dia", "figs_del_dia", "figuras"):
+                raw = js.get(k)
+                if isinstance(raw, list) and raw:
+                    out = []
+                    for item in raw:
+                        if isinstance(item, dict):
+                            nombre = (item.get("nombre") or item.get("name") or "").strip()
+                            valor  = _parse_valor_int(item.get("valor") or item.get("value") or 0)
+                            if nombre:
+                                out.append({"nombre": nombre, "valor": valor, "estado": "INACTIVO"})
+                        else:
+                            p = _parse_fig_item_from_text(str(item))
+                            if p:
+                                out.append({"nombre": p["nombre"], "valor": p["valor"], "estado": "INACTIVO"})
+                    # mezclar estados previos si en XML ya están
+                    path_xml = _pick_figuras_xml_for_fecha(fecha)
+                    out = _merge_estado_desde_xml(path_xml, out)
+                    return (out, path_xml)
+
+    # 2) XML
+    path_xml = _pick_figuras_xml_for_fecha(fecha)
+    figs = _read_figuras_from_xml(path_xml)
+    return (figs, path_xml)
+
+def _read_figuras_from_xml(path_xml: str):
+    """Lee figuras de un XML: atributos nombre, valor, estado."""
     out = []
-    for it in figuras or []:
-        nombre = (it.get("nombre") or "").strip()
-        est_xml = (it.get("estado") or "").strip()
-        est_saved = (saved.get(nombre) or "").strip()
-        out.append({
-            "nombre": nombre,
-            "valor": it.get("valor", 0),
-            "estado": est_saved or est_xml or ""
-        })
+    try:
+        root = ET.parse(path_xml).getroot()
+        for f in root.findall(".//figura"):
+            nombre = (f.get("nombre") or f.findtext("figuraNOMBRE") or "").strip()
+            valor  = _parse_valor_int(f.get("valor") or f.findtext("figuraVALOR") or 0)
+            estado = (f.get("estado") or "").strip().upper() or "INACTIVO"
+            if nombre:
+                out.append({"nombre": nombre, "valor": valor, "estado": estado})
+    except Exception:
+        pass
     return out
 
-# --------------------------- Endpoints figuras ------------------------------
+def _merge_estado_desde_xml(path_xml: str, base_list: list):
+    """
+    Si en el XML ya existen figuras con 'estado', mezcla ese estado.
+    Prioriza los nombres (case-insensitive).
+    """
+    try:
+        current = _read_figuras_from_xml(path_xml)
+        m = {c["nombre"].strip().lower(): c for c in current}
+        out = []
+        for f in base_list:
+            key = f["nombre"].strip().lower()
+            estado = (m.get(key, {}).get("estado") or f.get("estado") or "INACTIVO").upper()
+            out.append({"nombre": f["nombre"], "valor": _parse_valor_int(f["valor"]), "estado": estado})
+        return out
+    except Exception:
+        return base_list
+
+def _write_figure_state_to_xml(path_xml: str, nombre: str, estado: str, valor: int | None = None):
+    """
+    Actualiza/crea la figura 'nombre' en XML con el 'estado' (INACTIVO|SE FUE|SE QUEDO)
+    preservando el resto de elementos hijos (matriz 5x5, etc.).
+    Si 'valor' se provee (int), actualiza también el atributo valor.
+    """
+    estado = (estado or "").strip().upper()
+    if estado not in ("INACTIVO", "SE FUE", "SE QUEDO"):
+        estado = "INACTIVO"
+
+    # crea XML base si no existe
+    if not os.path.exists(path_xml):
+        root = ET.Element("figuras")
+        ET.ElementTree(root).write(path_xml, encoding="utf-8", xml_declaration=True)
+
+    tree = ET.parse(path_xml); root = tree.getroot()
+    # Busca figura por atributo nombre o por hijo figuraNOMBRE
+    target = None
+    for f in root.findall(".//figura"):
+        n = (f.get("nombre") or f.findtext("figuraNOMBRE") or "").strip()
+        if n.lower() == nombre.strip().lower():
+            target = f; break
+
+    if target is None:
+        # crear nodo mínimo (no alteramos tu DB; solo añadimos si no existe)
+        target = ET.SubElement(root, "figura", nombre=nombre)
+
+    # set atributos
+    target.set("nombre", nombre)
+    target.set("estado", estado)
+    if valor is not None:
+        target.set("valor", str(_parse_valor_int(valor)))
+    else:
+        # si no viene valor y el nodo no tiene, deja 0 (no sobreescribe si ya tiene)
+        if target.get("valor") is None:
+            target.set("valor", "0")
+
+    tree.write(path_xml, encoding="utf-8", xml_declaration=True)
+    return True
+
+# -------------------------------------------------------------------
+#  VISTAS / ENDPOINTS
+# -------------------------------------------------------------------
+@juego_bp.route("/")
+def juego_ui():
+    # Renderiza tu template si lo tienes; si no, solo responde 200
+    try:
+        if require_session and not session.get("usuario"):
+            return redirect(url_for("login"))
+    except Exception:
+        pass
+    # Si tienes templates/juego.html, se mostrará:
+    try:
+        return render_template("juego.html")
+    except Exception:
+        return "Juego OK (sin template juego.html).", 200
+
+# --- Estado del juego (incluye spinners para que el front los tenga a mano)
+@juego_bp.get("/estado.json")
+def juego_estado_json():
+    stack = _read_stack()
+    last = (stack[-1] if stack else None)
+    spinners = _read_spinners_list()
+    return jsonify(ok=True, stack=stack, last=last, total=len(stack), ultimos5=stack[-5:], spinners=spinners)
+
+# --- Spinners JSON para front/vMix
+@juego_bp.get("/spinners")
+def juego_spinners():
+    return jsonify(ok=True, spinners=_read_spinners_list())
+
+# --- Marcar / Reversa / Reset
+@juego_bp.post("/marcar")
+def juego_marcar():
+    data = request.get_json(silent=True) or {}
+    numero = str(data.get("numero", "")).strip()
+    if not numero.isdigit(): return jsonify(success=False, error="Número inválido"), 400
+    n = int(numero)
+    if n < 1 or n > 75: return jsonify(success=False, error="Rango 1–75"), 400
+    stack = _read_stack()
+    if n not in stack:
+        stack.append(n)
+        _write_stack(stack)
+        _sync_bingo_xml_from_stack(stack)
+    return jsonify(success=True, stack=stack)
+
+@juego_bp.post("/reversa")
+def juego_reversa():
+    data = request.get_json(silent=True) or {}
+    stack = _read_stack()
+    if str(data.get("all", "")).lower() in ("1", "true", "si", "sí", "yes"):
+        stack = []
+    else:
+        if stack: stack.pop()
+    _write_stack(stack)
+    _sync_bingo_xml_from_stack(stack)
+    return jsonify(success=True, stack=stack)
+
+@juego_bp.post("/reset")
+def juego_reset():
+    _write_stack([])
+    _sync_bingo_xml_from_stack([])
+    return jsonify(success=True)
+
+# --- Stinger opcional (si usas este flag en XML para triggers)
+@juego_bp.post("/activar_stinger")
+def juego_activar_stinger():
+    data = request.get_json(silent=True) or {}
+    numero = str(data.get("numero", "")).strip()
+    if not numero:
+        return jsonify(success=False, error="numero requerido"), 400
+    _ensure_bingo_xml()
+    tree = ET.parse(BINGO_XML); root = tree.getroot()
+    st = root.find("stinger") or ET.SubElement(root, "stinger")
+    st.text = numero
+    tree.write(BINGO_XML, encoding="utf-8", xml_declaration=True)
+    return jsonify(success=True)
+
+# --- Fecha del sorteo (para front)
 @juego_bp.get("/sorteo_fecha")
 def juego_sorteo_fecha():
-    return jsonify({"fecha": _jg_get_sorteo_fecha()})
+    return jsonify(ok=True, fecha=_get_sorteo_fecha())
 
-@juego_bp.get("/figuras-para-juego")
-def juego_figuras_para_juego():
-    fecha = (request.args.get("fecha") or "").strip() or _jg_get_sorteo_fecha()
-    figs_raw, origen, origen_tipo = _jg_load_figuras(fecha)
-    figs = _jg_merge_estados_por_fecha(fecha, figs_raw)
-    return jsonify({"ok": True, "fecha": fecha, "figuras": figs, "origen": origen, "tipo": origen_tipo})
-
-@juego_bp.post("/figura-estado")
-def juego_figura_estado():
-    data   = request.get_json(silent=True) or {}
-    fecha  = (data.get("fecha") or "").strip() or _jg_get_sorteo_fecha()
-    nombre = (data.get("nombre") or "").strip()
-    estado = (data.get("estado") or "").strip()  # 'se-quedo' | 'se-fue' | ''
-    if not nombre:
-        return jsonify({"ok": False, "error": "nombre requerido"}), 400
-    est = _jg_estados_load()
-    est.setdefault(fecha, {})
-    if estado:
-        est[fecha][nombre] = estado
-    else:
-        est[fecha].pop(nombre, None)
-    _jg_estados_save(est)
-    return jsonify({"ok": True})
-
-# ---- Compatibilidad con endpoints previos ----
+# --------------------------
+#  FIGURAS: listar y estados
+# --------------------------
 @juego_bp.get("/figuras")
-def juego_figuras_legacy():
-    fecha = _jg_get_sorteo_fecha()
-    figs_raw, origen, origen_tipo = _jg_load_figuras(fecha)
-    figs = _jg_merge_estados_por_fecha(fecha, figs_raw)
-    return jsonify({"ok": True, "fecha": fecha, "figuras": figs, "origen": origen, "tipo": origen_tipo})
+def juego_figuras_list():
+    """Lista figuras con nombre, valor y estado (INACTIVO|SE FUE|SE QUEDO)."""
+    fecha = _get_sorteo_fecha()
+    figuras, path_xml = _load_figuras_desde_json_o_xml(fecha)
+    return jsonify(ok=True, fecha=fecha, origen_xml=path_xml, figuras=figuras)
 
 @juego_bp.post("/figuras/estado")
-def juego_figuras_estado_legacy():
-    data   = request.get_json(silent=True) or {}
+def juego_figuras_estado():
+    """
+    Body JSON: { "nombre": "FULL", "estado": "SE FUE" | "SE QUEDO" | "INACTIVO", "valor": 150 (opc) }
+    - Actualiza el estado en el XML de figuras del día.
+    - Mantiene la estructura del XML (no borra hijos).
+    """
+    data = request.get_json(silent=True) or {}
     nombre = (data.get("nombre") or "").strip()
-    estado = (data.get("estado") or "").strip()
+    estado = (data.get("estado") or "").strip().upper()
+    valor  = data.get("valor", None)
+
     if not nombre:
-        return jsonify({"ok": False, "error": "nombre requerido"}), 400
-    fecha = _jg_get_sorteo_fecha()
-    est = _jg_estados_load()
-    est.setdefault(fecha, {})
-    if estado:
-        est[fecha][nombre] = estado
-    else:
-        est[fecha].pop(nombre, None)
-    _jg_estados_save(est)
-    return jsonify({"ok": True, "fecha": fecha})
+        return jsonify(ok=False, error="nombre requerido"), 400
+    if estado not in ("INACTIVO", "SE FUE", "SE QUEDO"):
+        return jsonify(ok=False, error="estado inválido (use INACTIVO|SE FUE|SE QUEDO)"), 400
 
-# ----------------------- Alias /api y /sorteo/fecha ------------------------
-api_bp  = Blueprint("juego_api",  __name__, url_prefix="/api")
-flat_bp = Blueprint("juego_flat", __name__, url_prefix="/")
+    fecha = _get_sorteo_fecha()
+    path_xml = _pick_figuras_xml_for_fecha(fecha)
 
-@api_bp.get("/figuras-para-juego")
-def _api_figs():
-    return juego_figuras_para_juego()
+    ok = _write_figure_state_to_xml(path_xml, nombre, estado, valor)
+    if not ok:
+        return jsonify(ok=False, error="no se pudo escribir XML"), 500
 
-@api_bp.post("/figura-estado")
-def _api_fig_estado():
-    return juego_figura_estado()
+    # opcional: cache JSON (útil si lo estabas usando antes)
+    cache = _json_read(FIG_ESTADOS_JSON) or {}
+    cache.setdefault(fecha, {})
+    cache[fecha][nombre] = estado
+    _json_write(FIG_ESTADOS_JSON, cache)
 
-@api_bp.get("/sorteo/fecha")
-def _api_sorteo_fecha():
-    return juego_sorteo_fecha()
+    # responder con lista actualizada
+    figs = _read_figuras_from_xml(path_xml)
+    return jsonify(ok=True, fecha=fecha, origen_xml=path_xml, figuras=figs)
 
-@flat_bp.get("/sorteo/fecha")
-def _flat_sorteo_fecha():
-    return juego_sorteo_fecha()
+# --- Sincroniza todos los estados en XML desde el cache JSON (opcional)
+@juego_bp.post("/figuras/sync-xml")
+def juego_figuras_sync_xml():
+    """
+    Re-aplica los estados desde figuras_estado.json al XML de la fecha actual.
+    Útil si cambiaste de fuente y quieres forzar reflejarlo en XML.
+    """
+    fecha = _get_sorteo_fecha()
+    cache = _json_read(FIG_ESTADOS_JSON) or {}
+    estados = cache.get(fecha, {})
+    path_xml = _pick_figuras_xml_for_fecha(fecha)
+    # Mezcla: preserva valores ya escritos en XML
+    actual = {f["nombre"].strip().lower(): f for f in _read_figuras_from_xml(path_xml)}
+    for nombre, estado in estados.items():
+        low = nombre.strip().lower()
+        valor = actual.get(low, {}).get("valor", 0)
+        _write_figure_state_to_xml(path_xml, nombre, estado, valor)
+    figs = _read_figuras_from_xml(path_xml)
+    return jsonify(ok=True, fecha=fecha, origen_xml=path_xml, figuras=figs)
 
-# --------------------------- Debug de origen -------------------------------
-@juego_bp.get("/debug/figuras-origen")
-def juego_debug_figuras_origen():
-    fecha = (request.args.get("fecha") or "").strip() or _jg_get_sorteo_fecha()
-    figs_raw, origen, origen_tipo = _jg_load_figuras(fecha)
-    return jsonify({
-        "fecha": fecha,
-        "origen": origen,
-        "tipo": origen_tipo,
-        "cant_figuras": len(figs_raw)
-    })
+# -------------------------------------------------------------------
+#  REGISTRO (para usarlo “inline” en tu app o como import)
+# -------------------------------------------------------------------
+def register_juego(app):
+    """
+    Llama a register_juego(app) desde tu app principal:
+        app = Flask(__name__)
+        register_juego(app)
+    """
+    app.register_blueprint(juego_bp)
+    # Prepara archivos mínimos
+    _ensure_bingo_xml()
+    _ensure_hist()
 
-# ----------------------- Registrar blueprints (UNA VEZ) --------------------
-app.register_blueprint(juego_bp)
-app.register_blueprint(api_bp)
-app.register_blueprint(flat_bp)
-# ======================== FIN #JUEGO (Blueprint) ============================
+# Si este archivo está pegado directo en app.py puedes registrar:
+try:
+    app  # definido en tu app principal
+    # Evita doble registro si ya existe
+    if "juego" not in [bp.name for bp in app.blueprints.values()]:
+        register_juego(app)
+except Exception:
+    # Si no hay 'app', no hacemos nada (se importará y llamarán register_juego)
+    pass
+
+
 
 
 
