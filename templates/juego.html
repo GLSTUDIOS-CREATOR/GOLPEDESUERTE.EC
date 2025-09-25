@@ -13,6 +13,15 @@
       --ball: clamp(38px, 4.3vw, 66px); --ball-fs: clamp(14px, 1.65vw, 22px);
       --chip: clamp(42px, 5.3vw, 60px); --chip-fs: clamp(15px, 1.6vw, 21px);
       --last: clamp(68px, 8.4vw, 102px); --last-fs: clamp(30px, 3.8vw, 44px);
+
+      /* Estilos nuevos para el modal de SPINNERS */
+      --glass: rgba(255,255,255,.06);
+      --glassBorder: rgba(255,255,255,.16);
+      --glassGlow: 0 10px 30px rgba(0,0,0,.35);
+      --btnDark:#13294a;
+      --btnDarkBrd:#2a4d83;
+      --btnMint:#21cfa1;
+      --btnMintTxt:#05271c;
     }
     *{box-sizing:border-box}
     html,body{height:100%}
@@ -21,8 +30,6 @@
       background:radial-gradient(90% 90% at 50% 0%, #16294f 0%, #0b1220 60%, #090f1a 100%);
       font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Arial
     }
-    /* overlay público limpio */
-    html.overlay, body.overlay{ background:transparent !important; }
     .layout.hidden{display:none !important}
 
     .layout{display:grid;grid-template-columns:260px 1fr;min-height:100vh}
@@ -106,13 +113,13 @@
 
     @media (max-width:980px){ .layout{grid-template-columns:1fr} nav{display:none} .fig-item{grid-template-columns:1fr .6fr .6fr 1fr}}
 
-    /* ===== MODAL SPINNERS ===== */
+    /* ===== MODAL SPINNERS (rediseñado) ===== */
     .modal.hidden{display:none}
     .modal{position:fixed; inset:0; display:grid; place-items:center; z-index:9999}
-    .modal-backdrop{position:absolute; inset:0; background:rgba(0,0,0,.6); backdrop-filter:blur(3px)}
+    .modal-backdrop{position:absolute; inset:0; background:rgba(0,0,0,.6); backdrop-filter:blur(4px)}
     .modal-card{
-      position:relative; width:min(1080px, 94vw); max-height:88vh;
-      background:linear-gradient(180deg,rgba(16,29,54,.9),rgba(10,20,40,.9));
+      position:relative; width:min(1180px, 96vw); max-height:88vh;
+      background:linear-gradient(180deg,rgba(16,29,54,.92),rgba(10,20,40,.92));
       border:1px solid #2a3f68; border-radius:18px; box-shadow:0 30px 80px rgba(0,0,0,.5);
       display:flex; flex-direction:column; overflow:hidden
     }
@@ -129,54 +136,62 @@
     .subbar{display:flex; gap:12px; align-items:center; justify-content:space-between; margin-bottom:12px}
     .subbar .pill{background:#0f223f;border-color:#21406e}
     .subbar-actions{display:flex; gap:8px; align-items:center}
-    .spn-grid{display:grid; gap:12px; grid-template-columns: repeat(5, 1fr)}
-    .spn-cell{
-      background:linear-gradient(#ffffff,#e9eef6); color:#0e1a2f; border:1px solid #0002; border-radius:14px;
-      min-height:112px; display:flex; align-items:center; justify-content:center; font-weight:900;
-      font-size:clamp(22px, 2.6vw, 34px); box-shadow:0 2px 10px rgba(0,0,0,.28), 0 0 0 2px #0001 inset;
-      position:relative; padding:12px; transition:transform .08s ease, box-shadow .15s ease
-    }
-    .spn-cell:hover{ transform:translateY(-2px); box-shadow:0 10px 26px rgba(0,0,0,.35), 0 0 0 2px #0001 inset }
-    .spn-cell .label{position:absolute; top:6px; left:8px; font-size:11px; font-weight:800; opacity:.55}
-    .spn-num{font-variant-numeric:tabular-nums; letter-spacing:.5px}
-    .spn-actions{position:absolute; bottom:10px; right:10px; display:flex; gap:8px}
-    .mini{border:0; border-radius:999px; padding:7px 12px; font-weight:900; cursor:pointer}
-    .mini.gen{background:#172a4b; color:#e8eef8; border:1px solid #274e82}
-    .mini.lanz{background:#23d18b; color:#05271c}
-    .mini.lock{background:#2a1114; color:#ffb5b9; border:1px solid #7f1e26; cursor:not-allowed}
-    .spn-cell.used{opacity:.78}
-    .spn-cell.used::after{content:'🔒'; position:absolute; top:8px; right:10px; font-size:14px; opacity:.9}
 
-    /* ===== VISOR FULL (20) ===== */
-    .spn-full.hidden{display:none}
-    .spn-full{position:fixed; inset:0; background:radial-gradient(80% 80% at 50% 0%, #122440 0%, #0b1220 60%, #090f1a 100%); z-index:9998; display:flex; align-items:center; justify-content:center}
-    .spn-full-wrap{width:min(1200px, 92vw); padding:20px}
-    .spn-title{text-align:center; font-weight:900; font-size:clamp(22px, 3vw, 36px); margin-bottom:16px; color:#8cc9ff}
-    .spn-grid.large .spn-cell{min-height:92px; font-size:clamp(28px, 3.2vw, 44px)}
+    /* Grid 5x4 con tarjetas glass */
+    .spn-grid{display:grid; gap:14px; grid-template-columns: repeat(5, 1fr)}
+    .spn-card{
+      position:relative; border-radius:16px; padding:14px 14px 54px;
+      background:linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.03));
+      border:1px solid var(--glassBorder);
+      box-shadow: var(--glassGlow);
+      min-height:124px; overflow:hidden;
+      transition: transform .12s ease, box-shadow .2s ease, border-color .2s ease, background .2s ease;
+    }
+    .spn-card:hover{ transform: translateY(-2px); box-shadow:0 16px 36px rgba(0,0,0,.45); }
+    .spn-card.used{ opacity:.85; }
+    .spn-card .label{position:absolute; top:8px; left:10px; font-size:11px; font-weight:900; color:#9bb7e7; letter-spacing:.04em}
 
-    /* ===== OVERLAY ÚNICO ===== */
-    .solo.hidden{display:none}
-    .solo{
-      position:fixed; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:18px;
-      background: radial-gradient(120% 120% at 50% 10%,
-                  rgba(18,36,64,.55) 0%,
-                  rgba(12,22,42,.28) 45%,
-                  rgba(6,11,24,.12) 70%,
-                  rgba(4,7,15,0) 100%);
+    /* cinta de enviado */
+    .ribbon{
+      position:absolute; right:-36px; top:10px; width:160px; text-align:center;
+      transform:rotate(20deg);
+      background:linear-gradient(180deg,#742738,#5a1c2b); color:#ffd7db;
+      border:1px solid #a34a5f; padding:4px 0; font-weight:900; font-size:12px; letter-spacing:.03em;
+      box-shadow:0 6px 14px rgba(0,0,0,.3);
+      display:none;
     }
-    .solo .card{ width:min(900px, 92vw); border-radius:26px; padding:22px 24px; border:1px solid #ffffff26; background:transparent; }
-    .solo .screen{display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:220px}
-    .solo .digits{display:flex; gap:18px; align-items:center; justify-content:center}
-    .solo .d{
-      width:clamp(80px,10.5vw,140px); height:clamp(112px,14vw,168px);
-      display:flex; align-items:center; justify-content:center;
-      background:linear-gradient(#ffffff,#e9eef6);
-      color:#0d1a32; border:1px solid #0002; border-radius:18px;
-      font-weight:900; font-size:clamp(56px,8.4vw,128px);
-      box-shadow: inset 0 0 0 2px #0001, 0 10px 30px rgba(0,0,0,.35);
-      font-variant-numeric:tabular-nums; user-select:none;
+    .spn-card.used .ribbon{display:block}
+
+    .num-face{
+      margin-top:10px; display:flex; justify-content:center; align-items:center; gap:8px;
+      font-variant-numeric:tabular-nums;
     }
-    .solo .toolbar, .solo .meta {display:none!important}
+    .digit{
+      width:46px; height:62px; border-radius:10px; display:flex; align-items:center; justify-content:center;
+      background:linear-gradient(#ffffff,#e9eef6); color:#0d1a32; font-weight:1000; font-size:30px;
+      border:1px solid #0002; box-shadow: inset 0 0 0 2px #ffffffcc, 0 10px 24px rgba(0,0,0,.25);
+      user-select:none;
+    }
+    .num-empty .digit{background:linear-gradient(#f4f6fb,#e9eef6); color:#7283a9}
+
+    .controls-row{
+      position:absolute; left:10px; right:10px; bottom:10px; display:flex; gap:8px; align-items:center; justify-content:space-between;
+    }
+    .btn-pill{
+      border:0; border-radius:999px; padding:10px 14px; font-weight:900; cursor:pointer;
+      display:inline-flex; align-items:center; gap:8px;
+      transition: transform .06s ease, filter .15s ease, box-shadow .15s ease;
+    }
+    .btn-pill:active{ transform: translateY(1px); }
+    .btn-dark{
+      background:var(--btnDark); color:#e8eef8; border:1px solid var(--btnDarkBrd);
+      box-shadow:0 6px 16px rgba(18,41,74,.45);
+    }
+    .btn-mint{
+      background:var(--btnMint); color:var(--btnMintTxt); border:1px solid #17b58b;
+      box-shadow:0 6px 16px rgba(33,207,161,.35);
+    }
+    .btn-locked{ background:#3a1520; color:#ffd7db; border:1px solid #7f1e26 }
   </style>
 </head>
 <body>
@@ -226,7 +241,7 @@
         <button id="reset" class="btn reset">🔁 RESET</button>
         <div class="spacer"></div>
         <button id="btnSpinners" class="btn ghost">🎰 Spinners</button>
-        <button id="btnSoloSpin" class="btn ghost">🎯 Spinner 1 a 1</button>
+        <a class="btn ghost" href="/juego/spinner_overlay" target="_blank">🌐 Overlay público</a>
         <button id="rev1"   class="btn ghost">↩ Reversa 1</button>
         <button id="revn"   class="btn ghost">↩ Reversa N…</button>
         <button id="revall" class="btn ghost">↩ Reversa TODO</button>
@@ -260,7 +275,7 @@
         </div>
       </div>
 
-      <!-- MODAL SPINNERS 20 -->
+      <!-- MODAL SPINNERS -->
       <div id="spinnerModal" class="modal hidden" aria-hidden="true">
         <div class="modal-backdrop" data-close-modal></div>
         <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="mdlTitleSpn">
@@ -273,36 +288,14 @@
               <div class="pill">Fuente: <b>/juego/spinners</b> (fallback: XML en /static/db)</div>
               <div class="subbar-actions">
                 <button id="btnRefreshSpn" class="btn-xs">⟳ Actualizar</button>
-                <button id="btnOpenWindowSpn" class="btn-xs">🗔 Abrir en ventana</button>
-                <a id="lnkFullUrlSpn" class="btn-xs" target="_blank" href="#">🔗 Abrir visor (URL)</a>
-                <a id="lnkOverlayUrlSpn" class="btn-xs" target="_blank" href="#" title="Overlay en esta página">🧷 Overlay integrado</a>
-                <a id="lnkOverlayStaticSpn" class="btn-xs" target="_blank" href="/juego/spinner_overlay" title="Ideal para vMix">🌐 Overlay público</a>
+                <a id="lnkOverlayStaticSpn" class="btn-xs" target="_blank" href="/juego/spinner_overlay" title="Abrir overlay">🌐 Overlay público</a>
               </div>
             </div>
             <div id="gridSpinners" class="spn-grid"></div>
-            <p class="hint" style="margin-top:10px">Usa <b>Generar</b> para preparar (0000) y <b>Lanzar</b> para enviar la animación al overlay.</p>
+            <p class="hint" style="margin-top:10px">Usa <b>Generar</b> para preparar (0000) y <b>Lanzar</b> para animar en el overlay ya abierto.</p>
           </div>
           <div class="modal-foot">
             <button class="btn ghost" data-close-modal>Cerrar</button>
-          </div>
-        </div>
-      </div>
-
-      <!-- VISOR FULL (20) -->
-      <div id="SpinnersFullView" class="spn-full hidden">
-        <div class="spn-full-wrap">
-          <div class="spn-title">🎰 Spinners</div>
-          <div id="spnFullGrid" class="spn-grid large"></div>
-        </div>
-      </div>
-
-      <!-- OVERLAY ÚNICO -->
-      <div id="soloSpin" class="solo hidden">
-        <div class="card">
-          <div class="screen" id="soloScreen">
-            <div id="soloDigits" class="digits" title="Click / Espacio = lanzar · G = generar">
-              <span class="d">0</span><span class="d">0</span><span class="d">0</span><span class="d">0</span>
-            </div>
           </div>
         </div>
       </div>
@@ -315,15 +308,6 @@
     const qsAll = (s,root=document)=> Array.from(root.querySelectorAll(s));
     const sleep = ms => new Promise(r=>setTimeout(r, ms));
     const bust  = () => `&_=${Date.now()}`;
-    const Q = new URL(location.href).searchParams;
-    const isSpin = () => Q.get('spin') === '1';
-    const isVisor20 = () => Q.get('spinners') === '1';
-    const isOverlay = () => Q.get('overlay') === '1' || Q.get('public') === '1';
-
-    // Canal para coordinar con overlays (vMix y/o otra ventana)
-    const BC_NAME='glbingo-spinners';
-    let bc=null;
-    function getBC(){ if(!bc){ try{ bc=new BroadcastChannel(BC_NAME);}catch(_){ bc=null; } } return bc; }
 
     /* ========= Juego base ========= */
     let running=false, timer=null, secs=0, stack=[];
@@ -410,7 +394,7 @@
 
     /* ========= Figuras ========= */
     async function resolverFecha(){
-      try{ const r=await fetch('/juego/sorteo_fecha'); if(r.ok){ const j=await r.json(); if(j.fecha) return j.fecha; } }catch(_){}
+      try{ const r=await fetch('/juego/sorteo_fecha'); const j=await r.json(); if(j.fecha) return j.fecha; }catch(_){}
       return new Date().toISOString().slice(0,10);
     }
     async function loadFiguras(){
@@ -442,257 +426,77 @@
 
     /* ========= Spinners (20 / modal / overlay) ========= */
     const modalSpn = $('#spinnerModal'), gridSpinners=$('#gridSpinners'),
-          btnSpinners=$('#btnSpinners'), btnRefreshSpn=$('#btnRefreshSpn'),
-          btnOpenWindowSpn=$('#btnOpenWindowSpn'), lnkFullUrlSpn=$('#lnkFullUrlSpn'), lnkOverlayUrlSpn=$('#lnkOverlayUrlSpn'), lnkOverlayStaticSpn=$('#lnkOverlayStaticSpn');
-    const spnFull = $('#SpinnersFullView'), spnFullGrid = $('#spnFullGrid');
+          btnSpinners=$('#btnSpinners'), btnRefreshSpn=$('#btnRefreshSpn');
+    const BC_NAME = 'glbingo-spin';      // <<< CANAL UNIFICADO (overlay escucha este)
+    let bc=null; function getBC(){ if(!bc){ try{ bc=new BroadcastChannel(BC_NAME);}catch(_){ bc=null; } } return bc; }
 
-    const VISOR20_URL = location.origin + location.pathname + '?spinners=1';
-    const SOLO_INTEGRATED = location.origin + location.pathname + '?spin=1&overlay=1';
-    if (lnkFullUrlSpn)    lnkFullUrlSpn.href    = VISOR20_URL;
-    if (lnkOverlayUrlSpn) lnkOverlayUrlSpn.href = SOLO_INTEGRATED;
-    if (lnkOverlayStaticSpn) lnkOverlayStaticSpn.href = '/juego/spinner_overlay';
+    const VISOR_URL = '/juego/spinner_overlay';
+    $('#btnSpinners')?.addEventListener('click', ()=>{ modalSpn.classList.remove('hidden'); renderSpinnersGrid(); });
+    $('#btnRefreshSpn')?.addEventListener('click', ()=> renderSpinnersGrid());
+    $('#spinnerModal')?.querySelectorAll('[data-close-modal]').forEach(el=> el.addEventListener('click', ()=> modalSpn.classList.add('hidden')));
 
-    async function fetchSpinnersJSON(){
-      const r = await fetch('/juego/spinners?fmt=json'+bust());
-      if(!r.ok) throw 0;
-      const j = await r.json(); if(!Array.isArray(j.spinners)) throw 0;
-      return j.spinners.slice(0,20);
-    }
-    async function fetchXML(url){
-      const r = await fetch(url + (url.includes('?')?'&':'?') + '_=' + Date.now());
-      if(!r.ok) throw 0;
-      const xml = new DOMParser().parseFromString(await r.text(), "text/xml");
-      const out=[];
-      xml.querySelectorAll('n').forEach(n=>{
-        const v = (n.getAttribute('v') || n.textContent || '').replace(/\D/g,'').slice(0,4);
-        out.push(v? v.padStart(4,'0') : '');
-      });
-      return (out.concat(Array(20).fill(''))).slice(0,20);
-    }
-    async function fetchSpinnersSafe(){
-      const preferXML = isOverlay();
-      if (preferXML){
-        try{ return await fetchXML('/static/db/vmix_spinners.xml'); }catch(_){}
-        try{ return await fetchXML('/static/db/spinners.xml'); }catch(_){}
-        try{ const r2=await fetch('/juego/estado.json'+bust()); const j2=await r2.json(); if(Array.isArray(j2.spinners)) return j2.spinners.slice(0,20);}catch(_){}
-        try{ return await fetchSpinnersJSON(); }catch(_){}
-        return new Array(20).fill('');
-      }else{
-        try{ return await fetchSpinnersJSON(); }catch(_){}
-        try{ return await fetchXML('/static/db/vmix_spinners.xml'); }catch(_){}
-        try{ return await fetchXML('/static/db/spinners.xml'); }catch(_){}
-        try{ const r2=await fetch('/juego/estado.json'+bust()); const j2=await r2.json(); if(Array.isArray(j2.spinners)) return j2.spinners.slice(0,20);}catch(_){}
-        return new Array(20).fill('');
-      }
+    async function fetchSpinners(){
+      try{ const r = await fetch('/juego/spinners?fmt=json'+bust()); const j = await r.json(); if(Array.isArray(j.spinners)) return j.spinners.slice(0,20);}catch(_){}
+      try{ const r2=await fetch('/juego/estado.json'+bust()); const j2=await r2.json(); if(Array.isArray(j2.spinners)) return j2.spinners.slice(0,20);}catch(_){}
+      return new Array(20).fill('');
     }
 
-    function storeBase(f){ return `soloSpin:${f}`; }
-    function loadUsed(f){ try{ const raw = localStorage.getItem(storeBase(f)+':used'); if(raw) return new Set(JSON.parse(raw)); }catch(_){ } return new Set(); }
-    function saveUsed(f, set){ localStorage.setItem(storeBase(f)+':used', JSON.stringify(Array.from(set))); }
+    function k(fecha){ return `soloSpin:${fecha}`; }
+    function loadUsed(fecha){ try{ const raw = localStorage.getItem(k(fecha)+':used'); if(raw) return new Set(JSON.parse(raw)); }catch(_){ } return new Set(); }
+    function saveUsed(fecha,set){ localStorage.setItem(k(fecha)+':used', JSON.stringify(Array.from(set))); }
 
-    // --- Enviar orden al overlay (vMix) vía BroadcastChannel (sin abrir ventanas)
-    function broadcastToOverlay(op, index){
+    function sendToOverlay(op, index){
       const ch = getBC();
-      if (ch){ try{ ch.postMessage({type:'solo-spin', op, index}); }catch(_){ } }
-      // Plan B para motores sin BC: usar storage events
-      try{ localStorage.setItem('glbingo-spin-evt', JSON.stringify({t:Date.now(), op, index})); }catch(_){}
+      if (ch){ try{ ch.postMessage({type:'solo-spin', op, index, ts:Date.now()}); }catch(_){ } }
+      // Plan B: evento storage para casos sin BroadcastChannel
+      try{ localStorage.setItem('glbingo-spin-evt', JSON.stringify({op, index, ts:Date.now()})); }catch(_){}
     }
 
-    // (Opcional) abrir vista de overlay en una ventana si quieres previsualizar
-    function openPreviewWindow(){
-      window.open('/juego/spinner_overlay', 'SoloSpinnerPreview', 'width=900,height=650');
-    }
-
-    async function renderSpinnersGridWithActions(container){
-      const valores = await fetchSpinnersSafe();
+    async function renderSpinnersGrid(){
+      const valores = await fetchSpinners();
       const fecha = await resolverFecha();
       const usados = loadUsed(fecha);
 
-      container.innerHTML='';
+      gridSpinners.innerHTML='';
       valores.forEach((val,idx)=>{
-        const i = idx; const valor = (val||'').toString().padStart(4,'•');
-        const used = usados.has(i);
-        const cell=document.createElement('div'); cell.className='spn-cell';
-        if (used) cell.classList.add('used');
-        cell.innerHTML=`
-          <div class="label">#${i+1}</div>
-          <div class="spn-num">${valor}</div>
-          <div class="spn-actions">
-            <button class="mini gen">⚙ Generar</button>
-            <button class="mini ${used?'lock':'lanz'}">${used?'🔒 Enviado':'🚀 Lanzar'}</button>
-          </div>`;
+        const pretty = (val||'').toString().padStart(4,'•');
+        const used = usados.has(idx);
 
-        const [btnGen, btnLan] = cell.querySelectorAll('button');
-        btnGen.onclick = ()=> broadcastToOverlay('gen', i);
+        // tarjeta
+        const card = document.createElement('div');
+        card.className = 'spn-card' + (used? ' used':'');
+        card.innerHTML = `
+          <div class="label">#${idx+1}</div>
+          <div class="ribbon">ENVIADO</div>
+          <div class="num-face ${pretty.includes('•')?'num-empty':''}">
+            <div class="digit">${pretty[0]}</div>
+            <div class="digit">${pretty[1]}</div>
+            <div class="digit">${pretty[2]}</div>
+            <div class="digit">${pretty[3]}</div>
+          </div>
+          <div class="controls-row">
+            <button class="btn-pill btn-dark">⚙ Generar</button>
+            <button class="btn-pill ${used?'btn-locked':'btn-mint'}">${used?'🔒 Bloqueado':'🚀 Lanzar'}</button>
+          </div>
+        `;
+        const [btnGen, btnLan] = card.querySelectorAll('button');
+
+        btnGen.onclick = ()=> sendToOverlay('gen', idx);
         btnLan.onclick = ()=>{
-          if (usados.has(i)){
+          if (usados.has(idx)){
             const ok = confirm('Este spinner ya fue lanzado. ¿Deseas volver a lanzarlo?');
             if (!ok) return;
-            usados.delete(i); saveUsed(fecha, usados);
+            usados.delete(idx); saveUsed(fecha, usados);
+            card.classList.remove('used');
+            btnLan.className='btn-pill btn-mint';
+            btnLan.textContent='🚀 Lanzar';
           }
-          broadcastToOverlay('launch', i);
+          sendToOverlay('launch', idx);
         };
-        container.appendChild(cell);
+
+        gridSpinners.appendChild(card);
       });
     }
-
-    function openModalSpinners(){ $('#spinnerModal').classList.remove('hidden'); renderSpinnersGridWithActions(gridSpinners); }
-    $('#btnSpinners')?.addEventListener('click', openModalSpinners);
-    $('#btnRefreshSpn')?.addEventListener('click', ()=>renderSpinnersGridWithActions(gridSpinners));
-    $('#btnOpenWindowSpn')?.addEventListener('click', openPreviewWindow);
-    $('#spinnerModal')?.querySelectorAll('[data-close-modal]').forEach(el=> el.addEventListener('click', ()=>$('#spinnerModal').classList.add('hidden')));
-    window.addEventListener('focus', ()=> !$('#spinnerModal').classList.contains('hidden') && renderSpinnersGridWithActions(gridSpinners));
-
-    // Visor 20
-    async function bootFull20(){
-      document.querySelector('.layout')?.classList.add('hidden');
-      $('#SpinnersFullView').classList.remove('hidden');
-      const valores = await fetchSpinnersSafe();
-      const fecha = await resolverFecha();
-      const usados = loadUsed(fecha);
-      const grid = $('#spnFullGrid'); grid.innerHTML='';
-      valores.forEach((val,idx)=>{
-        const cell=document.createElement('div'); cell.className='spn-cell';
-        if (usados.has(idx)) cell.classList.add('used');
-        cell.innerHTML=`<div class="label">#${idx+1}</div><div class="spn-num">${(val||'').toString().padStart(4,'•')}</div>`;
-        grid.appendChild(cell);
-      });
-      setTimeout(bootFull20, 3000);
-    }
-
-    // Acceso rápido al overlay integrado (si quieres en esta misma app)
-    $('#btnSoloSpin')?.addEventListener('click', ()=> window.open(SOLO_INTEGRATED, 'SoloSpinner', 'width=900,height=650'));
-
-    /* ========= OVERLAY ÚNICO (escucha eventos) ========= */
-    const soloDigits = $('#soloDigits');
-    let SOLO_LIST = new Array(20).fill(''), SOLO_I=0, SOLO_USED=new Set();
-    const DIGS = 4;
-
-    function setSoloDigits(str){
-      const s = (str ?? '').padStart(DIGS, '0').slice(-DIGS);
-      const boxes = qsAll('.d', soloDigits);
-      for(let i=0;i<DIGS;i++) boxes[i].textContent = s[i];
-    }
-    function kBase(fecha){ return `soloSpin:${fecha}`; }
-    function loadUsedSolo(fecha){ try{ const raw = localStorage.getItem(kBase(fecha)+':used'); if(raw){ return new Set(JSON.parse(raw)); } }catch(_){ } return new Set(); }
-    function saveUsedSolo(fecha){ localStorage.setItem(kBase(fecha)+':used', JSON.stringify(Array.from(SOLO_USED))); }
-    function saveIdx(fecha){ localStorage.setItem(kBase(fecha)+':idx', String(SOLO_I)); }
-    function readIdx(fecha){ const v = parseInt(localStorage.getItem(kBase(fecha)+':idx')||'0',10); return Number.isFinite(v) ? v : 0; }
-    function targetForIndex(i){ const v = (SOLO_LIST[i]||'').trim(); return v ? v.padStart(4,'0') : ''; }
-    function isAvailable(i){ const has = !!targetForIndex(i); return has && !SOLO_USED.has(i); }
-    function nextAvailableFrom(start){
-      const n = SOLO_LIST.length;
-      for(let step=0; step<n; step++){ const j = (start + step) % n; if (isAvailable(j)) return j; }
-      return -1;
-    }
-
-    async function rollDigitTo(el, targetDigit, extraTurns=1){
-      let cur = /^\d$/.test(el.textContent) ? parseInt(el.textContent,10) : 0;
-      const to = parseInt(targetDigit,10);
-      const steps = extraTurns*10 + ((to - cur + 10) % 10);
-      for(let s=0; s<steps; s++){
-        cur = (cur+1) % 10;
-        el.textContent = String(cur);
-        const t = 30 + Math.min(200, s*3);
-        await sleep(t);
-      }
-    }
-    async function tambolaRollTo(targetStr){
-      const t = targetStr.padStart(DIGS,'0').slice(-DIGS);
-      const boxes = qsAll('.d', soloDigits);
-      for(let i=0;i<DIGS;i++){ await rollDigitTo(boxes[i], t[i], 2+i); }
-      setSoloDigits(t);
-    }
-
-    function updateSoloUI(fecha){
-      if (SOLO_I>=0 && SOLO_USED.has(SOLO_I)) setSoloDigits(targetForIndex(SOLO_I));
-      else setSoloDigits('0000');
-      saveIdx(fecha);
-    }
-
-    async function soloGenerar(){
-      const f = await resolverFecha();
-      const next = nextAvailableFrom((SOLO_I+1) % SOLO_LIST.length);
-      if (next !== -1){ SOLO_I = next; updateSoloUI(f); }
-    }
-    async function soloLanzar(){
-      const f = await resolverFecha();
-      if (SOLO_I < 0) return;
-      const target = targetForIndex(SOLO_I);
-      if (!target) return;
-      if (SOLO_USED.has(SOLO_I)){
-        const ok = confirm('Este spinner ya fue lanzado. ¿Deseas volver a lanzarlo?');
-        if (!ok) return;
-        SOLO_USED.delete(SOLO_I); saveUsedSolo(f);
-      }
-      await tambolaRollTo(target);
-      SOLO_USED.add(SOLO_I); saveUsedSolo(f);
-      saveIdx(f);
-    }
-
-    async function bootSolo(){
-      SOLO_LIST = await fetchSpinnersSafe();
-      const f = await resolverFecha();
-      SOLO_USED = loadUsedSolo(f);
-      const qI = parseInt(Q.get('i')||'-1',10);
-      if (Number.isFinite(qI) && qI>=0 && qI<SOLO_LIST.length){ SOLO_I = qI; }
-      else { SOLO_I = readIdx(f); if (!isAvailable(SOLO_I)) SOLO_I = nextAvailableFrom(SOLO_I); }
-      updateSoloUI(f);
-
-      // Click/Espacio/Letras (sigue funcionando local)
-      $('#soloScreen').addEventListener('click', soloLanzar);
-      window.addEventListener('keydown', e=>{
-        if (e.code==='Space'){ e.preventDefault(); soloLanzar(); }
-        else if (e.key==='g' || e.key==='G'){ e.preventDefault(); soloGenerar(); }
-      });
-
-      // Escucha postMessage (compatibilidad)
-      window.addEventListener('message', async (ev)=>{
-        if (ev.origin !== location.origin) return;
-        const d = ev.data || {};
-        if (d.type !== 'solo-spin') return;
-        if (Number.isFinite(d.index)){ SOLO_I = d.index; updateSoloUI(await resolverFecha()); }
-        if (d.op === 'gen')      await soloGenerar();
-        else if (d.op === 'launch') await soloLanzar();
-      });
-
-      // Escucha BroadcastChannel (vía canal)
-      const ch = getBC();
-      if (ch){
-        ch.addEventListener('message', async (ev)=>{
-          const d = ev.data || {};
-          if (d.type !== 'solo-spin') return;
-          if (Number.isFinite(d.index)){ SOLO_I = d.index; updateSoloUI(await resolverFecha()); }
-          if (d.op === 'gen')      await soloGenerar();
-          else if (d.op === 'launch') await soloLanzar();
-        });
-      }
-
-      // Plan B: evento de storage
-      window.addEventListener('storage', async (ev)=>{
-        if (ev.key !== 'glbingo-spin-evt') return;
-        try{
-          const d = JSON.parse(ev.newValue||'{}');
-          if (Number.isFinite(d.index)){ SOLO_I = d.index; updateSoloUI(await resolverFecha()); }
-          if (d.op === 'gen')      await soloGenerar();
-          else if (d.op === 'launch') await soloLanzar();
-        }catch(_){}
-      });
-    }
-
-    // Modo visor/overlay
-    if (isVisor20()){
-      bootFull20();
-    } else if (isSpin()){
-      document.querySelector('.layout')?.classList.add('hidden');
-      document.documentElement.classList.add('overlay');
-      document.body.classList.add('overlay');
-      $('#soloSpin').classList.remove('hidden');
-      bootSolo();
-    }
-
-    // Botón superior (overlay integrado opcional)
-    $('#btnSoloSpin')?.addEventListener('click', ()=> window.open(SOLO_INTEGRATED, 'SoloSpinner', 'width=900,height=650'));
 
     /* Boot */
     setLockedUI(true);
@@ -701,4 +505,3 @@
   </script>
 </body>
 </html>
-

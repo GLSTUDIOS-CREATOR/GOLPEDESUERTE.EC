@@ -5792,38 +5792,33 @@ from datetime import datetime, date
 from flask import Blueprint, jsonify, render_template, request, redirect, url_for, session
 
 # -------------------------------------------------------------------
-#  Descubre rutas de datos (respetando tu esquema con DATA_DIR)
+#  Rutas de datos (respetando tu DATA_DIR si ya existe)
 # -------------------------------------------------------------------
 _BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = globals().get("DATA_DIR", os.path.join(_BASE_DIR, "DATA"))
 DB_DIR = os.path.join(DATA_DIR, "static", "db")
 os.makedirs(DB_DIR, exist_ok=True)
 
-# Archivos “core” de juego
+# Archivos core
 BINGO_XML     = os.path.join(DB_DIR, "datos_bingo.xml")
 HIST_JSON     = os.path.join(DB_DIR, "historial.json")
 
-# Spinners (prioridad vmix_spinners.xml)
+# Spinners
 VMIX_SPINNERS_XML = globals().get("VMIX_SPINNERS_XML", os.path.join(DB_DIR, "vmix_spinners.xml"))
 SPINNERS_XML      = globals().get("SPINNERS_XML",      os.path.join(DB_DIR, "spinners.xml"))
 
-# Sorteo (para fecha + figuras del día)
+# Sorteos / Figuras
 SORTEOS_XML = globals().get("SORTEOS_XML", os.path.join(DB_DIR, "sorteos.xml"))
 SORTEO_JSON_CANDIDATES = [
     os.path.join(DB_DIR, "sorteo.json"),
     os.path.join(DB_DIR, "config_sorteo.json")
 ]
-
-# Figuras (varias ubicaciones válidas)
 FIGURAS_DIR          = os.path.join(DB_DIR, "figuras")
 FIGURAS_DEL_DIA_XML  = os.path.join(DB_DIR, "figuras_del_dia.xml")
 DATOS_FIGURAS_XML    = os.path.join(DB_DIR, "datos_figuras.xml")
 os.makedirs(FIGURAS_DIR, exist_ok=True)
+FIG_ESTADOS_JSON = os.path.join(DB_DIR, "figuras_estado.json")
 
-# Estados de figuras (persistidos también en XML de figuras)
-FIG_ESTADOS_JSON = os.path.join(DB_DIR, "figuras_estado.json")  # cache auxiliar opcional
-
-# Wrapper de sesión (si lo tienes en tu app, se respeta)
 require_session = globals().get("require_session", None)
 
 # -------------------------------------------------------------------
@@ -5832,11 +5827,12 @@ require_session = globals().get("require_session", None)
 juego_bp = Blueprint("juego", __name__, url_prefix="/juego")
 
 # -------------------------------------------------------------------
-#  Helpers base
+#  Helpers
 # -------------------------------------------------------------------
 def _json_read(path):
     try:
-        with open(path, "r", encoding="utf-8") as f: return json.load(f)
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f)
     except Exception:
         return None
 
@@ -5856,8 +5852,7 @@ def _read_stack():
     _ensure_hist()
     try:
         data = _json_read(HIST_JSON) or {}
-        stack = [int(x) for x in data.get("stack", []) if 1 <= int(x) <= 75]
-        return stack
+        return [int(x) for x in data.get("stack", []) if 1 <= int(x) <= 75]
     except Exception:
         return []
 
@@ -5882,15 +5877,12 @@ def _sync_bingo_xml_from_stack(stack):
     balotas_el = root.find("balotas")
     marked = set(int(x) for x in stack)
     last = stack[-1] if stack else None
-    # limpia
     for b in balotas_el.findall("balota"):
         b.set("estado", ""); b.set("ultimo", "")
-    # marca
     for b in balotas_el.findall("balota"):
         n = int(b.get("numero"))
         if n in marked: b.set("estado", str(n))
         if last is not None and n == last: b.set("ultimo", str(n))
-    # meta
     root.find("ultimos5").text = ",".join(str(x) for x in stack[-5:]) if stack else ""
     root.find("totalMarcadas").text = str(len(marked))
     root.find("ultimoMarcado").text = (str(last) if last is not None else "")
@@ -5911,7 +5903,6 @@ def _to_iso_date(s: str) -> str:
         return ""
 
 def _get_sorteo_fecha() -> str:
-    # 1) JSON
     for path in SORTEO_JSON_CANDIDATES:
         js = _json_read(path)
         if isinstance(js, dict):
@@ -5919,7 +5910,6 @@ def _get_sorteo_fecha() -> str:
                 if js.get(k):
                     iso = _to_iso_date(str(js[k]))
                     if iso: return iso
-    # 2) XML sorteo activo
     try:
         if os.path.exists(SORTEOS_XML):
             root = ET.parse(SORTEOS_XML).getroot()
@@ -5928,22 +5918,9 @@ def _get_sorteo_fecha() -> str:
                 return _to_iso_date(act.get("fecha"))
     except Exception:
         pass
-    # 3) hoy
     return date.today().isoformat()
 
-# -------------------------------------------------------------------
-#  SPINNERS
-# -------------------------------------------------------------------
 def _read_spinners_list():
-    """
-    Devuelve una lista de 20 strings (4 dígitos) leídos desde:
-    1) vmix_spinners.xml (prioridad)
-    2) spinners.xml
-    Si faltan, se completa con ''.
-    Estructuras aceptadas:
-        <spinners><n v="0123"/></spinners>
-        <spinners><n>0123</n></spinners>
-    """
     for path in (VMIX_SPINNERS_XML, SPINNERS_XML):
         try:
             if not os.path.exists(path): continue
@@ -5959,26 +5936,15 @@ def _read_spinners_list():
             pass
     return [""] * 20
 
-# -------------------------------------------------------------------
-#  FIGURAS (lectura de valores + estados y escritura a XML)
-# -------------------------------------------------------------------
+# ---------- Figuras helpers (idénticos a los que ya tenías) ----------
 def _pick_figuras_xml_for_fecha(fecha: str) -> str:
-    """
-    Orden de búsqueda:
-      1) DB_DIR/figuras/YYYY-MM-DD.xml
-      2) DB_DIR/figuras_del_dia.xml
-      3) DB_DIR/datos_figuras.xml
-    Devuelve el primero que exista. Si ninguno existe, crea figuras_del_dia.xml vacío.
-    """
     candidates = [
         os.path.join(FIGURAS_DIR, f"{fecha}.xml"),
         FIGURAS_DEL_DIA_XML,
         DATOS_FIGURAS_XML,
     ]
     for c in candidates:
-        if os.path.exists(c):
-            return c
-    # crear base vacía (no destruye nada previo)
+        if os.path.exists(c): return c
     root = ET.Element("figuras")
     ET.ElementTree(root).write(FIGURAS_DEL_DIA_XML, encoding="utf-8", xml_declaration=True)
     return FIGURAS_DEL_DIA_XML
@@ -5990,9 +5956,6 @@ def _parse_valor_int(v):
         return 0
 
 def _parse_fig_item_from_text(txt: str):
-    """
-    Acepta "NOMBRE  150", "CORTA-2: 200", "FULL - 700"
-    """
     s = (txt or "").strip()
     if not s: return None
     s = s.replace("—", "-").replace("–", "-")
@@ -6002,18 +5965,36 @@ def _parse_fig_item_from_text(txt: str):
         valor  = _parse_valor_int(m.group(2))
         if nombre:
             return {"nombre": nombre, "valor": valor}
-    # si no se pudo parsear, deja nombre completo y valor 0
     return {"nombre": s, "valor": 0}
 
+def _read_figuras_from_xml(path_xml: str):
+    out = []
+    try:
+        root = ET.parse(path_xml).getroot()
+        for f in root.findall(".//figura"):
+            nombre = (f.get("nombre") or f.findtext("figuraNOMBRE") or "").strip()
+            valor  = _parse_valor_int(f.get("valor") or f.findtext("figuraVALOR") or 0)
+            estado = (f.get("estado") or "").strip().upper() or "INACTIVO"
+            if nombre:
+                out.append({"nombre": nombre, "valor": valor, "estado": estado})
+    except Exception:
+        pass
+    return out
+
+def _merge_estado_desde_xml(path_xml: str, base_list: list):
+    try:
+        current = _read_figuras_from_xml(path_xml)
+        m = {c["nombre"].strip().lower(): c for c in current}
+        out = []
+        for f in base_list:
+            key = f["nombre"].strip().lower()
+            estado = (m.get(key, {}).get("estado") or f.get("estado") or "INACTIVO").upper()
+            out.append({"nombre": f["nombre"], "valor": _parse_valor_int(f["valor"]), "estado": estado})
+        return out
+    except Exception:
+        return base_list
+
 def _load_figuras_desde_json_o_xml(fecha: str):
-    """
-    Devuelve (figs:list[dict[nombre, valor, estado]], path_xml_usado:str)
-    Prioridad:
-      1) JSON (sorteo.json/config_sorteo.json) claves: figuras_del_dia | figs_del_dia | figuras
-      2) XML (figuras YYYY-MM-DD o figuras_del_dia.xml o datos_figuras.xml)
-    El 'estado' se toma del atributo XML si existe; si no, 'INACTIVO'.
-    """
-    # 1) JSON
     for path in SORTEO_JSON_CANDIDATES:
         js = _json_read(path)
         if isinstance(js, dict):
@@ -6031,106 +6012,55 @@ def _load_figuras_desde_json_o_xml(fecha: str):
                             p = _parse_fig_item_from_text(str(item))
                             if p:
                                 out.append({"nombre": p["nombre"], "valor": p["valor"], "estado": "INACTIVO"})
-                    # mezclar estados previos si en XML ya están
                     path_xml = _pick_figuras_xml_for_fecha(fecha)
                     out = _merge_estado_desde_xml(path_xml, out)
                     return (out, path_xml)
-
-    # 2) XML
     path_xml = _pick_figuras_xml_for_fecha(fecha)
     figs = _read_figuras_from_xml(path_xml)
     return (figs, path_xml)
 
-def _read_figuras_from_xml(path_xml: str):
-    """Lee figuras de un XML: atributos nombre, valor, estado."""
-    out = []
-    try:
-        root = ET.parse(path_xml).getroot()
-        for f in root.findall(".//figura"):
-            nombre = (f.get("nombre") or f.findtext("figuraNOMBRE") or "").strip()
-            valor  = _parse_valor_int(f.get("valor") or f.findtext("figuraVALOR") or 0)
-            estado = (f.get("estado") or "").strip().upper() or "INACTIVO"
-            if nombre:
-                out.append({"nombre": nombre, "valor": valor, "estado": estado})
-    except Exception:
-        pass
-    return out
-
-def _merge_estado_desde_xml(path_xml: str, base_list: list):
-    """
-    Si en el XML ya existen figuras con 'estado', mezcla ese estado.
-    Prioriza los nombres (case-insensitive).
-    """
-    try:
-        current = _read_figuras_from_xml(path_xml)
-        m = {c["nombre"].strip().lower(): c for c in current}
-        out = []
-        for f in base_list:
-            key = f["nombre"].strip().lower()
-            estado = (m.get(key, {}).get("estado") or f.get("estado") or "INACTIVO").upper()
-            out.append({"nombre": f["nombre"], "valor": _parse_valor_int(f["valor"]), "estado": estado})
-        return out
-    except Exception:
-        return base_list
-
 def _write_figure_state_to_xml(path_xml: str, nombre: str, estado: str, valor: int | None = None):
-    """
-    Actualiza/crea la figura 'nombre' en XML con el 'estado' (INACTIVO|SE FUE|SE QUEDO)
-    preservando el resto de elementos hijos (matriz 5x5, etc.).
-    Si 'valor' se provee (int), actualiza también el atributo valor.
-    """
     estado = (estado or "").strip().upper()
     if estado not in ("INACTIVO", "SE FUE", "SE QUEDO"):
         estado = "INACTIVO"
-
-    # crea XML base si no existe
     if not os.path.exists(path_xml):
         root = ET.Element("figuras")
         ET.ElementTree(root).write(path_xml, encoding="utf-8", xml_declaration=True)
-
     tree = ET.parse(path_xml); root = tree.getroot()
-    # Busca figura por atributo nombre o por hijo figuraNOMBRE
     target = None
     for f in root.findall(".//figura"):
         n = (f.get("nombre") or f.findtext("figuraNOMBRE") or "").strip()
         if n.lower() == nombre.strip().lower():
             target = f; break
-
     if target is None:
-        # crear nodo mínimo (no alteramos tu DB; solo añadimos si no existe)
         target = ET.SubElement(root, "figura", nombre=nombre)
-
-    # set atributos
     target.set("nombre", nombre)
     target.set("estado", estado)
     if valor is not None:
         target.set("valor", str(_parse_valor_int(valor)))
     else:
-        # si no viene valor y el nodo no tiene, deja 0 (no sobreescribe si ya tiene)
         if target.get("valor") is None:
             target.set("valor", "0")
-
     tree.write(path_xml, encoding="utf-8", xml_declaration=True)
     return True
 
 # -------------------------------------------------------------------
-#  VISTAS / ENDPOINTS
+#  Rutas
 # -------------------------------------------------------------------
 @juego_bp.route("/")
 def juego_ui():
-    # Renderiza tu template si lo tienes; si no, solo responde 200
     try:
         if require_session and not session.get("usuario"):
             return redirect(url_for("login"))
     except Exception:
         pass
-    # Si tienes templates/juego.html, se mostrará:
-    try:
-        return render_template("juego.html")
-    except Exception:
-        return "Juego OK (sin template juego.html).", 200
+    return render_template("juego.html")
 
-# --- Estado del juego (incluye spinners para que el front los tenga a mano)
+@juego_bp.get("/spinner_overlay")
+def spinner_overlay_ui():
+    # Overlay público que se controla por BroadcastChannel (vMix abre esta URL)
+    return render_template("spinner_overlay.html")
+
 @juego_bp.get("/estado.json")
 def juego_estado_json():
     stack = _read_stack()
@@ -6138,12 +6068,10 @@ def juego_estado_json():
     spinners = _read_spinners_list()
     return jsonify(ok=True, stack=stack, last=last, total=len(stack), ultimos5=stack[-5:], spinners=spinners)
 
-# --- Spinners JSON para front/vMix
 @juego_bp.get("/spinners")
 def juego_spinners():
     return jsonify(ok=True, spinners=_read_spinners_list())
 
-# --- Marcar / Reversa / Reset
 @juego_bp.post("/marcar")
 def juego_marcar():
     data = request.get_json(silent=True) or {}
@@ -6176,7 +6104,6 @@ def juego_reset():
     _sync_bingo_xml_from_stack([])
     return jsonify(success=True)
 
-# --- Stinger opcional (si usas este flag en XML para triggers)
 @juego_bp.post("/activar_stinger")
 def juego_activar_stinger():
     data = request.get_json(silent=True) or {}
@@ -6190,67 +6117,44 @@ def juego_activar_stinger():
     tree.write(BINGO_XML, encoding="utf-8", xml_declaration=True)
     return jsonify(success=True)
 
-# --- Fecha del sorteo (para front)
 @juego_bp.get("/sorteo_fecha")
 def juego_sorteo_fecha():
     return jsonify(ok=True, fecha=_get_sorteo_fecha())
 
-# --------------------------
-#  FIGURAS: listar y estados
-# --------------------------
 @juego_bp.get("/figuras")
 def juego_figuras_list():
-    """Lista figuras con nombre, valor y estado (INACTIVO|SE FUE|SE QUEDO)."""
     fecha = _get_sorteo_fecha()
     figuras, path_xml = _load_figuras_desde_json_o_xml(fecha)
     return jsonify(ok=True, fecha=fecha, origen_xml=path_xml, figuras=figuras)
 
 @juego_bp.post("/figuras/estado")
 def juego_figuras_estado():
-    """
-    Body JSON: { "nombre": "FULL", "estado": "SE FUE" | "SE QUEDO" | "INACTIVO", "valor": 150 (opc) }
-    - Actualiza el estado en el XML de figuras del día.
-    - Mantiene la estructura del XML (no borra hijos).
-    """
     data = request.get_json(silent=True) or {}
     nombre = (data.get("nombre") or "").strip()
     estado = (data.get("estado") or "").strip().upper()
     valor  = data.get("valor", None)
-
     if not nombre:
         return jsonify(ok=False, error="nombre requerido"), 400
     if estado not in ("INACTIVO", "SE FUE", "SE QUEDO"):
-        return jsonify(ok=False, error="estado inválido (use INACTIVO|SE FUE|SE QUEDO)"), 400
-
+        return jsonify(ok=False, error="estado inválido"), 400
     fecha = _get_sorteo_fecha()
     path_xml = _pick_figuras_xml_for_fecha(fecha)
-
     ok = _write_figure_state_to_xml(path_xml, nombre, estado, valor)
     if not ok:
         return jsonify(ok=False, error="no se pudo escribir XML"), 500
-
-    # opcional: cache JSON (útil si lo estabas usando antes)
     cache = _json_read(FIG_ESTADOS_JSON) or {}
     cache.setdefault(fecha, {})
     cache[fecha][nombre] = estado
     _json_write(FIG_ESTADOS_JSON, cache)
-
-    # responder con lista actualizada
     figs = _read_figuras_from_xml(path_xml)
     return jsonify(ok=True, fecha=fecha, origen_xml=path_xml, figuras=figs)
 
-# --- Sincroniza todos los estados en XML desde el cache JSON (opcional)
 @juego_bp.post("/figuras/sync-xml")
 def juego_figuras_sync_xml():
-    """
-    Re-aplica los estados desde figuras_estado.json al XML de la fecha actual.
-    Útil si cambiaste de fuente y quieres forzar reflejarlo en XML.
-    """
     fecha = _get_sorteo_fecha()
     cache = _json_read(FIG_ESTADOS_JSON) or {}
     estados = cache.get(fecha, {})
     path_xml = _pick_figuras_xml_for_fecha(fecha)
-    # Mezcla: preserva valores ya escritos en XML
     actual = {f["nombre"].strip().lower(): f for f in _read_figuras_from_xml(path_xml)}
     for nombre, estado in estados.items():
         low = nombre.strip().lower()
@@ -6259,31 +6163,17 @@ def juego_figuras_sync_xml():
     figs = _read_figuras_from_xml(path_xml)
     return jsonify(ok=True, fecha=fecha, origen_xml=path_xml, figuras=figs)
 
-# -------------------------------------------------------------------
-#  REGISTRO (para usarlo “inline” en tu app o como import)
-# -------------------------------------------------------------------
 def register_juego(app):
-    """
-    Llama a register_juego(app) desde tu app principal:
-        app = Flask(__name__)
-        register_juego(app)
-    """
     app.register_blueprint(juego_bp)
-    # Prepara archivos mínimos
     _ensure_bingo_xml()
     _ensure_hist()
 
-# Si este archivo está pegado directo en app.py puedes registrar:
 try:
-    app  # definido en tu app principal
-    # Evita doble registro si ya existe
+    app
     if "juego" not in [bp.name for bp in app.blueprints.values()]:
         register_juego(app)
 except Exception:
-    # Si no hay 'app', no hacemos nada (se importará y llamarán register_juego)
     pass
-
-
 
 
 

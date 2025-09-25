@@ -2,304 +2,345 @@
 <html lang="es">
 <head>
   <meta charset="utf-8" />
-  <title>Spinners Overlay | GL Bingo</title>
+  <title>Spinners Overlay</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
     :root{
-      /* Colores base */
-      --blueA: 18,36,64;  /* oscuro */
-      --blueB: 12,22,42;  /* medio  */
-      --belt-opacity: .62;
+      /* Fondo */
+      --bgA:#0a1223; --bgB:#0c1832; --bgC:#0a0f1f;
 
-      /* Dígitos */
-      --digitBgTop: #fefefe;
-      --digitBgBot: #e7ecfb;
-      --digitRimTop:#f9d56c; /* oro */
-      --digitRimBot:#e1a93a;
+      /* Panel */
+      --panelTop:#f7faff; --panelMid:#e9f0fd; --panelBot:#d7e1f5;
 
-      /* Resaltado final (amarillo) */
-      --litColor: #2a1b00;
-      --litGlow:  rgba(255,200,40,.55);
+      /* Título */
+      --titleGlow: 0 22px 70px rgba(46,95,180,.55);
 
-      /* Tamaños responsivos */
-      --gap: clamp(12px, 2.2vw, 22px);
-      --digitW: clamp(86px, 12vw, 146px);
-      --digitH: clamp(118px, 15vw, 176px);
-      --fzTitle: clamp(28px, 5.8vw, 68px);
-      --fzDigit: clamp(58px, 8.6vw, 128px);
-      --beltH: clamp(120px, 28vh, 260px);        /* altura de la franja */
-      --beltY:  30%;                              /* dónde inicia la franja desde abajo */
+      /* Azules */
+      --blueHi:#dfeaff;     /* claro para el degradado base */
+      --blueMd:#8fb1ff;     /* medio */
+      --blueLo:#3665d6;     /* oscuro */
+      --blueDeepHi:#cfe0ff; /* claro en estado aterrizado */
+      --blueDeepMd:#5e86ff; /* medio en estado aterrizado */
+      --blueDeepLo:#1f3993; /* muy oscuro en estado aterrizado */
+      --blueGlow:#6fa0ff;
+
+      /* Dorado solo para “chips usados” abajo */
+      --goldHi:#fff1bf; --goldMd:#ffd466; --goldLo:#d88b10;
+
+      /* Sombras */
+      --deckShadow: 0 28px 80px rgba(0,0,0,.55);
+      --digitShadow: 0 24px 46px rgba(0,0,0,.38);
     }
 
-    html,body{
-      height:100%; margin:0;
-      background: transparent;                    /* overlay transparente para vMix */
-      display:flex; align-items:center; justify-content:center; color:#e8f4ff;
-      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial;
-      -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;
-      overflow:hidden;
-    }
-
-    /* Franja/degradado que sube desde abajo y muere en el título */
-    .belt{
-      position: fixed; left:0; right:0; bottom: var(--beltY);
-      height: var(--beltH);
-      pointer-events:none;
+    html,body{height:100%}
+    body{
+      margin:0;
       background:
-        linear-gradient(0deg,
-          rgba(var(--blueA), var(--belt-opacity)) 0%,
-          rgba(var(--blueB), .45) 60%,
-          rgba(var(--blueA), 0.00) 100%);
-      z-index: 0;
-    }
-
-    .wrap{
-      position: relative;
-      display:flex; flex-direction:column; align-items:center; gap: 16px;
-      z-index: 1; /* por encima de la franja */
-      padding-inline: clamp(6px, 2vw, 18px);
-    }
-
-    /* ===== TÍTULO 3D con alto relieve y colores vibrantes ===== */
-    .title3d{
-      font-weight: 900; letter-spacing: .22em; text-transform: uppercase;
-      font-size: var(--fzTitle); line-height:1; user-select:none;
-      /* gradiente multicolor que funciona sobre cualquier fondo */
-      background: linear-gradient(180deg,
-                  #fff5d6 0%, #ffe08a 28%, #8dd3ff 55%, #59a4ff 70%, #9cc9ff 100%);
-      -webkit-background-clip: text; background-clip: text; color: transparent;
-
-      /* Alto relieve (capas) */
-      text-shadow:
-        0  1px 0  #3558a2,
-        0  2px 0  #27457e,
-        0  3px 0  #1b2f55,
-        0  5px 8px rgba(0,0,0,.35),
-        0  12px 24px rgba(0,0,0,.45);
-
-      /* halo exterior sutil */
-      filter: drop-shadow(0 10px 18px rgba(140,200,255,.45))
-              drop-shadow(0 2px 8px rgba(255,210,80,.35));
-    }
-
-    /* Contenedor de dígitos */
-    .digits{
-      display:flex; gap: var(--gap); align-items:center; justify-content:center;
-    }
-
-    /* Carta/dígito */
-    .d{
-      width: var(--digitW); height: var(--digitH);
+        radial-gradient(120% 140% at 50% -20%, #192a4f 0%, var(--bgA) 35%, var(--bgB) 70%, var(--bgC) 100%),
+        linear-gradient(180deg, #0b1428, #0a0f1f);
       display:flex; align-items:center; justify-content:center;
-      position:relative; border-radius:22px; cursor:pointer;
-      font-weight:1000; font-size: var(--fzDigit); font-variant-numeric: tabular-nums;
+      overflow:hidden;
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial;
+      color:#18305a;
+    }
 
-      background: linear-gradient(180deg, var(--digitBgTop) 0%, var(--digitBgBot) 100%);
-      color:#0b1630;
-      border:1px solid #0003;
+    .wrap{ width:min(1280px,96vw); }
+
+    /* ======== Título 3D ======== */
+    .title{
+      width:fit-content; margin:0 auto 16px; padding:18px 28px 16px;
+      border-radius:16px; backdrop-filter: blur(2px);
+      background: radial-gradient(120% 100% at 50% 0%,
+                  rgba(255,255,255,.14) 0%,
+                  rgba(255,255,255,.08) 55%,
+                  rgba(255,255,255,.03) 100%);
+      border:1px solid rgba(255,255,255,.22);
       box-shadow:
-        inset 0 0 0 2px #ffffffcc,
-        inset 0 12px 24px rgba(255,255,255,.35),
-        inset 0 -14px 26px rgba(0,0,0,.12),
-        0 14px 36px rgba(0,0,0,.45),
-        0 0 0 2px #0002;
+        inset 0 2px 0 rgba(255,255,255,.55),
+        0 1px 0 rgba(255,255,255,.35),
+        0 16px 26px rgba(0,0,0,.35),
+        var(--titleGlow);
+      letter-spacing:.46em;
+      text-align:center;
     }
-
-    /* Marco oro 3D */
-    .d::before{
-      content:"";
-      position:absolute; inset:-6px; border-radius:26px;
-      background: linear-gradient(180deg, var(--digitRimTop), var(--digitRimBot));
-      box-shadow: 0 2px 0 #7e5819 inset, 0 -2px 0 rgba(255,255,255,.35) inset, 0 16px 34px rgba(0,0,0,.35);
-      z-index:-1;
-    }
-
-    /* Brillo cristal diagonal */
-    .d::after{
-      content:""; position:absolute; inset:2px; border-radius:18px;
-      background: linear-gradient(145deg,
-                  rgba(255,255,255,.65) 0%,
-                  rgba(255,255,255,.25) 30%,
-                  rgba(255,255,255,0) 40%,
-                  rgba(255,255,255,0) 60%,
-                  rgba(0,0,0,.06) 100%);
-      pointer-events:none; mix-blend-mode: screen;
-    }
-
-    /* Hover sutil (no interfiere con vMix) */
-    .d:hover{
-      box-shadow:
-        inset 0 0 0 2px #ffffffcc,
-        inset 0 14px 28px rgba(255,255,255,.4),
-        inset 0 -16px 30px rgba(0,0,0,.16),
-        0 18px 42px rgba(0,0,0,.5),
-        0 0 0 2px #0002,
-        0 0 24px 4px rgba(80,140,255,.35);
-      transform: translateY(-1px);
-      transition: box-shadow .18s ease, transform .12s ease;
-    }
-
-    /* ===== Resaltado amarillo cuando termina el spinner ===== */
-    .d.lit{
-      color: var(--litColor);
+    .title span{
+      display:inline-block;
+      font-weight:1000;
+      font-size: clamp(28px,3.8vw,54px);
+      background: linear-gradient(180deg,#f9fbff 0%, #dbe7ff 65%, #b8ccff 100%);
+      -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent;
       text-shadow:
-        0 0 2px rgba(255,220,140,.9),
-        0 0 10px var(--litGlow),
-        0 0 20px var(--litGlow);
-      animation: pulseGlow .9s ease-out 1;
-    }
-    @keyframes pulseGlow{
-      0%{ filter: drop-shadow(0 0 0 var(--litGlow)); }
-      60%{ filter: drop-shadow(0 0 18px var(--litGlow)); }
-      100%{ filter: drop-shadow(0 0 6px  var(--litGlow)); }
+        0 1px 0 #fff,
+        0 2px 0 #eef4ff,
+        0 3px 0 #dfeaff,
+        0 4px 0 #cbd9ff,
+        0 6px 10px rgba(0,0,0,.35);
     }
 
-    ::-webkit-scrollbar{width:0;height:0}
+    /* ======== Bandeja ======== */
+    .deck{
+      margin-top:10px;
+      padding:26px clamp(16px,2.4vw,36px);
+      border-radius:20px;
+      background: linear-gradient(180deg, var(--panelTop) 0%, var(--panelMid) 54%, var(--panelBot) 100%);
+      border-top:1px solid #fff; border-bottom:1px solid #b9c6e2;
+      box-shadow: var(--deckShadow);
+      display:flex; gap: clamp(14px,2.2vw,28px); justify-content:center; align-items:flex-end;
+    }
+
+    /* ======== Cartucho / Dígito (blanco) ======== */
+    .digit{
+      width: clamp(92px, 10.6vw, 142px);
+      height: clamp(124px, 13.2vw, 174px);
+      border-radius:24px;
+      position:relative; overflow:hidden;
+      background: linear-gradient(180deg,#ffffff 0%, #f3f7ff 60%, #e7eef9 100%);
+      border:2px solid #f8fbff;
+      box-shadow:
+        inset 0 0 0 2px #ffffff,
+        inset 0 -14px 0 rgba(0,0,0,.06),
+        0 2px 0 #fff,
+        var(--digitShadow);
+    }
+    .digit::before{
+      content:''; position:absolute; inset:0; border-radius:24px;
+      box-shadow: inset 0 3px 0 rgba(255,255,255,.95), inset 0 -12px 0 rgba(0,0,0,.08);
+      pointer-events:none;
+    }
+    .digit::after{
+      content:''; position:absolute; inset:4px; border-radius:20px;
+      box-shadow: inset 0 0 0 2px rgba(90,120,220,.16);
+      pointer-events:none;
+      transition: box-shadow .25s ease, outline-color .25s ease;
+    }
+
+    /* Reel (0..9) */
+    .reel{
+      position:absolute; left:0; right:0; top:0;
+      display:flex; flex-direction:column; align-items:center;
+      transform: translateY(0);
+      transition: transform 1.25s cubic-bezier(.17,.9,.16,1);
+      will-change: transform;
+    }
+    .slot{
+      height: clamp(124px, 13.2vw, 174px);
+      display:flex; align-items:center; justify-content:center;
+      font-weight:1000;
+      font-size: clamp(62px, 8.6vw, 118px);
+      /* Números (azul durante giro) */
+      background: linear-gradient(180deg, var(--blueHi), var(--blueMd) 58%, var(--blueLo));
+      -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent;
+      color:transparent;
+      text-shadow:
+        0 1px 0 rgba(255,255,255,.95),
+        0 12px 18px rgba(0,0,0,.16);
+    }
+
+    /* Al aterrizar: AZUL OSCURO alto relieve + halo */
+    .digit.landed::after{
+      box-shadow:
+        inset 0 0 0 2px rgba(255,255,255,.9),
+        0 0 0 2px rgba(96,132,255,.35),
+        0 0 38px rgba(94,134,255,.28);
+    }
+    .digit.landed .slot{
+      background: linear-gradient(180deg, var(--blueDeepHi) 0%, var(--blueDeepMd) 55%, var(--blueDeepLo) 100%);
+      -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent;
+      color:transparent;
+      text-shadow:
+        0 1px 0 rgba(255,255,255,.95),
+        0 0 26px color-mix(in srgb, var(--blueGlow) 80%, transparent),
+        0 18px 26px rgba(0,0,0,.28),
+        0 0 1px rgba(10,20,60,.45);
+      animation: flash 1s ease-in-out 1, pulse 2.2s ease-in-out 3 1s;
+    }
+    @keyframes flash{ 0%{filter:brightness(1)} 30%{filter:brightness(1.45)} 60%{filter:brightness(1.05)} 100%{filter:brightness(1.18)} }
+    @keyframes pulse{
+      0%,100%{
+        text-shadow:
+          0 1px 0 rgba(255,255,255,.95),
+          0 0 16px color-mix(in srgb, var(--blueGlow) 48%, transparent),
+          0 18px 26px rgba(0,0,0,.28),
+          0 0 1px rgba(10,20,60,.40);
+      }
+      50%{
+        text-shadow:
+          0 1px 0 rgba(255,255,255,1),
+          0 0 36px color-mix(in srgb, var(--blueGlow) 90%, transparent),
+          0 18px 26px rgba(0,0,0,.28),
+          0 0 1px rgba(10,20,60,.46);
+      }
+    }
+
+    /* ======== Barra 1..20 ======== */
+    .bar{ display:grid; grid-template-columns: repeat(20,1fr); gap:8px; margin-top:14px }
+    .chip{
+      height:30px; border-radius:999px; font-weight:900; font-size:13px;
+      display:flex; align-items:center; justify-content:center;
+      color:#24406f;
+      background: linear-gradient(180deg,#eef3ff,#dce6f8);
+      border:1px solid #c7d2ea;
+      box-shadow: inset 0 0 0 1px #ffffffc0, 0 12px 20px rgba(0,0,0,.18);
+      opacity:.96;
+    }
+    .chip.used{
+      color:#402e00;
+      background: linear-gradient(180deg,var(--goldHi),var(--goldMd));
+      border-color:#f0c24c;
+      box-shadow: inset 0 0 0 1px #ffffffc0, 0 12px 20px rgba(0,0,0,.18);
+    }
+    .chip.active{ outline:2px solid #3f64c4; outline-offset:2px; }
   </style>
 </head>
 <body>
-  <!-- Franja de degradado que sube y termina en el título -->
-  <div class="belt" aria-hidden="true"></div>
-
   <div class="wrap">
-    <div class="title3d">SPINNERS</div>
-    <div id="digits" class="digits">
-      <div class="d">0</div><div class="d">0</div><div class="d">0</div><div class="d">0</div>
+    <div class="title"><span>SPINNERS</span></div>
+
+    <div class="deck" id="deck">
+      <div class="digit"><div class="reel"></div></div>
+      <div class="digit"><div class="reel"></div></div>
+      <div class="digit"><div class="reel"></div></div>
+      <div class="digit"><div class="reel"></div></div>
     </div>
+
+    <div class="bar" id="bar"></div>
   </div>
 
   <script>
-    /* === Lógica original (con mínimo extra para el resaltado amarillo) === */
-    const $ = s => document.querySelector(s);
-    const qsAll = (s,root=document)=> Array.from(root.querySelectorAll(s));
+    /* ===== Util ===== */
+    const DIGS = 4;
+    const $  = s => document.querySelector(s);
+    const $$ = s => Array.from(document.querySelectorAll(s));
     const sleep = ms => new Promise(r=>setTimeout(r, ms));
-    const BUST = () => (location.search ? '&' : '?') + '_=' + Date.now();
+    const bust  = () => `&_=${Date.now()}`;
     const Q = new URL(location.href).searchParams;
 
-    const DIGS = 4;
-    let LIST = new Array(20).fill('');
-    let I = 0;
-    let USED = new Set();
-    let FECHA = '';
+    let INDEX = Math.max(0, Math.min(19, parseInt(Q.get('i')||'0',10) || 0));
+    let LIST  = new Array(20).fill('');
 
-    function kBase(fecha){ return `soloSpin:${fecha}`; }
-    function loadUsed(fecha){
-      try { const raw = localStorage.getItem(kBase(fecha)+':used'); if(raw) return new Set(JSON.parse(raw)); }
-      catch(_){}
-      return new Set();
-    }
-    function saveUsed(fecha,set){ localStorage.setItem(kBase(fecha)+':used', JSON.stringify(Array.from(set))); }
-    function saveIdx(fecha){ localStorage.setItem(kBase(fecha)+':idx', String(I)); }
-    function readIdx(fecha){ const v = parseInt(localStorage.getItem(kBase(fecha)+':idx')||'0',10); return Number.isFinite(v)?v:0; }
-
-    async function fetchSpinnersJSON(){
-      const r = await fetch('/juego/spinners?fmt=json'+BUST());
-      if(!r.ok) throw 0;
-      const j = await r.json();
-      if (!Array.isArray(j.spinners)) throw 0;
-      return j.spinners.slice(0,20);
-    }
-    async function fetchXML(url){
-      const r = await fetch(url + (url.includes('?')?'&':'?') + '_=' + Date.now());
-      if(!r.ok) throw 0;
-      const xml = new DOMParser().parseFromString(await r.text(), 'text/xml');
-      const out=[]; xml.querySelectorAll('n').forEach(n=>{
-        const v = (n.getAttribute('v') || n.textContent || '').replace(/\D/g,'').slice(0,4);
-        out.push(v? v.padStart(4,'0') : '');
-      });
-      return (out.concat(Array(20).fill(''))).slice(0,20);
-    }
-    async function fetchSpinnersFallback(){
-      try{ return await fetchSpinnersJSON(); }catch(_){}
-      try{ return await fetchXML('/static/db/vmix_spinners.xml'); }catch(_){}
-      try{ return await fetchXML('/static/db/spinners.xml'); }catch(_){}
+    /* ===== Datos ===== */
+    async function fetchSpinners(){
       try{
-        const r=await fetch('/juego/estado.json'+BUST()); if(r.ok){ const j=await r.json(); if(Array.isArray(j.spinners)) return j.spinners.slice(0,20); }
+        const r=await fetch('/juego/spinners?fmt=json'+bust());
+        const j=await r.json();
+        if(Array.isArray(j.spinners)) return j.spinners.slice(0,20);
+      }catch(_){}
+      try{
+        const r2=await fetch('/static/db/spinners.xml'+(location.search?location.search+'&':'?')+bust());
+        if(r2.ok){
+          const xml=new DOMParser().parseFromString(await r2.text(),'text/xml');
+          const out=[]; xml.querySelectorAll('n').forEach(n=>{
+            const v=(n.getAttribute('v')||n.textContent||'').replace(/\D/g,'').slice(0,4);
+            out.push(v? v.padStart(4,'0'):'');
+          });
+          return (out.concat(Array(20).fill(''))).slice(0,20);
+        }
       }catch(_){}
       return new Array(20).fill('');
     }
-    async function resolverFecha(){
-      try{ const r=await fetch('/juego/sorteo_fecha'); if(r.ok){ const j=await r.json(); if(j.fecha) return j.fecha; } }catch(_){}
-      return new Date().toISOString().slice(0,10);
-    }
 
-    function setDigits(text){
-      const s = (text||'').toString().padStart(DIGS,'0').slice(-DIGS);
-      const boxes = qsAll('.d', $('#digits'));
-      boxes.forEach(b=>b.classList.remove('lit'));     // quitar resaltado al preparar
-      for (let i=0;i<DIGS;i++) boxes[i].textContent = s[i];
-    }
-    async function rollDigitTo(el, targetDigit, extraTurns=1){
-      let cur = /^\d$/.test(el.textContent) ? parseInt(el.textContent,10) : 0;
-      const to = parseInt(targetDigit,10);
-      const steps = extraTurns*10 + ((to - cur + 10) % 10);
-      for (let s=0;s<steps;s++){
-        cur = (cur+1) % 10;
-        el.textContent = String(cur);
-        const t = 26 + Math.min(180, s*3);
-        await sleep(t);
+    /* ===== Barra ===== */
+    const bar = $('#bar');
+    function buildBar(){
+      bar.innerHTML='';
+      for(let i=0;i<20;i++){
+        const c=document.createElement('div');
+        c.className='chip'; c.textContent=String(i+1).padStart(2,'0');
+        if(i===INDEX) c.classList.add('active');
+        bar.appendChild(c);
       }
     }
-    async function animateTo(targetStr){
-      const t = (targetStr||'0000').toString().padStart(DIGS,'0').slice(-DIGS);
-      const boxes = qsAll('.d', $('#digits'));
-      for(let i=0;i<DIGS;i++){ await rollDigitTo(boxes[i], t[i], 2+i); }
-      setDigits(t);                                     // fija el valor final
-      boxes.forEach(b=>b.classList.add('lit'));         // ¡resalta en amarillo!
+    function markUsed(i,on=true){
+      const chip=bar.children[i]; if(!chip) return;
+      chip.classList.toggle('used', on);
+    }
+    function markActive(i){
+      [...bar.children].forEach((c,idx)=> c.classList.toggle('active', idx===i));
     }
 
-    function targetFor(i){
-      const v = (LIST[i]||'').trim();
+    /* ===== Reels (tambola) ===== */
+    function buildReels(){
+      $$('#deck .reel').forEach(reel=>{
+        reel.innerHTML='';
+        for(let k=0;k<60;k++){ // 0..9 repetido 6 veces
+          const s=document.createElement('div');
+          s.className='slot';
+          s.textContent=String(k%10);
+          reel.appendChild(s);
+        }
+      });
+    }
+    function digitH(){
+      const slot=$('.slot'); return slot? slot.getBoundingClientRect().height : 150;
+    }
+    async function spinDigitTo(digitEl, target, turns=3, duration=1100){
+      digitEl.classList.remove('landed');
+      const reel=digitEl.querySelector('.reel');
+      const h=digitH();
+      const steps = Math.round(turns*10 + (target%10));
+      reel.style.transitionDuration=`${duration}ms`;
+      reel.style.transform=`translateY(${-h*steps}px)`;
+      await new Promise(res=>{
+        const done=()=>{ reel.removeEventListener('transitionend',done); res(); };
+        reel.addEventListener('transitionend',done,{once:true});
+      });
+      // normaliza
+      const norm = (target%10);
+      reel.style.transitionDuration='0ms';
+      reel.style.transform = `translateY(${-h*norm}px)`;
+      await sleep(16);
+      digitEl.classList.add('landed');
+    }
+    async function rollTo(str, baseTurns=3){
+      const s = (str||'').padStart(4,'0').slice(-4);
+      const digits = $$('#deck .digit');
+      for(let i=0;i<4;i++){
+        await spinDigitTo(digits[i], parseInt(s[i],10), baseTurns+(i*0.5), 900+(i*140));
+      }
+    }
+    function targetForIndex(i){
+      const v=(LIST[i]||'').trim();
       return v ? v.padStart(4,'0') : '';
     }
-    function isAvailable(i){ const v = targetFor(i); return !!v && !USED.has(i); }
-    function nextAvailableFrom(start){
-      const n = LIST.length;
-      for(let step=0; step<n; step++){ const j=(start+step)%n; if(isAvailable(j)) return j; }
-      return -1;
+
+    /* ===== Acciones ===== */
+    async function doGenerate(i){
+      INDEX=i; markActive(i);
+      await rollTo('0000', 2);      // genera (0000) con giro corto
+    }
+    async function doLaunch(i){
+      INDEX=i; markActive(i);
+      const t=targetForIndex(i);
+      if(!t) return;
+      await rollTo(t, 4);           // gira más y aterriza (azul oscuro)
+      markUsed(i, true);
     }
 
-    async function generar(){
-      const j = nextAvailableFrom((I+1) % LIST.length);
-      if (j !== -1){ I = j; saveIdx(FECHA); setDigits('0000'); }  // vuelve a 0000 y sin resaltado
+    /* ===== Mensajería ===== */
+    function handleMessage(d){
+      if(!d || d.type!=='solo-spin') return;
+      const idx = Number.isFinite(d.index)? Math.max(0,Math.min(19,d.index)) : INDEX;
+      if(d.op==='gen') doGenerate(idx);
+      else if(d.op==='launch') doLaunch(idx);
     }
-    async function lanzar(){
-      if (I < 0) return;
-      const tgt = targetFor(I);
-      if (!tgt) return;
+    try{
+      const bc=new BroadcastChannel('glbingo-spin');
+      bc.addEventListener('message', ev=>handleMessage(ev.data));
+    }catch(_){}
+    window.addEventListener('message', ev=>{
+      if(ev.origin!==location.origin) return; handleMessage(ev.data);
+    });
+    window.addEventListener('storage', ev=>{
+      if(ev.key!=='glbingo-spin-evt') return;
+      try{ const d=JSON.parse(ev.newValue||'{}'); handleMessage({type:'solo-spin',op:d.op,index:d.index}); }catch(_){}
+    });
 
-      if (USED.has(I)){
-        const ok = confirm('Este spinner ya fue lanzado. ¿Deseas volver a lanzarlo?');
-        if (!ok) return;
-        USED.delete(I); saveUsed(FECHA, USED);
-      }
-
-      await animateTo(tgt);
-      USED.add(I); saveUsed(FECHA, USED);
-
-      const next = nextAvailableFrom((I+1) % LIST.length);
-      I = (next === -1) ? I : next;
-      saveIdx(FECHA);
-    }
-
+    /* ===== Boot ===== */
     (async function boot(){
-      FECHA = await resolverFecha();
-      LIST  = await fetchSpinnersFallback();
-      USED  = loadUsed(FECHA);
-
-      const qi = parseInt(Q.get('i')||'');
-      if (Number.isFinite(qi) && qi>=0 && qi<LIST.length) I = qi;
-      else { I = readIdx(FECHA); if (!isAvailable(I)) I = nextAvailableFrom(I); }
-      if (I < 0) I = 0;
-
-      setDigits('0000');
-
-      // Interacciones mínimas (para operador/VMix)
-      $('#digits').addEventListener('click', lanzar);
-      window.addEventListener('keydown', e=>{
-        if (e.code === 'Space'){ e.preventDefault(); lanzar(); }
-        else if (e.key === 'g' || e.key === 'G'){ e.preventDefault(); generar(); }
-      });
+      buildReels();
+      buildBar();
+      LIST = await fetchSpinners();
+      await rollTo('0000',1);  // estado inicial
     })();
   </script>
 </body>
