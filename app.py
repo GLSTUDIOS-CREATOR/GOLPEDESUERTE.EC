@@ -5787,13 +5787,16 @@ def api_vendedores_ranking():
 #  JUEGO + SPINNERS + FIGURAS
 #  (Blueprint: /juego/*)
 # ===========================
+# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 import os, json, re, xml.etree.ElementTree as ET
 from datetime import datetime, date
-from flask import Blueprint, jsonify, render_template, request, redirect, url_for, session
+from flask import Blueprint, jsonify, render_template, request, redirect, url_for, session, send_file, make_response
 
-# -------------------------------------------------------------------
-#  Rutas de datos (respetando tu DATA_DIR si ya existe)
-# -------------------------------------------------------------------
+# ============================================================
+#  CONFIG & RUTAS (respeta tu DATA_DIR si ya existe)
+# ============================================================
 _BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = globals().get("DATA_DIR", os.path.join(_BASE_DIR, "DATA"))
 DB_DIR = os.path.join(DATA_DIR, "static", "db")
@@ -5803,32 +5806,40 @@ os.makedirs(DB_DIR, exist_ok=True)
 BINGO_XML     = os.path.join(DB_DIR, "datos_bingo.xml")
 HIST_JSON     = os.path.join(DB_DIR, "historial.json")
 
-# Spinners
+# Spinners (VMIX overlay + fallback XML)
 VMIX_SPINNERS_XML = globals().get("VMIX_SPINNERS_XML", os.path.join(DB_DIR, "vmix_spinners.xml"))
 SPINNERS_XML      = globals().get("SPINNERS_XML",      os.path.join(DB_DIR, "spinners.xml"))
+SPINNERS_STATE_JSON = os.path.join(DB_DIR, "spinners_state.json")
 
 # Sorteos / Figuras
 SORTEOS_XML = globals().get("SORTEOS_XML", os.path.join(DB_DIR, "sorteos.xml"))
 SORTEO_JSON_CANDIDATES = [
     os.path.join(DB_DIR, "sorteo.json"),
-    os.path.join(DB_DIR, "config_sorteo.json")
+    os.path.join(DB_DIR, "config_sorteo.json"),
 ]
-FIGURAS_DIR          = os.path.join(DB_DIR, "figuras")
-FIGURAS_DEL_DIA_XML  = os.path.join(DB_DIR, "figuras_del_dia.xml")
-DATOS_FIGURAS_XML    = os.path.join(DB_DIR, "datos_figuras.xml")
+FIGURAS_DIR         = os.path.join(DB_DIR, "figuras")
+FIGURAS_DEL_DIA_XML = os.path.join(DB_DIR, "figuras_del_dia.xml")
+DATOS_FIGURAS_XML   = os.path.join(DB_DIR, "datos_figuras.xml")
 os.makedirs(FIGURAS_DIR, exist_ok=True)
 FIG_ESTADOS_JSON = os.path.join(DB_DIR, "figuras_estado.json")
 
+# vMix API (HTTP) — opcional
+VMIX_HOST = os.getenv("VMIX_HOST", "127.0.0.1")
+VMIX_PORT = os.getenv("VMIX_PORT", "8088")
+VMIX_OVERLAY_INDEX = int(os.getenv("VMIX_OVERLAY_INDEX", "3"))
+VMIX_SPINNER_INPUT = os.getenv("VMIX_SPINNER_INPUT", "SpinnerOverlay")
+
+# Si tu proyecto define require_session, se respeta
 require_session = globals().get("require_session", None)
 
-# -------------------------------------------------------------------
-#  Blueprint
-# -------------------------------------------------------------------
+# ============================================================
+#  BLUEPRINT
+# ============================================================
 juego_bp = Blueprint("juego", __name__, url_prefix="/juego")
 
-# -------------------------------------------------------------------
-#  Helpers
-# -------------------------------------------------------------------
+# ============================================================
+#  HELPERS JSON/XML
+# ============================================================
 def _json_read(path):
     try:
         with open(path, "r", encoding="utf-8") as f:
@@ -5865,24 +5876,39 @@ def _ensure_bingo_xml():
     root = ET.Element("bingo")
     balotas = ET.SubElement(root, "balotas")
     for n in range(1, 76):
+        # 'estado' y 'ultimo' se guardan como cadena del número (según tu estructura)
         ET.SubElement(balotas, "balota", numero=str(n), estado="", ultimo="")
     ET.SubElement(root, "ultimos5").text = ""
     ET.SubElement(root, "totalMarcadas").text = "0"
     ET.SubElement(root, "ultimoMarcado").text = ""
+    ET.SubElement(root, "stinger").text = ""
     ET.ElementTree(root).write(BINGO_XML, encoding="utf-8", xml_declaration=True)
 
 def _sync_bingo_xml_from_stack(stack):
+    """
+    Sincroniza:
+      - balota[@estado] = 'n' si n está marcada, si no ''
+      - balota[@ultimo] = 'n' sólo para la última marcada (las demás '')
+      - ultimos5, totalMarcadas, ultimoMarcado
+    """
     _ensure_bingo_xml()
     tree = ET.parse(BINGO_XML); root = tree.getroot()
     balotas_el = root.find("balotas")
     marked = set(int(x) for x in stack)
     last = stack[-1] if stack else None
+
+    # Limpia todos los 'estado' y 'ultimo'
     for b in balotas_el.findall("balota"):
         b.set("estado", ""); b.set("ultimo", "")
+
+    # Marca los presentes y el último
     for b in balotas_el.findall("balota"):
         n = int(b.get("numero"))
-        if n in marked: b.set("estado", str(n))
-        if last is not None and n == last: b.set("ultimo", str(n))
+        if n in marked:
+            b.set("estado", str(n))
+        if last is not None and n == last:
+            b.set("ultimo", str(n))
+
     root.find("ultimos5").text = ",".join(str(x) for x in stack[-5:]) if stack else ""
     root.find("totalMarcadas").text = str(len(marked))
     root.find("ultimoMarcado").text = (str(last) if last is not None else "")
@@ -5920,6 +5946,20 @@ def _get_sorteo_fecha() -> str:
         pass
     return date.today().isoformat()
 
+# ============================================================
+#  SPINNERS: estado persistente + XML fallback + vMix API
+# ============================================================
+def _ensure_vmix_xml():
+    if os.path.exists(VMIX_SPINNERS_XML):
+        return
+    root = ET.Element("vmix")
+    ET.SubElement(root, "overlay", index=str(VMIX_OVERLAY_INDEX), state="off")
+    ET.SubElement(root, "spinner", state="idle", locked="0")
+    nums = ET.SubElement(root, "nums")
+    for _ in range(20):
+        ET.SubElement(nums, "n", v="")
+    ET.ElementTree(root).write(VMIX_SPINNERS_XML, encoding="utf-8", xml_declaration=True)
+
 def _read_spinners_list():
     for path in (VMIX_SPINNERS_XML, SPINNERS_XML):
         try:
@@ -5936,7 +5976,90 @@ def _read_spinners_list():
             pass
     return [""] * 20
 
-# ---------- Figuras helpers (idénticos a los que ya tenías) ----------
+def _write_spinners_list(values):
+    _ensure_vmix_xml()
+    tree = ET.parse(VMIX_SPINNERS_XML); root = tree.getroot()
+    nums = root.find("nums")
+    if nums is None:
+        nums = ET.SubElement(root, "nums")
+    for el in list(nums):
+        nums.remove(el)
+    for i in range(20):
+        v = ""
+        if i < len(values):
+            raw = str(values[i]).strip()
+            v = re.sub(r"\D", "", raw)[:4]
+            if v: v = v.zfill(4)
+        ET.SubElement(nums, "n", v=v)
+    tree.write(VMIX_SPINNERS_XML, encoding="utf-8", xml_declaration=True)
+
+def _read_spinner_state():
+    st = _json_read(SPINNERS_STATE_JSON) or {}
+    return {
+        "running": bool(st.get("running", False)),
+        "locked":  bool(st.get("locked", False)),
+        "overlay_on": bool(st.get("overlay_on", False)),
+        "ts": st.get("ts") or datetime.utcnow().isoformat(),
+    }
+
+def _write_spinner_state(running=None, locked=None, overlay_on=None):
+    cur = _read_spinner_state()
+    if running is not None:   cur["running"] = bool(running)
+    if locked is not None:    cur["locked"] = bool(locked)
+    if overlay_on is not None:cur["overlay_on"] = bool(overlay_on)
+    cur["ts"] = datetime.utcnow().isoformat()
+    _json_write(SPINNERS_STATE_JSON, cur)
+
+    # Espejo en XML
+    _ensure_vmix_xml()
+    tree = ET.parse(VMIX_SPINNERS_XML); root = tree.getroot()
+    spn = root.find("spinner") or ET.SubElement(root, "spinner")
+    spn.set("state", "running" if cur["running"] else "idle")
+    spn.set("locked", "1" if cur["locked"] else "0")
+    ov = root.find("overlay") or ET.SubElement(root, "overlay", index=str(VMIX_OVERLAY_INDEX))
+    ov.set("index", str(VMIX_OVERLAY_INDEX))
+    ov.set("state", "on" if cur["overlay_on"] else "off")
+    tree.write(VMIX_SPINNERS_XML, encoding="utf-8", xml_declaration=True)
+    return cur
+
+# -------- vMix HTTP control (con fallback silencioso) --------
+def _vmix_call(function, **params):
+    import socket
+    try:
+        import requests
+    except Exception:
+        return False, "requests-not-available"
+    base = f"http://{VMIX_HOST}:{VMIX_PORT}/api/"
+    q = {"Function": function}
+    q.update({k: str(v) for k, v in params.items() if v is not None})
+    try:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(0.5)
+        sock.connect((VMIX_HOST, int(VMIX_PORT)))
+        sock.close()
+    except Exception:
+        return False, "vmix-offline"
+    try:
+        r = requests.get(base, params=q, timeout=1.5)
+        if r.status_code == 200:
+            return True, "ok"
+        return False, f"http-{r.status_code}"
+    except Exception as e:
+        return False, f"err:{e}"
+
+def _overlay_on():
+    ok, msg = _vmix_call(f"OverlayInput{VMIX_OVERLAY_INDEX}On", Input=VMIX_SPINNER_INPUT)
+    st = _write_spinner_state(overlay_on=True)
+    return ok, msg, st
+
+def _overlay_off():
+    ok, msg = _vmix_call(f"OverlayInput{VMIX_OVERLAY_INDEX}Off", Input=VMIX_SPINNER_INPUT)
+    st = _write_spinner_state(overlay_on=False)
+    return ok, msg, st
+
+# ============================================================
+#  FIGURAS HELPERS
+# ============================================================
 def _pick_figuras_xml_for_fecha(fecha: str) -> str:
     candidates = [
         os.path.join(FIGURAS_DIR, f"{fecha}.xml"),
@@ -6044,9 +6167,9 @@ def _write_figure_state_to_xml(path_xml: str, nombre: str, estado: str, valor: i
     tree.write(path_xml, encoding="utf-8", xml_declaration=True)
     return True
 
-# -------------------------------------------------------------------
-#  Rutas
-# -------------------------------------------------------------------
+# ============================================================
+#  RUTAS UI BÁSICAS
+# ============================================================
 @juego_bp.route("/")
 def juego_ui():
     try:
@@ -6058,20 +6181,89 @@ def juego_ui():
 
 @juego_bp.get("/spinner_overlay")
 def spinner_overlay_ui():
-    # Overlay público que se controla por BroadcastChannel (vMix abre esta URL)
     return render_template("spinner_overlay.html")
 
+# ============================================================
+#  RUTAS: XML públicos (no cache)  <<<<<<  IMPORTANTE
+# ============================================================
+def _no_cache_file(path, mime="application/xml"):
+    resp = make_response(send_file(path, mimetype=mime))
+    resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    resp.headers["Pragma"] = "no-cache"
+    resp.headers["Expires"] = "0"
+    return resp
+
+@juego_bp.get("/xml/bingo")
+def juego_xml_bingo():
+    _ensure_bingo_xml()
+    return _no_cache_file(BINGO_XML)
+
+@juego_bp.get("/xml/spinners")
+def juego_xml_spinners():
+    _ensure_vmix_xml()
+    return _no_cache_file(VMIX_SPINNERS_XML)
+
+# ============================================================
+#  RUTAS ESTADO JUEGO / SPINNERS
+# ============================================================
 @juego_bp.get("/estado.json")
 def juego_estado_json():
     stack = _read_stack()
     last = (stack[-1] if stack else None)
     spinners = _read_spinners_list()
-    return jsonify(ok=True, stack=stack, last=last, total=len(stack), ultimos5=stack[-5:], spinners=spinners)
+    spn_state = _read_spinner_state()
+    return jsonify(ok=True,
+                   stack=stack, last=last, total=len(stack), ultimos5=stack[-5:],
+                   spinners=spinners, spinner_state=spn_state)
 
 @juego_bp.get("/spinners")
 def juego_spinners():
+    return jsonify(ok=True, spinners=_read_spinners_list(), state=_read_spinner_state())
+
+@juego_bp.post("/spinners/update_list")
+def juego_spinners_update_list():
+    data = request.get_json(silent=True) or {}
+    values = data.get("values") or data.get("spinners") or []
+    if not isinstance(values, list):
+        return jsonify(ok=False, error="values debe ser lista"), 400
+    _write_spinners_list(values)
     return jsonify(ok=True, spinners=_read_spinners_list())
 
+@juego_bp.post("/spinners/launch")
+def juego_spinners_launch():
+    st = _read_spinner_state()
+    if st["locked"]:
+        return jsonify(ok=False, error="Spinners bloqueados. Desbloquea para lanzar."), 409
+    ok, msg, _ = _overlay_on()
+    st = _write_spinner_state(running=True, locked=False, overlay_on=True)
+    return jsonify(ok=True, vmix_ok=ok, vmix_msg=msg, state=st)
+
+@juego_bp.post("/spinners/lock")
+def juego_spinners_lock():
+    ok, msg, _ = _overlay_off()
+    st = _write_spinner_state(running=False, locked=True, overlay_on=False)
+    return jsonify(ok=True, vmix_ok=ok, vmix_msg=msg, state=st)
+
+@juego_bp.post("/spinners/unlock")
+def juego_spinners_unlock():
+    st = _write_spinner_state(locked=False)
+    return jsonify(ok=True, state=st)
+
+@juego_bp.post("/spinners/overlay")
+def juego_spinners_overlay():
+    data = request.get_json(silent=True) or {}
+    action = (data.get("action") or "").lower()
+    if action not in ("on", "off"):
+        return jsonify(ok=False, error="action debe ser 'on' o 'off'"), 400
+    if action == "on":
+        ok, msg, st = _overlay_on()
+    else:
+        ok, msg, st = _overlay_off()
+    return jsonify(ok=True, vmix_ok=ok, vmix_msg=msg, state=st)
+
+# ============================================================
+#  RUTAS JUEGO (marcado, reversa, reset, stinger)
+# ============================================================
 @juego_bp.post("/marcar")
 def juego_marcar():
     data = request.get_json(silent=True) or {}
@@ -6084,7 +6276,14 @@ def juego_marcar():
         stack.append(n)
         _write_stack(stack)
         _sync_bingo_xml_from_stack(stack)
-    return jsonify(success=True, stack=stack)
+    try:
+        tree = ET.parse(BINGO_XML); root = tree.getroot()
+        st = root.find("stinger") or ET.SubElement(root, "stinger")
+        st.text = str(n)
+        tree.write(BINGO_XML, encoding="utf-8", xml_declaration=True)
+    except Exception:
+        pass
+    return jsonify(success=True, stack=stack, last=n, total=len(stack), ultimos5=stack[-5:])
 
 @juego_bp.post("/reversa")
 def juego_reversa():
@@ -6096,12 +6295,27 @@ def juego_reversa():
         if stack: stack.pop()
     _write_stack(stack)
     _sync_bingo_xml_from_stack(stack)
-    return jsonify(success=True, stack=stack)
+    try:
+        tree = ET.parse(BINGO_XML); root = tree.getroot()
+        st = root.find("stinger") or ET.SubElement(root, "stinger")
+        st.text = (str(stack[-1]) if stack else "")
+        tree.write(BINGO_XML, encoding="utf-8", xml_declaration=True)
+    except Exception:
+        pass
+    return jsonify(success=True, stack=stack, last=(stack[-1] if stack else None), total=len(stack), ultimos5=stack[-5:])
 
 @juego_bp.post("/reset")
 def juego_reset():
     _write_stack([])
     _sync_bingo_xml_from_stack([])
+    try:
+        tree = ET.parse(BINGO_XML); root = tree.getroot()
+        st = root.find("stinger") or ET.SubElement(root, "stinger"); st.text = ""
+        tree.write(BINGO_XML, encoding="utf-8", xml_declaration=True)
+    except Exception:
+        pass
+    _overlay_off()
+    _write_spinner_state(running=False, locked=False, overlay_on=False)
     return jsonify(success=True)
 
 @juego_bp.post("/activar_stinger")
@@ -6117,6 +6331,9 @@ def juego_activar_stinger():
     tree.write(BINGO_XML, encoding="utf-8", xml_declaration=True)
     return jsonify(success=True)
 
+# ============================================================
+#  SORTEO / FIGURAS RUTAS
+# ============================================================
 @juego_bp.get("/sorteo_fecha")
 def juego_sorteo_fecha():
     return jsonify(ok=True, fecha=_get_sorteo_fecha())
@@ -6163,18 +6380,23 @@ def juego_figuras_sync_xml():
     figs = _read_figuras_from_xml(path_xml)
     return jsonify(ok=True, fecha=fecha, origen_xml=path_xml, figuras=figs)
 
+# ============================================================
+#  REGISTRO BP + INICIALIZACIÓN
+# ============================================================
 def register_juego(app):
     app.register_blueprint(juego_bp)
     _ensure_bingo_xml()
     _ensure_hist()
+    _ensure_vmix_xml()
+    _write_spinner_state(running=False, locked=False, overlay_on=False)
 
+# Si ya tienes app definida, registra en caliente
 try:
-    app
+    app  # noqa
     if "juego" not in [bp.name for bp in app.blueprints.values()]:
         register_juego(app)
 except Exception:
     pass
-
 
 
 

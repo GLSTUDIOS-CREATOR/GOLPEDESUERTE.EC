@@ -172,21 +172,19 @@
 
     let INDEX=Math.max(0,Math.min(19,parseInt(Q.get('i')||'0',10)||0));
     let LIST=new Array(20).fill('');
-    let LAST_EVENT_TS=0;
-    let ws=null;
 
     async function fetchSpinners(){
       try{
-        const r=await fetch('/juego/spinners?fmt=json'+bust()); const j=await r.json();
+        const r=await fetch('/juego/spinners'+bust()); const j=await r.json();
         if(Array.isArray(j.spinners)) return j.spinners.slice(0,20);
       }catch(_){}
       try{
-        const r2=await fetch('/static/db/spinners.xml'+(location.search?location.search+'&':'?')+bust());
+        const r2=await fetch('/static/db/spinners.xml'+bust());
         if(r2.ok){
           const xml=new DOMParser().parseFromString(await r2.text(),'text/xml');
           const out=[]; xml.querySelectorAll('n').forEach(n=>{
             const v=(n.getAttribute('v')||n.textContent||'').replace(/\D/g,'').slice(0,4);
-            out.push(v? v.padStart(4,'0'):'');
+            out.push(v? v.padStart(4,'0'): '');
           });
           return (out.concat(Array(20).fill(''))).slice(0,20);
         }
@@ -250,7 +248,7 @@
     async function doGenerate(i){ INDEX=i; markActive(i); await rollTo('0000',2); }
     async function doLaunch(i){ INDEX=i; markActive(i); const t=targetForIndex(i); if(!t) return; await rollTo(t,4); markUsed(i,true); }
 
-    // === Mensajería local
+    // === Mensajería local (sin dependencias de backend) ===
     function handleMessage(d){
       if(!d || d.type!=='solo-spin') return;
       const idx=Number.isFinite(d.index)? Math.max(0,Math.min(19,d.index)) : INDEX;
@@ -264,57 +262,11 @@
       try{ const d=JSON.parse(ev.newValue||'{}'); handleMessage({type:'solo-spin',op:d.op,index:d.index}); }catch(_){}
     });
 
-    // === WebSocket (si existe en tu backend)
-    function bootWS(){
-      try{
-        const proto = location.protocol==='https:'?'wss':'ws';
-        ws = new WebSocket(`${proto}://${location.host}/juego/spin_ws`);
-        ws.onmessage = (e)=>{ try{ const d=JSON.parse(e.data); handleMessage({type:'solo-spin',op:d.op,index:d.index}); }catch(_){} };
-        ws.onclose = ()=>{ setTimeout(bootWS, 1500); };
-      }catch(_){}
-    }
-
-    // === SSE (si existe en tu backend)
-    function bootSSE(){
-      try{
-        const es = new EventSource('/juego/spin_events/stream');
-        es.onmessage = (e)=>{ try{ const d=JSON.parse(e.data||'{}'); handleMessage({type:'solo-spin',op:d.op,index:d.index}); }catch(_){} };
-        es.onerror = ()=>{ try{ es.close(); }catch(_){} };
-      }catch(_){}
-    }
-
-    // === Polling (multi-PC garantizado si publicas /juego/spin_events o el json estático)
-    async function netPoll(){
-      const urls=[
-        '/juego/spin_events',
-        '/static/db/spin_events.json',
-        '/juego/estado.json'
-      ];
-      for(const u of urls){
-        try{
-          const r=await fetch(u+(u.includes('?')?'&':'?')+bust());
-          if(!r.ok) continue;
-          const j=await r.json();
-          const evt=j.spin||j;
-          const ts=Number(evt?.ts||0), op=evt?.op, idx=Number(evt?.index);
-          if(!ts || !op || !Number.isFinite(idx)) continue;
-          if(ts>LAST_EVENT_TS){
-            LAST_EVENT_TS=ts;
-            handleMessage({type:'solo-spin',op,index:idx});
-          }
-          break;
-        }catch(_){}
-      }
-    }
-    setInterval(netPoll, 700);
-
     (async function boot(){
       buildReels();
       buildBar();
       LIST=await fetchSpinners();
       await rollTo('0000',1);
-      bootWS();
-      bootSSE();
     })();
   </script>
 </body>
