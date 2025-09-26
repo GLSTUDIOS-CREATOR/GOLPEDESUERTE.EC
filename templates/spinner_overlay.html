@@ -4,32 +4,26 @@
   <meta charset="utf-8" />
   <title>Spinners Overlay</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-
   <style>
     :root{
-      /* Colores clave */
-      --blueDeep:#0b3a9c;     /* azul oscuro permanente del dígito */
-      --blueLive:#1e5cff;     /* azul vivo al aterrizar */
-      --goldGlow:255,209,97;  /* brillo dorado (RGB) */
+      --blueDeep:#0b3a9c;
+      --blueLive:#1e5cff;
+      --goldGlow:255,209,97;
 
-      /* Panel/cartucho */
       --panelA:#ffffff; --panelB:#f6f8ff; --panelC:#e9eef9;
       --ring:#c8d5f2;
-      --panelShadow:0 28px 70px rgba(0,0,0,.42);
-      --digitShadow:0 26px 52px rgba(0,0,0,.34);
     }
 
-    /* === FONDO TRANSPARENTE (para vMix/OBS) === */
     html,body{height:100%}
     html,body{
       margin:0; background:transparent; overflow:hidden;
       font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Arial;
       -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale;
+      color:#1b2a4a;
     }
 
     .wrap{ width:min(1400px,96vw); margin-inline:auto; padding-block:min(7vh,84px) 18px }
 
-    /* === TÍTULO 3D MEJORADO (alto relieve, sin fondo opaco) === */
     .title{
       width:fit-content; margin:0 auto 16px; padding:10px 26px;
       border-radius:18px;
@@ -45,7 +39,6 @@
     .title span{
       display:inline-block;
       font-weight:1000; font-size:clamp(26px,3.8vw,52px);
-      /* apariencia 3D: azul + trazo blanco + sombras escalonadas */
       color:var(--blueDeep);
       -webkit-text-stroke:1px #ffffff;
       text-shadow:
@@ -56,14 +49,13 @@
         0 0 26px rgba(var(--goldGlow),.20);
     }
 
-    /* === BANDEJA (blanca, bisel suave, sin opacar el fondo) === */
     .deck{
       position:relative;
       padding:22px clamp(12px,2vw,26px);
       border-radius:24px;
       background:linear-gradient(180deg,var(--panelA) 0%,var(--panelB) 55%,var(--panelC) 100%);
       border-top:1px solid #fff; border-bottom:1px solid #d9e2f4;
-      box-shadow:var(--panelShadow);
+      box-shadow:0 28px 70px rgba(0,0,0,.42);
       display:flex; gap:clamp(12px,2.2vw,28px); justify-content:center; align-items:flex-end;
     }
     .deck::after{
@@ -71,7 +63,6 @@
       box-shadow:inset 0 0 0 1px rgba(174,191,238,.35);
     }
 
-    /* === CARTUCHOS BLANCOS (más elegantes) === */
     .digit{
       width:clamp(96px,10.4vw,144px);
       height:clamp(126px,13.4vw,176px);
@@ -82,7 +73,7 @@
         inset 0 0 0 2px #ffffff,
         inset 0 -16px 0 rgba(0,0,0,.06),
         0 2px 0 #fff,
-        var(--digitShadow);
+        0 26px 52px rgba(0,0,0,.34);
       transition:filter .25s ease;
     }
     .digit::before{
@@ -90,7 +81,6 @@
       box-shadow:inset 0 0 0 2px rgba(80,110,190,.12); pointer-events:none;
     }
 
-    /* === REEL Y DÍGITOS (AZUL SIEMPRE) === */
     .reel{
       position:absolute; left:0; right:0; top:0;
       display:flex; flex-direction:column; align-items:center;
@@ -103,16 +93,14 @@
       display:flex; align-items:center; justify-content:center;
       font-weight:1000; font-size:clamp(62px,8.8vw,120px);
       letter-spacing:.02em;
-      color:var(--blueDeep);                 /* AZUL OSCURO PERMANENTE */
-      -webkit-text-stroke:1px #ffffff;      /* relieve */
+      color:var(--blueDeep);
+      -webkit-text-stroke:1px #ffffff;
       text-shadow:
-        0 1px 0 rgba(255,255,255,.95),       /* brillo borde superior */
-        0 0 12px rgba(var(--goldGlow),.22),  /* halo dorado suave */
+        0 1px 0 rgba(255,255,255,.95),
+        0 0 12px rgba(var(--goldGlow),.22),
         0 18px 28px rgba(0,0,0,.20);
       user-select:none;
     }
-
-    /* Aterrizaje: azules + halo dorado + “bombeo” sutil */
     .digit.landed .slot{
       color:var(--blueLive);
       text-shadow:
@@ -142,7 +130,6 @@
       }
     }
 
-    /* === LISTA 1–20 (estado/activo) === */
     .bar{ display:grid; grid-template-columns:repeat(20,1fr); gap:8px; margin-top:12px }
     .chip{
       height:28px; border-radius:999px; font-weight:900; font-size:12px;
@@ -176,8 +163,7 @@
   </div>
 
   <script>
-    /* ========= Util & estado ========= */
-    const DIGS=4;
+    const DIGS=4, BC='glbingo-spin';
     const $=s=>document.querySelector(s);
     const $$=s=>Array.from(document.querySelectorAll(s));
     const sleep=ms=>new Promise(r=>setTimeout(r,ms));
@@ -187,20 +173,18 @@
     let INDEX=Math.max(0,Math.min(19,parseInt(Q.get('i')||'0',10)||0));
     let LIST=new Array(20).fill('');
     let LAST_EVENT_TS=0;
+    let ws=null;
 
-    /* ========= Data (spinners) ========= */
     async function fetchSpinners(){
       try{
-        const r=await fetch('/juego/spinners?fmt=json'+bust());
-        const j=await r.json();
+        const r=await fetch('/juego/spinners?fmt=json'+bust()); const j=await r.json();
         if(Array.isArray(j.spinners)) return j.spinners.slice(0,20);
       }catch(_){}
       try{
         const r2=await fetch('/static/db/spinners.xml'+(location.search?location.search+'&':'?')+bust());
         if(r2.ok){
           const xml=new DOMParser().parseFromString(await r2.text(),'text/xml');
-          const out=[];
-          xml.querySelectorAll('n').forEach(n=>{
+          const out=[]; xml.querySelectorAll('n').forEach(n=>{
             const v=(n.getAttribute('v')||n.textContent||'').replace(/\D/g,'').slice(0,4);
             out.push(v? v.padStart(4,'0'):'');
           });
@@ -210,7 +194,6 @@
       return new Array(20).fill('');
     }
 
-    /* ========= Barra 1–20 ========= */
     const bar=$('#bar');
     function buildBar(){
       bar.innerHTML='';
@@ -221,14 +204,12 @@
         bar.appendChild(c);
       }
     }
-    function markUsed(i,on=true){ const chip=bar.children[i]; if(chip) chip.classList.toggle('used',on); }
+    function markUsed(i,on=true){ const chip=bar.children[i]; chip && chip.classList.toggle('used',on); }
     function markActive(i){ [...bar.children].forEach((c,idx)=>c.classList.toggle('active',idx===i)); }
 
-    /* ========= Reels ========= */
     function buildReels(){
       $$('#deck .reel').forEach(reel=>{
         reel.innerHTML='';
-        // 0..9 repetidos: más recorrido = más “tambola”
         for(let k=0;k<70;k++){
           const s=document.createElement('div');
           s.className='slot'; s.textContent=String(k%10);
@@ -240,7 +221,6 @@
       const slot=$('.slot');
       return slot?slot.getBoundingClientRect().height:150;
     }
-
     async function spinDigitTo(digitEl,target,turns=3,duration=1100){
       digitEl.classList.remove('landed');
       const reel=digitEl.querySelector('.reel');
@@ -258,7 +238,6 @@
       await sleep(16);
       digitEl.classList.add('landed');
     }
-
     async function rollTo(str,baseTurns=3){
       const s=(str||'').padStart(4,'0').slice(-4);
       const digits=$$('#deck .digit');
@@ -268,34 +247,48 @@
     }
     function targetForIndex(i){ const v=(LIST[i]||'').trim(); return v? v.padStart(4,'0'):''; }
 
-    /* ========= Acciones ========= */
     async function doGenerate(i){ INDEX=i; markActive(i); await rollTo('0000',2); }
-    async function doLaunch(i){
-      INDEX=i; markActive(i);
-      const t=targetForIndex(i); if(!t) return;
-      await rollTo(t,4); markUsed(i,true);
-    }
+    async function doLaunch(i){ INDEX=i; markActive(i); const t=targetForIndex(i); if(!t) return; await rollTo(t,4); markUsed(i,true); }
 
-    /* ========= Mensajería local (misma PC) ========= */
+    // === Mensajería local
     function handleMessage(d){
       if(!d || d.type!=='solo-spin') return;
       const idx=Number.isFinite(d.index)? Math.max(0,Math.min(19,d.index)) : INDEX;
       if(d.op==='gen') doGenerate(idx);
       else if(d.op==='launch') doLaunch(idx);
     }
-    try{ const bc=new BroadcastChannel('glbingo-spin'); bc.addEventListener('message',ev=>handleMessage(ev.data)); }catch(_){}
+    try{ const bc=new BroadcastChannel(BC); bc.addEventListener('message',ev=>handleMessage(ev.data)); }catch(_){}
     window.addEventListener('message',ev=>{ if(ev.origin!==location.origin) return; handleMessage(ev.data); });
     window.addEventListener('storage',ev=>{
       if(ev.key!=='glbingo-spin-evt') return;
       try{ const d=JSON.parse(ev.newValue||'{}'); handleMessage({type:'solo-spin',op:d.op,index:d.index}); }catch(_){}
     });
 
-    /* ========= Sincronización entre PCs (polling de red) ========= */
+    // === WebSocket (si existe en tu backend)
+    function bootWS(){
+      try{
+        const proto = location.protocol==='https:'?'wss':'ws';
+        ws = new WebSocket(`${proto}://${location.host}/juego/spin_ws`);
+        ws.onmessage = (e)=>{ try{ const d=JSON.parse(e.data); handleMessage({type:'solo-spin',op:d.op,index:d.index}); }catch(_){} };
+        ws.onclose = ()=>{ setTimeout(bootWS, 1500); };
+      }catch(_){}
+    }
+
+    // === SSE (si existe en tu backend)
+    function bootSSE(){
+      try{
+        const es = new EventSource('/juego/spin_events/stream');
+        es.onmessage = (e)=>{ try{ const d=JSON.parse(e.data||'{}'); handleMessage({type:'solo-spin',op:d.op,index:d.index}); }catch(_){} };
+        es.onerror = ()=>{ try{ es.close(); }catch(_){} };
+      }catch(_){}
+    }
+
+    // === Polling (multi-PC garantizado si publicas /juego/spin_events o el json estático)
     async function netPoll(){
       const urls=[
-        '/juego/spin_events',          // {ts, op, index}
-        '/static/db/spin_events.json', // {ts, op, index}
-        '/juego/estado.json'           // { spin:{ts,op,index}, ... }
+        '/juego/spin_events',
+        '/static/db/spin_events.json',
+        '/juego/estado.json'
       ];
       for(const u of urls){
         try{
@@ -309,18 +302,19 @@
             LAST_EVENT_TS=ts;
             handleMessage({type:'solo-spin',op,index:idx});
           }
-          break; // ya refrescamos con una fuente válida
+          break;
         }catch(_){}
       }
     }
     setInterval(netPoll, 700);
 
-    /* ========= Boot ========= */
     (async function boot(){
       buildReels();
       buildBar();
       LIST=await fetchSpinners();
       await rollTo('0000',1);
+      bootWS();
+      bootSSE();
     })();
   </script>
 </body>
