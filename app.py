@@ -5829,7 +5829,6 @@ VMIX_PORT = os.getenv("VMIX_PORT", "8088")
 VMIX_OVERLAY_INDEX = int(os.getenv("VMIX_OVERLAY_INDEX", "3"))
 VMIX_SPINNER_INPUT = os.getenv("VMIX_SPINNER_INPUT", "SpinnerOverlay")
 
-# Si tu proyecto define require_session, se respeta
 require_session = globals().get("require_session", None)
 
 # ============================================================
@@ -5876,7 +5875,7 @@ def _ensure_bingo_xml():
     root = ET.Element("bingo")
     balotas = ET.SubElement(root, "balotas")
     for n in range(1, 76):
-        # 'estado' y 'ultimo' se guardan como cadena del número (según tu estructura)
+        # 'estado' y 'ultimo'
         ET.SubElement(balotas, "balota", numero=str(n), estado="", ultimo="")
     ET.SubElement(root, "ultimos5").text = ""
     ET.SubElement(root, "totalMarcadas").text = "0"
@@ -5886,32 +5885,42 @@ def _ensure_bingo_xml():
 
 def _sync_bingo_xml_from_stack(stack):
     """
-    Sincroniza:
-      - balota[@estado] = 'n' si n está marcada, si no ''
-      - balota[@ultimo] = 'n' sólo para la última marcada (las demás '')
-      - ultimos5, totalMarcadas, ultimoMarcado
+    Reglas pedidas (como tu captura):
+      - estado="n" para marcadas, "" para no marcadas
+      - ultimo="X" SOLO en <balota numero="1">, X = último marcado; todas las demás "", incluida la balota X
+      - ultimos5: más reciente → más antiguo
+      - ultimoMarcado: último marcado
     """
     _ensure_bingo_xml()
     tree = ET.parse(BINGO_XML); root = tree.getroot()
     balotas_el = root.find("balotas")
+
     marked = set(int(x) for x in stack)
     last = stack[-1] if stack else None
 
-    # Limpia todos los 'estado' y 'ultimo'
+    # Limpia 'estado' y 'ultimo'
     for b in balotas_el.findall("balota"):
-        b.set("estado", ""); b.set("ultimo", "")
+        b.set("estado", "")
+        b.set("ultimo", "")
 
-    # Marca los presentes y el último
+    # Marca presentes
     for b in balotas_el.findall("balota"):
         n = int(b.get("numero"))
         if n in marked:
             b.set("estado", str(n))
-        if last is not None and n == last:
-            b.set("ultimo", str(n))
 
-    root.find("ultimos5").text = ",".join(str(x) for x in stack[-5:]) if stack else ""
+    # 👉 "ultimo" solo en la balota numero="1"
+    first = balotas_el.find(".//balota[@numero='1']")
+    if first is not None:
+        first.set("ultimo", str(last) if last is not None else "")
+
+    # ultimos5 (más reciente primero)
+    ult5 = list(reversed(stack[-5:])) if stack else []
+    root.find("ultimos5").text = ",".join(str(x) for x in ult5)
+
     root.find("totalMarcadas").text = str(len(marked))
     root.find("ultimoMarcado").text = (str(last) if last is not None else "")
+
     tree.write(BINGO_XML, encoding="utf-8", xml_declaration=True)
 
 def _to_iso_date(s: str) -> str:
@@ -6022,7 +6031,6 @@ def _write_spinner_state(running=None, locked=None, overlay_on=None):
     tree.write(VMIX_SPINNERS_XML, encoding="utf-8", xml_declaration=True)
     return cur
 
-# -------- vMix HTTP control (con fallback silencioso) --------
 def _vmix_call(function, **params):
     import socket
     try:
@@ -6168,7 +6176,7 @@ def _write_figure_state_to_xml(path_xml: str, nombre: str, estado: str, valor: i
     return True
 
 # ============================================================
-#  RUTAS UI BÁSICAS
+#  RUTAS UI
 # ============================================================
 @juego_bp.route("/")
 def juego_ui():
@@ -6184,7 +6192,7 @@ def spinner_overlay_ui():
     return render_template("spinner_overlay.html")
 
 # ============================================================
-#  RUTAS: XML públicos (no cache)  <<<<<<  IMPORTANTE
+#  RUTAS: XML públicos (no cache)
 # ============================================================
 def _no_cache_file(path, mime="application/xml"):
     resp = make_response(send_file(path, mimetype=mime))
@@ -6212,9 +6220,15 @@ def juego_estado_json():
     last = (stack[-1] if stack else None)
     spinners = _read_spinners_list()
     spn_state = _read_spinner_state()
-    return jsonify(ok=True,
-                   stack=stack, last=last, total=len(stack), ultimos5=stack[-5:],
-                   spinners=spinners, spinner_state=spn_state)
+    return jsonify(
+        ok=True,
+        stack=stack,
+        last=last,
+        total=len(stack),
+        ultimos5=list(reversed(stack[-5:])),
+        spinners=spinners,
+        spinner_state=spn_state
+    )
 
 @juego_bp.get("/spinners")
 def juego_spinners():
@@ -6262,7 +6276,7 @@ def juego_spinners_overlay():
     return jsonify(ok=True, vmix_ok=ok, vmix_msg=msg, state=st)
 
 # ============================================================
-#  RUTAS JUEGO (marcado, reversa, reset, stinger)
+#  RUTAS JUEGO
 # ============================================================
 @juego_bp.post("/marcar")
 def juego_marcar():
@@ -6283,7 +6297,7 @@ def juego_marcar():
         tree.write(BINGO_XML, encoding="utf-8", xml_declaration=True)
     except Exception:
         pass
-    return jsonify(success=True, stack=stack, last=n, total=len(stack), ultimos5=stack[-5:])
+    return jsonify(success=True, stack=stack, last=n, total=len(stack), ultimos5=list(reversed(stack[-5:])))
 
 @juego_bp.post("/reversa")
 def juego_reversa():
@@ -6302,7 +6316,7 @@ def juego_reversa():
         tree.write(BINGO_XML, encoding="utf-8", xml_declaration=True)
     except Exception:
         pass
-    return jsonify(success=True, stack=stack, last=(stack[-1] if stack else None), total=len(stack), ultimos5=stack[-5:])
+    return jsonify(success=True, stack=stack, last=(stack[-1] if stack else None), total=len(stack), ultimos5=list(reversed(stack[-5:])))
 
 @juego_bp.post("/reset")
 def juego_reset():
@@ -6332,7 +6346,7 @@ def juego_activar_stinger():
     return jsonify(success=True)
 
 # ============================================================
-#  SORTEO / FIGURAS RUTAS
+#  SORTEO / FIGURAS
 # ============================================================
 @juego_bp.get("/sorteo_fecha")
 def juego_sorteo_fecha():
@@ -6390,7 +6404,6 @@ def register_juego(app):
     _ensure_vmix_xml()
     _write_spinner_state(running=False, locked=False, overlay_on=False)
 
-# Si ya tienes app definida, registra en caliente
 try:
     app  # noqa
     if "juego" not in [bp.name for bp in app.blueprints.values()]:
