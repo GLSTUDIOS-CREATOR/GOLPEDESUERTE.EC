@@ -1,6 +1,6 @@
 {
-  "running": false,
+  "running": true,
   "locked": false,
-  "overlay_on": false,
-  "ts": "2025-10-18T20:43:40.417959"
+  "overlay_on": true,
+  "ts": "2025-10-18T21:46:22.601642"
 }

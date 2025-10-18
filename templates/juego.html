@@ -132,21 +132,27 @@
     .subbar{display:flex; gap:12px; align-items:center; justify-content:space-between; margin-bottom:12px}
     .subbar .pill{background:#0f223f;border-color:#21406e}
     .subbar-actions{display:flex; gap:8px; align-items:center}
+
     .spn-grid{display:grid; gap:12px; grid-template-columns: repeat(5, 1fr)}
     .spn-cell{
       background:linear-gradient(#ffffff,#e9eef6); color:#0e1a2f; border:1px solid #0002; border-radius:14px;
       min-height:112px; display:flex; align-items:center; justify-content:center; font-weight:900;
       font-size:clamp(22px, 2.6vw, 34px); box-shadow:0 2px 10px rgba(0,0,0,.28), 0 0 0 2px #0001 inset;
-      position:relative; padding:12px; transition:transform .08s ease, box-shadow .15s ease
+      position:relative; padding:12px 12px 60px; transition:transform .08s ease, box-shadow .15s ease; /* ↑ más espacio abajo para botones */
     }
     .spn-cell:hover{ transform:translateY(-2px); box-shadow:0 10px 26px rgba(0,0,0,.35), 0 0 0 2px #0001 inset }
     .spn-cell .label{position:absolute; top:6px; left:8px; font-size:11px; font-weight:800; opacity:.55}
     .spn-num{font-variant-numeric:tabular-nums; letter-spacing:.5px}
-    .spn-actions{position:absolute; bottom:10px; right:10px; display:flex; gap:8px}
+    .spn-actions{
+      position:absolute; bottom:10px; left:10px; right:10px;
+      display:flex; gap:8px; flex-wrap:wrap; justify-content:center;   /* ↑ visibles y sin solaparse */
+    }
     .mini{border:0; border-radius:999px; padding:7px 12px; font-weight:900; cursor:pointer}
     .mini.gen{background:#172a4b; color:#e8eef8; border:1px solid #274e82}
     .mini.lanz{background:#23d18b; color:#05271c}
     .mini.lock{background:#2a1114; color:#ffb5b9; border:1px solid #7f1e26; cursor:not-allowed}
+    .mini.unlock{background:#162542; color:#e8eef8; border:1px solid #274e82}
+
     .spn-cell.used{opacity:.78}
     .spn-cell.used::after{content:'🔒'; position:absolute; top:8px; right:10px; font-size:14px; opacity:.9}
 
@@ -171,6 +177,9 @@
       font-variant-numeric:tabular-nums; user-select:none;
     }
     .solo .toolbar, .solo .meta {display:none!important}
+
+    /* ====== SOLO: util para pintar "Spinners" en rojo sin tocar más lógica ====== */
+    .spn-red{ color: var(--red); font-weight: 900; }
   </style>
 </head>
 <body>
@@ -231,7 +240,7 @@
         <button id="spnLock"    class="btn" style="background:#ff5364;color:#fff">🔒 Bloquear</button>
         <button id="spnUnlock"  class="btn ghost">🔓 Desbloquear</button>
 
-        <button id="btnSpinners" class="btn ghost">🎰 Spinners</button>
+        <button id="btnSpinners" class="btn ghost">🎰 <span class="spn-red">Spinners</span></button>
         <button id="btnSoloSpin" class="btn ghost">🎯 Spinner 1 a 1</button>
         <button id="rev1"   class="btn ghost">↩ Reversa 1</button>
         <button id="revn"   class="btn ghost">↩ Reversa N…</button>
@@ -271,7 +280,7 @@
         <div class="modal-backdrop" data-close-modal></div>
         <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="mdlTitleSpn">
           <div class="modal-head">
-            <h3 id="mdlTitleSpn">🎰 Spinners del día</h3>
+            <h3 id="mdlTitleSpn">🎰 <span class="spn-red">Spinners</span> del día</h3>
             <button class="iconbtn" title="Cerrar" data-close-modal>&times;</button>
           </div>
           <div class="modal-body">
@@ -286,7 +295,7 @@
               </div>
             </div>
             <div id="gridSpinners" class="spn-grid"></div>
-            <p class="hint" style="margin-top:10px">Usa <b>Generar</b> (0000) y <b>Lanzar</b> para emitir animación.</p>
+            <p class="hint" style="margin-top:10px">Usa <b>Generar</b> (0000), <b>Lanzar</b> y <b>Desbloquear</b> para controlar cada spinner.</p>
           </div>
           <div class="modal-foot">
             <button class="btn ghost" data-close-modal>Cerrar</button>
@@ -297,7 +306,7 @@
       <!-- VISOR 20 -->
       <div id="SpinnersFullView" class="spn-full hidden">
         <div class="spn-full-wrap">
-          <div class="spn-title">🎰 Spinners</div>
+          <div class="spn-title">🎰 <span class="spn-red">Spinners</span></div>
           <div id="spnFullGrid" class="spn-grid large"></div>
         </div>
       </div>
@@ -562,7 +571,7 @@
       return String(v).replace(/\D/g,'').padStart(4,'0').slice(0,4);
     }
 
-    // --- COMPAT XML: <spinner value="0123"> ó <n v="0123"> ó texto ---
+    // --- COMPAT XML ---
     async function fetchXML(url){
       const r = await fetch(url + (url.includes('?')?'&':'?') + '_=' + Date.now());
       if(!r.ok) return null;
@@ -616,10 +625,13 @@
           <div class="spn-actions">
             <button class="mini gen"   data-gen>⚙ Generar</button>
             <button class="mini ${used?'lock':'lanz'}" data-launch>${used?'🔒 Enviado':'🚀 Lanzar'}</button>
+            ${used ? '<button class="mini unlock" data-unlock>🔓 Desbloquear</button>' : ''}
           </div>`;
 
+        // Generar => sólo posiciona el overlay 1:1
         cell.querySelector('[data-gen]').onclick = ()=> emitSpin('gen', idx);
 
+        // Lanzar (si está usado, pregunta y lo libera antes de volver a lanzarlo)
         cell.querySelector('[data-launch]').onclick = async ()=>{
           if (usados.has(idx)){
             const ok = confirm('Este spinner ya fue lanzado. ¿Deseas volver a lanzarlo?');
@@ -646,6 +658,15 @@
           try{ bc && bc.postMessage({type:'solo-spin', op:'launch', index:idx}); }catch(_){}
           try{ localStorage.setItem('glbingo-spin-evt', JSON.stringify({t:Date.now(), op:'launch', index:idx})); }catch(_){}
         };
+
+        // Desbloquear individual (nuevo)
+        const btnUn = cell.querySelector('[data-unlock]');
+        if (btnUn){
+          btnUn.onclick = ()=>{
+            usados.delete(idx); saveUsed(fecha, usados);
+            renderSpinnersGridWithActions(container);
+          };
+        }
 
         container.appendChild(cell);
       });
@@ -771,7 +792,7 @@
       window.addEventListener('storage', async (ev)=>{
         if (ev.key !== 'glbingo-spin-evt') return;
         try{
-          const d = JSON.parse(ev.newValue||'{}');
+          const d = JSON.parse(ev.newValue||{});
           if (Number.isFinite(d.index)){ SOLO_I = d.index; updateSoloUI(await resolverFecha()); }
           if (d.op === 'gen')      await soloGenerar();
           else if (d.op === 'launch') await soloLanzar();
@@ -800,3 +821,4 @@
   </script>
 </body>
 </html>
+
