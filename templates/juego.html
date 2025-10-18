@@ -13,6 +13,8 @@
       --ball: clamp(38px, 4.3vw, 66px); --ball-fs: clamp(14px, 1.65vw, 22px);
       --chip: clamp(42px, 5.3vw, 60px); --chip-fs: clamp(15px, 1.6vw, 21px);
       --last: clamp(68px, 8.4vw, 102px); --last-fs: clamp(30px, 3.8vw, 44px);
+
+      /* spinners modal */
       --spnBlue:#0b3a9c; --spnBlueLive:#1e5cff;
       --spnPanelA:#ffffff; --spnPanelB:#f6f8ff; --spnPanelC:#e9eef9;
     }
@@ -73,11 +75,11 @@
     .main{padding:0 22px 26px}
     .board{position:relative;background:linear-gradient(180deg,#0f1b33,#0e182c);border:1px solid var(--muted);border-radius:18px;padding:18px;box-shadow:var(--ring)}
     .grid-wrap{overflow-x:auto}
-    .grid{display:grid; gap:12px; grid-template-columns: repeat(auto-fit, minmax(var(--ball), 1fr)); min-width: 720px;}
+    .grid{display:grid; gap:12px; grid-template-columns: repeat(15, minmax(var(--ball), 1fr)); min-width: 720px;}
     .ball{width:var(--ball); height:var(--ball); border-radius:999px; display:flex; align-items:center; justify-content:center;
       color:#0f1b33; background:linear-gradient(#ffffff,#e9eef6); font-weight:900; font-size:var(--ball-fs); cursor:pointer; user-select:none;
       border:1px solid #0001; box-shadow:0 2px 8px rgba(0,0,0,.25)}
-    .ball.marked{color:#1b1202; background:radial-gradient(120% 120% at 50% 10%, #fff3cf 0%, var(--gold) 55%, #f1b938 100%);}
+    .ball.marked{color:#1b1202; background:radial-gradient(120% 120% at 50% 10%, #fff3cf 0%, var(--gold) 55%, #f1b938 100%)}
     .ball.last{color:#2a0c11; background:radial-gradient(120% 120% at 50% 8%, #ffd5d8 0%, var(--redSoft) 45%, #ff1f2d 100%)}
 
     .lock{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:linear-gradient(180deg,rgba(7,12,22,.72),rgba(7,12,22,.72));border-radius:18px;backdrop-filter:blur(2px);color:#d7def1;font-weight:900;letter-spacing:.3px;font-size:20px}
@@ -107,6 +109,7 @@
 
     @media (max-width:980px){ .layout{grid-template-columns:1fr} nav{display:none} .fig-item{grid-template-columns:1fr .6fr .6fr 1fr}}
 
+    /* ===== MODAL SPINNERS ===== */
     .modal.hidden{display:none}
     .modal{position:fixed; inset:0; display:grid; place-items:center; z-index:9999}
     .modal-backdrop{position:absolute; inset:0; background:rgba(0,0,0,.6); backdrop-filter:blur(3px)}
@@ -136,6 +139,14 @@
       font-size:clamp(22px, 2.6vw, 34px); box-shadow:0 2px 10px rgba(0,0,0,.28), 0 0 0 2px #0001 inset;
       position:relative; padding:12px; transition:transform .08s ease, box-shadow .15s ease
     }
+    .spn-cell:hover{ transform:translateY(-2px); box-shadow:0 10px 26px rgba(0,0,0,.35), 0 0 0 2px #0001 inset }
+    .spn-cell .label{position:absolute; top:6px; left:8px; font-size:11px; font-weight:800; opacity:.55}
+    .spn-num{font-variant-numeric:tabular-nums; letter-spacing:.5px}
+    .spn-actions{position:absolute; bottom:10px; right:10px; display:flex; gap:8px}
+    .mini{border:0; border-radius:999px; padding:7px 12px; font-weight:900; cursor:pointer}
+    .mini.gen{background:#172a4b; color:#e8eef8; border:1px solid #274e82}
+    .mini.lanz{background:#23d18b; color:#05271c}
+    .mini.lock{background:#2a1114; color:#ffb5b9; border:1px solid #7f1e26; cursor:not-allowed}
     .spn-cell.used{opacity:.78}
     .spn-cell.used::after{content:'🔒'; position:absolute; top:8px; right:10px; font-size:14px; opacity:.9}
 
@@ -198,9 +209,7 @@
               <div id="ultimoCircle" class="last-ball">–</div>
             </div>
             <div class="last6" id="last6"><span style="opacity:.85;white-space:nowrap">Últimas 6:</span></div>
-
-            <!-- OJO: ahora apuntamos al XML real, sin caché -->
-            <div class="pill">XML: <a href="/juego/xml/bingo" target="_blank">/juego/xml/bingo</a></div>
+            <div class="pill">XML: <a href="/static/db/datos_bingo.xml" target="_blank">/static/db/datos_bingo.xml</a></div>
 
             <!-- Estado Overlay/Spinners -->
             <div id="pillSpinner" class="pill" title="Estado Spinners / Overlay">
@@ -217,6 +226,7 @@
         <button id="reset" class="btn reset">🔁 RESET</button>
         <div class="spacer"></div>
 
+        <!-- control Spinner/Overlay -->
         <button id="spnLaunch"  class="btn" style="background:#23d18b;color:#05271c">🎰 Lanzar</button>
         <button id="spnLock"    class="btn" style="background:#ff5364;color:#fff">🔒 Bloquear</button>
         <button id="spnUnlock"  class="btn ghost">🔓 Desbloquear</button>
@@ -266,7 +276,7 @@
           </div>
           <div class="modal-body">
             <div class="subbar">
-              <div class="pill">Fuente: <b>/juego/spinners</b> (fallback: XML en /juego/xml/spinners)</div>
+              <div class="pill">Fuente: <b>/juego/spinners</b> (fallback: XML /static/db)</div>
               <div class="subbar-actions">
                 <button id="btnRefreshSpn" class="btn-xs">⟳ Actualizar</button>
                 <button id="btnOpenWindowSpn" class="btn-xs">🗔 Previsualizar overlay</button>
@@ -284,7 +294,7 @@
         </div>
       </div>
 
-      <!-- VISOR FULL (20) -->
+      <!-- VISOR 20 -->
       <div id="SpinnersFullView" class="spn-full hidden">
         <div class="spn-full-wrap">
           <div class="spn-title">🎰 Spinners</div>
@@ -306,17 +316,37 @@
   </div>
 
   <script>
+    /* ========= Helpers ========= */
     const $ = s => document.querySelector(s);
-    const qsAll = (s,root=document)=> Array.from(root.querySelectorAll(s));
+    const $$ = (s,root=document)=> Array.from(root.querySelectorAll(s));
     const sleep = ms => new Promise(r=>setTimeout(r, ms));
-    const bust  = () => `&_=${Date.now()}`;
+    const bust  = () => `?_=${Date.now()}`;
     const Q = new URL(location.href).searchParams;
     const isSpin = () => Q.get('spin') === '1';
     const isVisor20 = () => Q.get('spinners') === '1';
 
+    const safeFetch = async (url, opts={}) => {
+      try{
+        const r = await fetch(url, opts);
+        if(!r.ok) throw new Error(r.statusText);
+        return await r.json();
+      }catch(e){
+        console.error('fetch error', url, e);
+        return null;
+      }
+    };
+
+    // Canal local
+    const BC_NAME='glbingo-spin';
+    let bc;
+    try{ bc=new BroadcastChannel(BC_NAME);}catch(_){ bc=null; }
+
+    /* ========= Juego base ========= */
     let running=false, timer=null, secs=0, stack=[];
     const seg=$('#seg'), tot=$('#tot'), last6El=$('#last6'), ultimoCircle=$('#ultimoCircle'),
           grid=$('#grid'), lockEl=$('#lock'), histEl=$('#hist');
+
+    const setDisabled = (el,on)=>{ el.disabled=!!on; el.style.opacity=on? .6:1; el.style.cursor=on?'not-allowed':'pointer'; };
 
     function updateSecondsUI(){ seg.textContent = String(secs); }
     function setLockedUI(on){ lockEl.style.display = on ? 'flex' : 'none'; }
@@ -328,7 +358,8 @@
         const d=document.createElement('div');
         const isMarked = stack.includes(n);
         d.className = isMarked ? (n===last ? 'ball marked last' : 'ball marked') : 'ball';
-        d.textContent=n; d.onclick=()=>marcar(n);
+        d.textContent=n;
+        d.onclick=()=>marcar(n);
         grid.appendChild(d);
       }
       tot.textContent = stack.length;
@@ -352,49 +383,53 @@
     }
 
     async function cargar(){
-      try{
-        const r=await fetch('/juego/estado.json'); const j=await r.json();
-        if(j.ok){
-          stack=(j.stack||[]).map(Number); render();
-          applySpinnerStateUI(j.spinner_state);
-        }
-      }catch(_){}
+      const j = await safeFetch('/juego/estado.json'+bust());
+      if(j && j.ok){
+        stack=(j.stack||[]).map(Number); render();
+        applySpinnerStateUI(j.spinner_state);
+      }
     }
 
     async function marcar(n){
       if(!running){ lockEl.animate([{opacity:.9},{opacity:1}],{duration:200}); return; }
       if(stack.includes(n)) return;
-      const r=await fetch('/juego/marcar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({numero:n})});
-      const j=await r.json();
-      if(j.success){ stack=j.stack.map(Number); secs=0; updateSecondsUI(); render(); }
+      const j = await safeFetch('/juego/marcar', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({numero:n})});
+      if(j && j.success){ stack=j.stack.map(Number); secs=0; updateSecondsUI(); render(); }
     }
 
     async function reversaOne(){
-      const r=await fetch('/juego/reversa',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({})});
-      const j=await r.json(); if(j.success){ stack=j.stack.map(Number); render(); }
+      const j = await safeFetch('/juego/reversa', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({})});
+      if(j && j.success){ stack=j.stack.map(Number); render(); }
     }
     async function reversaK(k){
       if(!Number.isFinite(k) || k<=0) return;
       for(let i=0;i<k;i++){ await reversaOne(); }
     }
     async function reversaAll(){
-      const r=await fetch('/juego/reversa',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({all:true})});
-      const j=await r.json(); if(j.success){ stack=j.stack.map(Number); render(); }
+      const j = await safeFetch('/juego/reversa', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({all:true})});
+      if(j && j.success){ stack=j.stack.map(Number); render(); }
     }
     async function resetJuego(){
       if(!confirm('¿Seguro que quieres resetear TODO?')) return;
-      const r=await fetch('/juego/reset',{method:'POST'}); const j=await r.json();
-      if(j.success){ stack=[]; render(); secs=0; updateSecondsUI(); stop(); await cargar(); }
+      const j = await safeFetch('/juego/reset',{method:'POST'});
+      if(j && j.success){ stack=[]; render(); secs=0; updateSecondsUI(); stop(); await cargar(); }
     }
-    function start(){ if(running) return; running=true; setLockedUI(false);
-      $('#start').disabled=true; $('#stop').disabled=false;
+
+    function start(){
+      if(running) return;
+      running=true; setLockedUI(false);
+      setDisabled($('#start'), true); setDisabled($('#stop'), false);
       timer=setInterval(()=>{ secs++; updateSecondsUI(); },1000);
     }
-    function stop(){ running=false; setLockedUI(true);
-      $('#start').disabled=false; $('#stop').disabled=true;
+    function stop(){
+      running=false; setLockedUI(true);
+      setDisabled($('#start'), false); setDisabled($('#stop'), true);
       if(timer){clearInterval(timer); timer=null;}
     }
-    $('#start').onclick=start; $('#stop').onclick=stop; $('#reset').onclick=resetJuego;
+
+    $('#start').onclick=start;
+    $('#stop').onclick=stop;
+    $('#reset').onclick=resetJuego;
     $('#rev1').onclick=reversaOne;
     $('#revn').onclick=()=>{ const k=parseInt(prompt('¿Cuántas balotas reversar?','1'),10); if(Number.isFinite(k)&&k>0) reversaK(k); };
     $('#revall').onclick=reversaAll;
@@ -404,37 +439,43 @@
       await fetch('/juego/activar_stinger',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({numero:n})});
     });
 
+    /* ========= Figuras ========= */
     async function resolverFecha(){
-      try{ const r=await fetch('/juego/sorteo_fecha'); if(r.ok){ const j=await r.json(); if(j.fecha) return j.fecha; } }catch(_){}
-      return new Date().toISOString().slice(0,10);
+      const j = await safeFetch('/juego/sorteo_fecha'+bust());
+      return (j && j.fecha) ? j.fecha : new Date().toISOString().slice(0,10);
     }
     async function loadFiguras(){
       const fecha = await resolverFecha();
       $('#figFecha').textContent = fecha;
-      try{
-        const r = await fetch('/juego/figuras'); const j = await r.json();
-        const figs = (j.figuras||[]);
-        const el=$('#figList'); el.innerHTML='';
-        if(!figs.length){ el.innerHTML='<div class="pill" style="opacity:.85">No hay figuras cargadas.</div>'; return; }
-        figs.forEach(f=>{
-          const row=document.createElement('div'); row.className='fig-item';
-          const stay=(f.estado||'').toLowerCase()!=='se-fue';
-          row.innerHTML=`<div class="fig-name">${f.nombre}</div><div>💰 Valor: <b>${f.valor}</b></div>
-          <div><span class="badge ${stay?'ok':'no'}">${stay?'Se quedó':'Se fue'}</span></div>
-          <div style="display:flex;gap:8px">
-            <button class="btn-xs ok">Se quedó</button>
-            <button class="btn-xs no">Se fue</button>
-          </div>`;
-          const [bOk,bNo]=row.querySelectorAll('button');
-          const badge=row.querySelector('.badge');
-          bOk.onclick=async()=>{ await fetch('/juego/figuras/estado',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({nombre:f.nombre,estado:'se-quedo'})}); badge.className='badge ok'; badge.textContent='Se quedó'; };
-          bNo.onclick=async()=>{ await fetch('/juego/figuras/estado',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({nombre:f.nombre,estado:'se-fue'})});   badge.className='badge no'; badge.textContent='Se fue';   };
-          el.appendChild(row);
-        });
-      }catch(_){}
+      const j = await safeFetch('/juego/figuras'+bust());
+      const figs = (j && j.figuras) ? j.figuras : [];
+      const el=$('#figList'); el.innerHTML='';
+      if(!figs.length){ el.innerHTML='<div class="pill" style="opacity:.85">No hay figuras cargadas.</div>'; return; }
+      figs.forEach(f=>{
+        const row=document.createElement('div'); row.className='fig-item';
+        const stay=(f.estado||'').toLowerCase()!=='se-fue';
+        row.innerHTML=`<div class="fig-name">${f.nombre}</div><div>💰 Valor: <b>${f.valor}</b></div>
+        <div><span class="badge ${stay?'ok':'no'}">${stay?'Se quedó':'Se fue'}</span></div>
+        <div style="display:flex;gap:8px">
+          <button class="btn-xs ok">Se quedó</button>
+          <button class="btn-xs no">Se fue</button>
+        </div>`;
+        const [bOk,bNo]=row.querySelectorAll('button');
+        const badge=row.querySelector('.badge');
+        bOk.onclick=async()=>{
+          await fetch('/juego/figuras/estado',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({nombre:f.nombre,estado:'se-quedo'})});
+          badge.className='badge ok'; badge.textContent='Se quedó';
+        };
+        bNo.onclick=async()=>{
+          await fetch('/juego/figuras/estado',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({nombre:f.nombre,estado:'se-fue'})});
+          badge.className='badge no'; badge.textContent='Se fue';
+        };
+        el.appendChild(row);
+      });
     }
     $('#btnRefrescarFig')?.addEventListener('click', loadFiguras);
 
+    /* ========= Spinners (control backend) ========= */
     const dotOverlay   = $('#dotOverlay');
     const txtOverlay   = $('#txtOverlay');
     const btnLaunch    = $('#spnLaunch');
@@ -445,120 +486,310 @@
       if(!st) return;
       dotOverlay.style.background = st.overlay_on ? '#23d18b' : '#666';
       txtOverlay.textContent = (st.overlay_on ? 'Overlay ON' : 'Overlay OFF') + ' · ' + (st.locked ? 'Bloqueado' : 'Libre');
-      btnLaunch.disabled = st.locked;
-      btnLock.disabled   = !st.overlay_on && !st.running;
-      btnUnlock.disabled = !st.locked;
+      setDisabled(btnLaunch, !!st.locked);
+      setDisabled(btnLock,   false);
+      setDisabled(btnUnlock, !st.locked);
     }
+
     async function fetchSpinnerState(){
-      try{
-        const r=await fetch('/juego/estado.json'+bust()); const j=await r.json();
-        if(j.ok) applySpinnerStateUI(j.spinner_state);
-      }catch(_){}
+      const j = await safeFetch('/juego/estado.json'+bust());
+      if(j && j.ok) applySpinnerStateUI(j.spinner_state);
     }
+
+    // === Botón "🎰 Lanzar" (barra) -> /juego/spinners/launch  (index 0..19)
     btnLaunch.addEventListener('click', async ()=>{
-      try{
-        const r=await fetch('/juego/spinners/launch',{method:'POST'}); const j=await r.json();
-        if(j.ok || j.success){ applySpinnerStateUI(j.state || j.spinner_state); }
-        else if(j.error){ alert(j.error); }
-      }catch(_){}
-      fetchSpinnerState();
+      const idxStr = prompt('¿Qué spinner (1–20) quieres lanzar?', '1');
+      const index = parseInt(idxStr||'1', 10);
+      if (!Number.isFinite(index) || index < 1 || index > 20) return;
+
+      const index0 = index - 1;
+      const target = (prompt('Objetivo (4 dígitos):', '0123')||'').replace(/\D/g,'').padStart(4,'0').slice(0,4);
+      if (!target) return;
+
+      const r = await fetch('/juego/spinners/launch', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ index:index0, target, overlay_on: true })
+      });
+
+      let js = null;
+      try{ js = await r.json(); }catch(_){}
+      if (!r.ok || !js || !js.ok){
+        alert((js && (js.error||js.msg)) || 'No se pudo lanzar el spinner');
+        return;
+      }
+
+      await fetchSpinnerState();
+      try{ bc && bc.postMessage({type:'solo-spin', op:'launch', index:index0}); }catch(_){}
+      try{ localStorage.setItem('glbingo-spin-evt', JSON.stringify({t:Date.now(), op:'launch', index:index0})); }catch(_){}
     });
+
     btnLock.addEventListener('click', async ()=>{
-      try{
-        const r=await fetch('/juego/spinners/lock',{method:'POST'}); const j=await r.json();
-        if(j.ok || j.success){ applySpinnerStateUI(j.state || j.spinner_state); }
-      }catch(_){}
+      const j = await safeFetch('/juego/spinners/lock',{method:'POST'});
+      if(j) applySpinnerStateUI(j.state || j.spinner_state);
       fetchSpinnerState();
     });
     btnUnlock.addEventListener('click', async ()=>{
-      try{
-        const r=await fetch('/juego/spinners/unlock',{method:'POST'}); const j=await r.json();
-        if(j.ok || j.success){ applySpinnerStateUI(j.state || j.spinner_state); }
-      }catch(_){}
+      const j = await safeFetch('/juego/spinners/unlock',{method:'POST'});
+      if(j) applySpinnerStateUI(j.state || j.spinner_state);
       fetchSpinnerState();
     });
 
-    // Fallback lector de spinners si abres el modal (sin tocar esta parte)
+    /* ========= Spinners (20 / modal / overlay 1:1) ========= */
+    const modalSpn = $('#spinnerModal'), gridSpinners=$('#gridSpinners'),
+          btnSpinners=$('#btnSpinners'), btnRefreshSpn=$('#btnRefreshSpn'),
+          btnOpenWindowSpn=$('#btnOpenWindowSpn'), lnkFullUrlSpn=$('#lnkFullUrlSpn'), lnkOverlayUrlSpn=$('#lnkOverlayUrlSpn'), lnkOverlayStaticSpn=$('#lnkOverlayStaticSpn');
+
     const VISOR20_URL = location.origin + location.pathname + '?spinners=1';
     const SOLO_INTEGRATED = location.origin + location.pathname + '?spin=1&overlay=1';
-    document.getElementById('lnkFullUrlSpn')?.setAttribute('href', VISOR20_URL);
-    document.getElementById('lnkOverlayUrlSpn')?.setAttribute('href', SOLO_INTEGRATED);
+    lnkFullUrlSpn.href = VISOR20_URL;
+    lnkOverlayUrlSpn.href = SOLO_INTEGRATED;
+    lnkOverlayStaticSpn.href = '/juego/spinner_overlay';
 
-    const modalSpn = document.getElementById('spinnerModal');
-    const gridSpinners = document.getElementById('gridSpinners');
-    document.getElementById('btnSpinners')?.addEventListener('click', ()=>{ modalSpn.classList.remove('hidden'); renderSpinnersGridWithActions(gridSpinners); });
-    modalSpn?.querySelectorAll('[data-close-modal]')?.forEach(el=> el.addEventListener('click', ()=> modalSpn.classList.add('hidden') ));
-
-    async function fetchSpinnersJSON(){
-      const r = await fetch('/juego/spinners'+bust());
-      if(!r.ok) throw 0;
-      const j = await r.json(); if(!Array.isArray(j.spinners)) throw 0;
-      return j.spinners.slice(0,20);
-    }
-    async function fetchXML(url){
-      const r = await fetch(url + (url.includes('?')?'&':'?') + '_=' + Date.now());
-      if(!r.ok) throw 0;
-      const xml = new DOMParser().parseFromString(await r.text(), "text/xml");
-      const out=[];
-      xml.querySelectorAll('n').forEach(n=>{
-        const v = (n.getAttribute('v') || n.textContent || '').replace(/\D/g,'').slice(0,4);
-        out.push(v? v.padStart(4,'0') : '');
-      });
-      return (out.concat(Array(20).fill(''))).slice(0,20);
-    }
-    async function fetchSpinnersSafe(){
-      try{ return await fetchSpinnersJSON(); }catch(_){}
-      try{ return await fetchXML('/juego/xml/spinners'); }catch(_){}
-      try{ const r2=await fetch('/juego/estado.json'+bust()); const j2=await r2.json(); if(Array.isArray(j2.spinners)) return j2.spinners.slice(0,20);}catch(_){}
+    // --- COMPAT: acepta JSON como lista directa o como {spinners:[...]} ---
+    async function fetchSpnersJSON(){
+      const j = await safeFetch('/juego/spinners'+bust());
+      if (!j) return new Array(20).fill('');
+      if (Array.isArray(j)) return j.slice(0,20).map(normaliza4);
+      if (Array.isArray(j.spinners)) return j.spinners.slice(0,20).map(normaliza4);
       return new Array(20).fill('');
     }
+    const fetchSpinnersJSON = fetchSpnersJSON; // alias
+
+    function normaliza4(v){
+      if (v==null) return '';
+      if (typeof v === 'object' && v.value!=null) return String(v.value).padStart(4,'0').slice(0,4);
+      return String(v).replace(/\D/g,'').padStart(4,'0').slice(0,4);
+    }
+
+    // --- COMPAT XML: <spinner value="0123"> ó <n v="0123"> ó texto ---
+    async function fetchXML(url){
+      const r = await fetch(url + (url.includes('?')?'&':'?') + '_=' + Date.now());
+      if(!r.ok) return null;
+      const txt = await r.text();
+      const xml = new DOMParser().parseFromString(txt, "text/xml");
+      const out=[];
+      xml.querySelectorAll('spinner').forEach(n=>{
+        const v = n.getAttribute('value') || n.textContent || '';
+        out.push(normaliza4(v));
+      });
+      if (out.length===0){
+        xml.querySelectorAll('n').forEach(n=>{
+          const v = n.getAttribute('v') || n.textContent || '';
+          out.push(normaliza4(v));
+        });
+      }
+      return (out.concat(Array(20).fill(''))).slice(0,20);
+    }
+
+    async function fetchSpinnersSafe(){
+      const j = await fetchSpinnersJSON(); if(j.some(Boolean)) return j;
+      let x = await fetchXML('/static/db/vmix_spinners.xml'); if(x && x.some(Boolean)) return x;
+      x = await fetchXML('/static/db/spinners.xml'); if(x && x.some(Boolean)) return x;
+      const s = await safeFetch('/juego/estado.json'+bust()); if(s && Array.isArray(s.spinners)) return s.spinners.slice(0,20).map(normaliza4);
+      return new Array(20).fill('');
+    }
+
     function storeBase(f){ return `soloSpin:${f}`; }
     function loadUsed(f){ try{ const raw = localStorage.getItem(storeBase(f)+':used'); if(raw) return new Set(JSON.parse(raw)); }catch(_){ } return new Set(); }
     function saveUsed(f, set){ localStorage.setItem(storeBase(f)+':used', JSON.stringify(Array.from(set))); }
+
     function emitSpin(op,index){
-      try{ const bc=new BroadcastChannel('glbingo-spin'); bc && bc.postMessage({type:'solo-spin',op,index}); }catch(_){}
+      try{ bc && bc.postMessage({type:'solo-spin',op,index}); }catch(_){}
       try{ localStorage.setItem('glbingo-spin-evt', JSON.stringify({t:Date.now(),op,index})); }catch(_){}
     }
+
     async function renderSpinnersGridWithActions(container){
       const valores = await fetchSpinnersSafe();
       const fecha = await resolverFecha();
       const usados = loadUsed(fecha);
+
       container.innerHTML='';
       valores.forEach((val,idx)=>{
-        const i=idx; const valor=(val||'').toString().padStart(4,'•');
-        const used=usados.has(i);
+        const valor = (val||'').toString().padStart(4,'•');
+        const used = usados.has(idx);
         const cell=document.createElement('div'); cell.className='spn-cell';
-        if(used) cell.classList.add('used');
+        if (used) cell.classList.add('used');
         cell.innerHTML=`
-          <div style="position:absolute;top:6px;left:8px;font-size:11px;font-weight:800;opacity:.55">#${i+1}</div>
-          <div style="font-variant-numeric:tabular-nums;letter-spacing:.5px">${valor}</div>
-          <div style="position:absolute;bottom:10px;right:10px;display:flex;gap:8px">
-            <button class="btn-xs" style="background:#172a4b;color:#e8eef8;border:1px solid #274e82">⚙ Generar</button>
-            <button class="btn-xs" style="background:${used?'#3a1520':'#23d18b'};color:${used?'#ffb5b9':'#05271c'};border:1px solid ${used?'#7f1e26':'transparent'}">${used?'🔒 Enviado':'🚀 Lanzar'}</button>
+          <div class="label">#${idx+1}</div>
+          <div class="spn-num">${valor}</div>
+          <div class="spn-actions">
+            <button class="mini gen"   data-gen>⚙ Generar</button>
+            <button class="mini ${used?'lock':'lanz'}" data-launch>${used?'🔒 Enviado':'🚀 Lanzar'}</button>
           </div>`;
-        const [bGen,bLan]=cell.querySelectorAll('button');
-        bGen.onclick=()=> emitSpin('gen', i);
-        bLan.onclick=()=>{
-          if (usados.has(i)){
+
+        cell.querySelector('[data-gen]').onclick = ()=> emitSpin('gen', idx);
+
+        cell.querySelector('[data-launch]').onclick = async ()=>{
+          if (usados.has(idx)){
             const ok = confirm('Este spinner ya fue lanzado. ¿Deseas volver a lanzarlo?');
             if (!ok) return;
-            usados.delete(i); saveUsed(fecha, usados);
+            usados.delete(idx); saveUsed(fecha, usados);
           }
-          emitSpin('launch', i);
+          const target = String((val||'')).replace(/\D/g,'').padStart(4,'0').slice(0,4);
+          if (!target) { alert('Este spinner no tiene valor asignado.'); return; }
+
+          const r = await fetch('/juego/spinners/launch',{
+            method:'POST',
+            headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({ index: idx, target, overlay_on: true }) // 0-based
+          });
+          let js=null; try{ js = await r.json(); }catch(_){}
+          if (!r.ok || !js || !js.ok){
+            alert((js && (js.error||js.msg)) || 'No se pudo lanzar el spinner');
+            return;
+          }
+
+          usados.add(idx); saveUsed(fecha, usados);
+          renderSpinnersGridWithActions(container);
+
+          try{ bc && bc.postMessage({type:'solo-spin', op:'launch', index:idx}); }catch(_){}
+          try{ localStorage.setItem('glbingo-spin-evt', JSON.stringify({t:Date.now(), op:'launch', index:idx})); }catch(_){}
         };
+
         container.appendChild(cell);
       });
     }
 
-    // Modo visor/overlay (opcional)
+    function openModalSpinners(){ modalSpn.classList.remove('hidden'); renderSpinnersGridWithActions(gridSpinners); }
+    function closeModalSpinners(){ modalSpn.classList.add('hidden'); }
+    $('#btnSpinners')?.addEventListener('click', openModalSpinners);
+    $('#btnRefreshSpn')?.addEventListener('click', ()=>renderSpinnersGridWithActions(gridSpinners));
+    $('#btnOpenWindowSpn')?.addEventListener('click', ()=> window.open('/juego/spinner_overlay','SoloSpinnerPreview','width=920,height=680'));
+    $$('#spinnerModal [data-close-modal]').forEach(el=> el.addEventListener('click', closeModalSpinners));
+    window.addEventListener('focus', ()=> !modalSpn.classList.contains('hidden') && renderSpinnersGridWithActions(gridSpinners));
+
+    // Visor 20 (página completa)
+    async function bootFull20(){
+      $('.layout')?.classList.add('hidden');
+      $('#SpinnersFullView').classList.remove('hidden');
+      const valores = await fetchSpinnersSafe();
+      const fecha = await resolverFecha();
+      const usados = loadUsed(fecha);
+      const g = $('#spnFullGrid'); g.innerHTML='';
+      valores.forEach((val,idx)=>{
+        const cell=document.createElement('div'); cell.className='spn-cell';
+        if (usados.has(idx)) cell.classList.add('used');
+        cell.innerHTML=`<div class="label">#${idx+1}</div><div class="spn-num">${(val||'').toString().padStart(4,'•')}</div>`;
+        g.appendChild(cell);
+      });
+      setTimeout(bootFull20, 3000);
+    }
+
+    // Overlay integrado 1:1
+    $('#btnSoloSpin')?.addEventListener('click', ()=> window.open(location.origin + location.pathname + '?spin=1&overlay=1', 'SoloSpinner', 'width=900,height=650'));
+
+    /* ========= Overlay integrado (solo navegador) ========= */
+    const soloDigits = $('#soloDigits');
+    let SOLO_LIST = new Array(20).fill(''), SOLO_I=0, SOLO_USED=new Set();
+    const DIGS = 4;
+
+    function setSoloDigits(str){
+      const s = (str ?? '').padStart(DIGS, '0').slice(-DIGS);
+      const boxes = $$('.d', soloDigits);
+      for(let i=0;i<DIGS;i++) boxes[i].textContent = s[i];
+    }
+    function kBase(fecha){ return `soloSpin:${fecha}`; }
+    function loadUsedSolo(fecha){ try{ const raw = localStorage.getItem(kBase(fecha)+':used'); if(raw){ return new Set(JSON.parse(raw)); } }catch(_){ } return new Set(); }
+    function saveUsedSolo(fecha){ localStorage.setItem(kBase(fecha)+':used', JSON.stringify(Array.from(SOLO_USED))); }
+    function saveIdx(fecha){ localStorage.setItem(kBase(fecha)+':idx', String(SOLO_I)); }
+    function readIdx(fecha){ const v = parseInt(localStorage.getItem(kBase(fecha)+':idx')||'0',10); return Number.isFinite(v) ? v : 0; }
+    function targetForIndex(i){ const v = (SOLO_LIST[i]||'').trim(); return v ? v.padStart(4,'0') : ''; }
+    function isAvailable(i){ const has = !!targetForIndex(i); return has && !SOLO_USED.has(i); }
+    function nextAvailableFrom(start){
+      const n = SOLO_LIST.length;
+      for(let step=0; step<n; step++){ const j = (start + step) % n; if (isAvailable(j)) return j; }
+      return -1;
+    }
+
+    async function rollDigitTo(el, targetDigit, extraTurns=1){
+      let cur = /^\d$/.test(el.textContent) ? parseInt(el.textContent,10) : 0;
+      const to = parseInt(targetDigit,10);
+      const steps = extraTurns*10 + ((to - cur + 10) % 10);
+      for(let s=0; s<steps; s++){
+        cur = (cur+1) % 10;
+        el.textContent = String(cur);
+        const t = 30 + Math.min(200, s*3);
+        await sleep(t);
+      }
+    }
+    async function tambolaRollTo(targetStr){
+      const t = targetStr.padStart(DIGS,'0').slice(-DIGS);
+      const boxes = $$('.d', soloDigits);
+      for(let i=0;i<DIGS;i++){ await rollDigitTo(boxes[i], t[i], 2+i); }
+      setSoloDigits(t);
+    }
+
+    function updateSoloUI(fecha){
+      if (SOLO_I>=0 && SOLO_USED.has(SOLO_I)) setSoloDigits(targetForIndex(SOLO_I));
+      else setSoloDigits('0000');
+      saveIdx(fecha);
+    }
+
+    async function soloGenerar(){
+      const f = await resolverFecha();
+      const next = nextAvailableFrom((SOLO_I+1) % SOLO_LIST.length);
+      if (next !== -1){ SOLO_I = next; updateSoloUI(f); }
+    }
+    async function soloLanzar(){
+      const f = await resolverFecha();
+      if (SOLO_I < 0) return;
+      const target = targetForIndex(SOLO_I);
+      if (!target) return;
+      if (SOLO_USED.has(SOLO_I)){
+        const ok = confirm('Este spinner ya fue lanzado. ¿Deseas volver a lanzarlo?');
+        if (!ok) return;
+        SOLO_USED.delete(SOLO_I); saveUsedSolo(f);
+      }
+      await tambolaRollTo(target);
+      SOLO_USED.add(SOLO_I); saveUsedSolo(f);
+      saveIdx(f);
+    }
+
+    async function bootSolo(){
+      const j = await safeFetch('/juego/spinners'+bust());
+      if (j){
+        if (Array.isArray(j)) SOLO_LIST = j.slice(0,20).map(normaliza4);
+        else if (Array.isArray(j.spinners)) SOLO_LIST = j.spinners.slice(0,20).map(normaliza4);
+      } else {
+        SOLO_LIST = new Array(20).fill('');
+      }
+      const f = await resolverFecha();
+      SOLO_USED = loadUsedSolo(f);
+      const qI = parseInt(Q.get('i')||'-1',10);
+      if (Number.isFinite(qI) && qI>=0 && qI<SOLO_LIST.length){ SOLO_I = qI; }
+      else { SOLO_I = readIdx(f); if (!isAvailable(SOLO_I)) SOLO_I = nextAvailableFrom(SOLO_I); }
+      updateSoloUI(f);
+
+      $('#soloScreen').addEventListener('click', soloLanzar);
+      window.addEventListener('keydown', e=>{
+        if (e.code==='Space'){ e.preventDefault(); soloLanzar(); }
+        else if (e.key==='g' || e.key==='G'){ e.preventDefault(); soloGenerar(); }
+      });
+
+      try{ bc && bc.addEventListener('message', async (ev)=>{ const d=ev.data||{}; if(d.type!=='solo-spin') return; if(Number.isFinite(d.index)){ SOLO_I=d.index; updateSoloUI(await resolverFecha()); } if(d.op==='gen') await soloGenerar(); else if(d.op==='launch') await soloLanzar(); }); }catch(_){}
+      window.addEventListener('storage', async (ev)=>{
+        if (ev.key !== 'glbingo-spin-evt') return;
+        try{
+          const d = JSON.parse(ev.newValue||'{}');
+          if (Number.isFinite(d.index)){ SOLO_I = d.index; updateSoloUI(await resolverFecha()); }
+          if (d.op === 'gen')      await soloGenerar();
+          else if (d.op === 'launch') await soloLanzar();
+        }catch(_){}
+      });
+    }
+
+    // Modo visor/overlay
     if (isVisor20()){
-      document.querySelector('.layout')?.classList.add('hidden');
-      document.getElementById('SpinnersFullView')?.classList.remove('hidden');
+      $('.layout')?.classList.add('hidden');
+      $('#SpinnersFullView').classList.remove('hidden');
+      setTimeout(async function loop(){ await bootFull20(); }, 1);
     } else if (isSpin()){
-      document.querySelector('.layout')?.classList.add('hidden');
+      $('.layout')?.classList.add('hidden');
       document.documentElement.classList.add('overlay');
       document.body.classList.add('overlay');
-      document.getElementById('soloSpin')?.classList.remove('hidden');
+      $('#soloSpin').classList.remove('hidden');
+      bootSolo();
     }
 
     // Boot

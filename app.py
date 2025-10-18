@@ -6415,7 +6415,284 @@ except Exception:
 
 # ================== FIN JUEGO ==================
 
+# inicio spinners #
 
+
+
+# ===================== SPINNERS API + OVERLAY =====================
+
+# ===========================
+# ==== [ SPINNERS + VMIX OVERLAY ] ============================================
+import os, xml.etree.ElementTree as ET
+from datetime import datetime
+from flask import request, jsonify, render_template
+
+# ---------- Config ----------
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DATA_DIR = globals().get("DATA_DIR", os.path.join(BASE_DIR, "DATA"))
+DB_DIR = os.path.join(DATA_DIR, "static", "db")
+os.makedirs(DB_DIR, exist_ok=True)
+
+VMIX_SPINNERS_XML = os.path.join(DB_DIR, "vmix_spinners.xml")
+SPINNERS_XML      = os.path.join(DB_DIR, "spinners.xml")
+
+# Cambia esto si tu vMix API está en otra IP/puerto:
+# Ej: "http://127.0.0.1:8088/api"
+VMIX_API_URL = os.getenv("VMIX_API_URL", "").strip()  # vacío = desactivado
+VMIX_OVERLAY_INDEX = int(os.getenv("VMIX_OVERLAY_INDEX", "1"))  # Overlay 1 por defecto
+
+# ---------- Utilidades XML ----------
+def _ensure_xml_files():
+    """Crea plantillas XML si no existen."""
+    if not os.path.exists(SPINNERS_XML):
+        root = ET.Element("spinners")
+        # 20 slots inicialmente vacíos (0000) y unlocked
+        for i in range(1, 21):
+            ET.SubElement(root, "spinner", index=str(i), value="0000", locked="0", used="0")
+        ET.indent(root, space="  ")
+        ET.ElementTree(root).write(SPINNERS_XML, encoding="utf-8", xml_declaration=True)
+
+    if not os.path.exists(VMIX_SPINNERS_XML):
+        root = ET.Element("vmix")
+        overlay = ET.SubElement(root, "overlay", index=str(VMIX_OVERLAY_INDEX), state="off")
+        # espejo de los 20
+        group = ET.SubElement(root, "spinners")
+        for i in range(1, 21):
+            ET.SubElement(group, "spinner", index=str(i), value="0000", locked="0", used="0")
+        ET.indent(root, space="  ")
+        ET.ElementTree(root).write(VMIX_SPINNERS_XML, encoding="utf-8", xml_declaration=True)
+
+def _read_spinners():
+    _ensure_xml_files()
+    tree = ET.parse(SPINNERS_XML); root = tree.getroot()
+    data = []
+    for node in root.findall("spinner"):
+        data.append({
+            "index": int(node.get("index", "0")),
+            "value": node.get("value", "0000"),
+            "locked": node.get("locked", "0") == "1",
+            "used": node.get("used", "0") == "1",
+        })
+    return data
+
+def _write_spinners(spinners):
+    root = ET.Element("spinners")
+    for s in spinners:
+        ET.SubElement(root, "spinner",
+                      index=str(s["index"]),
+                      value=str(s["value"]).zfill(4)[:4],
+                      locked="1" if s.get("locked") else "0",
+                      used="1" if s.get("used") else "0")
+    ET.indent(root, space="  ")
+    ET.ElementTree(root).write(SPINNERS_XML, encoding="utf-8", xml_declaration=True)
+
+def _read_vmix():
+    _ensure_xml_files()
+    t = ET.parse(VMIX_SPINNERS_XML); r = t.getroot()
+    return t, r
+
+def _mirror_to_vmix(spinners, overlay_state=None):
+    """Espeja lista de spinners a vmix_spinners.xml y opcionalmente cambia overlay on/off."""
+    t, r = _read_vmix()
+    # overlay
+    overlay = r.find("overlay")
+    if overlay is None:
+        overlay = ET.SubElement(r, "overlay", index=str(VMIX_OVERLAY_INDEX), state="off")
+    if overlay_state in ("on", "off"):
+        overlay.set("state", overlay_state)
+
+    # grupo
+    group = r.find("spinners")
+    if group is None:
+        group = ET.SubElement(r, "spinners")
+    # limpia
+    for child in list(group):
+        group.remove(child)
+    # reescribe
+    for s in spinners:
+        ET.SubElement(group, "spinner",
+                      index=str(s["index"]),
+                      value=str(s["value"]).zfill(4)[:4],
+                      locked="1" if s.get("locked") else "0",
+                      used="1" if s.get("used") else "0")
+    ET.indent(r, space="  ")
+    t.write(VMIX_SPINNERS_XML, encoding="utf-8", xml_declaration=True)
+
+# ---------- vMix API (opcional) ----------
+def _vmix_call(function_name, **params):
+    """
+    Llama al API HTTP de vMix si VMIX_API_URL está definido.
+    Ej: _vmix_call("OverlayInput1On")
+    """
+    if not VMIX_API_URL:
+        return {"ok": False, "msg": "VMIX_API_URL no configurado"}
+    try:
+        import requests
+        # Construye query tipo: ?Function=OverlayInput1On
+        q = {"Function": function_name}
+        # anexa params si aplica
+        for k, v in params.items():
+            q[k] = v
+        resp = requests.get(VMIX_API_URL, params=q, timeout=3)
+        return {"ok": resp.ok, "status": resp.status_code}
+    except Exception as e:
+        return {"ok": False, "msg": str(e)}
+
+# ---------- Rutas JSON ----------
+@app.get("/juego/spinners")
+def get_spinners():
+    """
+    Devuelve los 20 spinners: index, value (0000-9999), locked, used
+    """
+    data = sorted(_read_spinners(), key=lambda x: x["index"])
+    return jsonify(data)
+
+@app.post("/juego/spinners/generar")
+def post_spinner_generar():
+    """
+    Pone el visor del spinner (index) en 0000, no toca 'value' si ya existía
+    pero deja 'used=0' y 'locked=0' si quieres relanzar.
+    Body: {index:int}
+    """
+    payload = request.get_json(force=True, silent=True) or {}
+    index = int(payload.get("index", 1))
+    sp = _read_spinners()
+    found = None
+    for s in sp:
+        if s["index"] == index:
+            found = s; break
+    if not found:
+        return jsonify({"ok": False, "msg": "index inválido"}), 400
+
+    # GENERAR → reset visual, desbloqueado y sin usado
+    found["value"] = "0000"
+    found["used"] = False
+    found["locked"] = False
+    _write_spinners(sp)
+    _mirror_to_vmix(sp)   # espejo
+
+    return jsonify({"ok": True, "index": index, "value": found["value"]})
+
+@app.post("/juego/spinners/lanzar")
+def post_spinner_lanzar():
+    """
+    Lanza el spinner al valor objetivo, marca used=1, locked=1 y enciende Overlay 1 (opcional).
+    Body: {index:int, target:str|int, overlay_on:bool}
+    """
+    payload = request.get_json(force=True, silent=True) or {}
+    index = int(payload.get("index", 1))
+    target = str(payload.get("target", "0000")).zfill(4)[:4]
+    overlay_on = bool(payload.get("overlay_on", True))
+
+    sp = _read_spinners()
+    found = None
+    for s in sp:
+        if s["index"] == index:
+            found = s; break
+    if not found:
+        return jsonify({"ok": False, "msg": "index inválido"}), 400
+    if found.get("locked"):
+        return jsonify({"ok": False, "msg": "Este spinner está bloqueado"}), 403
+
+    # asigna valor, usa y bloquea
+    found["value"] = target
+    found["used"] = True
+    found["locked"] = True
+    _write_spinners(sp)
+
+    # overlay ON (XML) y (opcional) API vMix
+    _mirror_to_vmix(sp, overlay_state="on" if overlay_on else None)
+    vmix_api = None
+    if overlay_on:
+        # Ej.: OverlayInput1On, OverlayInput1Off  (vMix es 1-indexed)
+        vmix_api = _vmix_call(f"OverlayInput{VMIX_OVERLAY_INDEX}On")
+
+    return jsonify({"ok": True, "index": index, "value": target, "vmix_api": vmix_api})
+
+@app.post("/juego/spinners/unlock")
+def post_spinner_unlock():
+    """
+    Desbloquea un spinner (o todos). Body: {index:int} o {all:true}
+    """
+    payload = request.get_json(force=True, silent=True) or {}
+    all_flag = bool(payload.get("all"))
+    sp = _read_spinners()
+
+    if all_flag:
+        for s in sp:
+            s["locked"] = False
+        _write_spinners(sp); _mirror_to_vmix(sp)
+        return jsonify({"ok": True, "msg": "Todos desbloqueados"})
+
+    index = int(payload.get("index", 1))
+    for s in sp:
+        if s["index"] == index:
+            s["locked"] = False
+            _write_spinners(sp); _mirror_to_vmix(sp)
+            return jsonify({"ok": True, "index": index, "locked": False})
+    return jsonify({"ok": False, "msg": "index inválido"}), 400
+
+@app.post("/juego/spinners/lock")
+def post_spinner_lock():
+    """
+    Bloquea un spinner (o todos). Body: {index:int} o {all:true}
+    """
+    payload = request.get_json(force=True, silent=True) or {}
+    all_flag = bool(payload.get("all"))
+    sp = _read_spinners()
+
+    if all_flag:
+        for s in sp:
+            s["locked"] = True
+        _write_spinners(sp); _mirror_to_vmix(sp)
+        return jsonify({"ok": True, "msg": "Todos bloqueados"})
+
+    index = int(payload.get("index", 1))
+    for s in sp:
+        if s["index"] == index:
+            s["locked"] = True
+            _write_spinners(sp); _mirror_to_vmix(sp)
+            return jsonify({"ok": True, "index": index, "locked": True})
+    return jsonify({"ok": False, "msg": "index inválido"}), 400
+
+@app.post("/juego/spinners/reset_used")
+def post_spinner_reset_used():
+    """
+    Resetea 'used' de todos a 0 (útil al preparar un nuevo sorteo).
+    """
+    sp = _read_spinners()
+    for s in sp:
+        s["used"] = False
+        s["locked"] = False
+        s["value"] = "0000"
+    _write_spinners(sp)
+    _mirror_to_vmix(sp, overlay_state="off")
+    return jsonify({"ok": True})
+
+# ---------- Rutas Overlay (HTML) ----------
+@app.get("/juego/spinner_overlay")
+def spinner_overlay_page():
+    """
+    Overlay transparente para vMix (usa tu spinner_overlay.html)
+    """
+    # Si usas render_template con archivo físico:
+    return render_template("spinner_overlay.html")
+
+# (Opcional) API rápida para apagar overlay vía backend + vMix API
+@app.post("/vmix/overlay/off")
+def vmix_overlay_off():
+    sp = _read_spinners()
+    _mirror_to_vmix(sp, overlay_state="off")
+    vmix_api = _vmix_call(f"OverlayInput{VMIX_OVERLAY_INDEX}Off")
+    return jsonify({"ok": True, "vmix_api": vmix_api})
+# ==== [ FIN SPINNERS ] ========================================================
+
+
+
+
+
+
+#--------FIN DE SPINNERS------------##
 
 
 

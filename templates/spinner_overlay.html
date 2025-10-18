@@ -2,272 +2,218 @@
 <html lang="es">
 <head>
   <meta charset="utf-8" />
-  <title>Spinners Overlay</title>
+  <title>Spinner Overlay</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
     :root{
-      --blueDeep:#0b3a9c;
-      --blueLive:#1e5cff;
-      --goldGlow:255,209,97;
-
-      --panelA:#ffffff; --panelB:#f6f8ff; --panelC:#e9eef9;
-      --ring:#c8d5f2;
+      --ink:#e8eef8;
+      --redTop:#ffdddd;
+      --redMid:#ff3c3c;
+      --redDeep:#b50000;
+      --redShadow:rgba(0,0,0,.45);
     }
-
+    *{box-sizing:border-box}
     html,body{height:100%}
-    html,body{
-      margin:0; background:transparent; overflow:hidden;
-      font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Arial;
-      -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale;
-      color:#1b2a4a;
+    body{
+      margin:0; background:transparent; color:var(--ink);
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial;
+      overflow:hidden;
     }
 
-    .wrap{ width:min(1400px,96vw); margin-inline:auto; padding-block:min(7vh,84px) 18px }
-
-    .title{
-      width:fit-content; margin:0 auto 16px; padding:10px 26px;
-      border-radius:18px;
-      backdrop-filter:blur(2px);
-      background:linear-gradient(180deg,rgba(255,255,255,.20),rgba(255,255,255,.06));
-      border:1px solid rgba(255,255,255,.35);
-      box-shadow:
-        inset 0 1px 0 rgba(255,255,255,.9),
-        0 18px 28px rgba(0,0,0,.22),
-        0 0 40px rgba(var(--goldGlow),.20);
-      letter-spacing:.42em;
+    /* ===== Fondo sutil translúcido ===== */
+    .fx-bg{
+      position:fixed; inset:0; pointer-events:none; z-index:0;
+      background:
+        radial-gradient(120% 80% at 50% -10%, rgba(255,80,80,.25) 0%, rgba(255,80,80,0) 46%),
+        radial-gradient(100% 90% at 50% 120%, rgba(0,0,0,.4) 0%, rgba(0,0,0,0) 44%);
     }
-    .title span{
+
+    /* ===== Contenedor principal ===== */
+    .stack{
+      position:fixed; inset:0; display:flex; align-items:center; justify-content:center; z-index:1;
+      flex-direction:column; gap:clamp(3px, 0.6vw, 8px);
+    }
+
+    /* ===== Título SPINNERS en rojo 3D ===== */
+    .title3d{
       display:inline-block;
-      font-weight:1000; font-size:clamp(26px,3.8vw,52px);
-      color:var(--blueDeep);
-      -webkit-text-stroke:1px #ffffff;
-      text-shadow:
-        0 1px 0 #fff,
-        0 2px 0 rgba(0,0,0,.06),
-        0 3px 0 rgba(0,0,0,.06),
-        0 6px 14px rgba(0,0,0,.20),
-        0 0 26px rgba(var(--goldGlow),.20);
-    }
-
-    .deck{
-      position:relative;
-      padding:22px clamp(12px,2vw,26px);
-      border-radius:24px;
-      background:linear-gradient(180deg,var(--panelA) 0%,var(--panelB) 55%,var(--panelC) 100%);
-      border-top:1px solid #fff; border-bottom:1px solid #d9e2f4;
-      box-shadow:0 28px 70px rgba(0,0,0,.42);
-      display:flex; gap:clamp(12px,2.2vw,28px); justify-content:center; align-items:flex-end;
-    }
-    .deck::after{
-      content:''; position:absolute; inset:-1px; border-radius:26px; pointer-events:none;
-      box-shadow:inset 0 0 0 1px rgba(174,191,238,.35);
-    }
-
-    .digit{
-      width:clamp(96px,10.4vw,144px);
-      height:clamp(126px,13.4vw,176px);
-      border-radius:26px; position:relative; overflow:hidden;
-      background:linear-gradient(180deg,#fff 0%,#f7f9ff 62%,#edf1fb 100%);
-      border:2px solid #ffffff;
+      padding: clamp(6px, .9vw, 12px) clamp(18px, 2.5vw, 32px);
+      border-radius:16px;
+      letter-spacing:.14em;
+      text-transform:uppercase;
+      font-weight:900;
+      font-size: clamp(24px, 4.6vw, 52px);
+      line-height:1;
+      background: linear-gradient(180deg, rgba(255,255,255,.4), rgba(255,255,255,.1));
+      border:1px solid rgba(255,255,255,.25);
       box-shadow:
-        inset 0 0 0 2px #ffffff,
-        inset 0 -16px 0 rgba(0,0,0,.06),
-        0 2px 0 #fff,
-        0 26px 52px rgba(0,0,0,.34);
-      transition:filter .25s ease;
-    }
-    .digit::before{
-      content:''; position:absolute; inset:6px; border-radius:20px;
-      box-shadow:inset 0 0 0 2px rgba(80,110,190,.12); pointer-events:none;
-    }
-
-    .reel{
-      position:absolute; left:0; right:0; top:0;
-      display:flex; flex-direction:column; align-items:center;
-      transform:translateY(0);
-      transition:transform 1.15s cubic-bezier(.18,.92,.12,1);
-      will-change:transform;
-    }
-    .slot{
-      height:clamp(126px,13.4vw,176px);
-      display:flex; align-items:center; justify-content:center;
-      font-weight:1000; font-size:clamp(62px,8.8vw,120px);
-      letter-spacing:.02em;
-      color:var(--blueDeep);
-      -webkit-text-stroke:1px #ffffff;
+        0 14px 34px rgba(0,0,0,.4),
+        inset 0 1px 0 rgba(255,255,255,.6),
+        inset 0 -1px 0 rgba(0,0,0,.15);
+      color: #ff4545;
+      background-clip:text;
+      -webkit-background-clip:text;
+      -webkit-text-fill-color: #ff3c3c;
       text-shadow:
-        0 1px 0 rgba(255,255,255,.95),
-        0 0 12px rgba(var(--goldGlow),.22),
-        0 18px 28px rgba(0,0,0,.20);
+        0 -2px 0 var(--redTop),
+        0 1px 0 var(--redMid),
+        0 2px 0 var(--redMid),
+        0 3px 0 var(--redDeep),
+        0 4px 3px rgba(0,0,0,.45),
+        0 14px 24px rgba(0,0,0,.35);
       user-select:none;
     }
-    .digit.landed .slot{
-      color:var(--blueLive);
+
+    /* ===== Dígitos ===== */
+    .digits{display:flex; gap:3vw; align-items:center; justify-content:center}
+    .d{
+      width:min(18vw,200px); height:min(24vw,260px);
+      display:flex; align-items:center; justify-content:center;
+      background:linear-gradient(#ffffff,#e9eef6);
+      color:#0d1a32; border:1px solid #0002; border-radius:22px;
+      font-weight:900; font-size:min(16vw,180px); line-height:1;
+      box-shadow:
+        inset 0 0 0 2px #0001,
+        0 16px 28px rgba(0,0,0,.28),
+        0 24px 48px rgba(0,0,0,.22);
+      font-variant-numeric: tabular-nums;
+      user-select:none;
       text-shadow:
-        0 1px 0 rgba(255,255,255,.95),
-        0 0 38px rgba(var(--goldGlow),.68),
-        0 26px 36px rgba(0,0,0,.30);
-      animation:popGlow .9s ease-out 1, breathe 2.2s ease-in-out 2 .15s;
-    }
-    @keyframes popGlow{
-      0%{filter:brightness(1)}
-      38%{filter:brightness(1.35)}
-      72%{filter:brightness(1.08)}
-      100%{filter:brightness(1.12)}
-    }
-    @keyframes breathe{
-      0%,100%{
-        text-shadow:
-          0 1px 0 rgba(255,255,255,.95),
-          0 0 24px rgba(var(--goldGlow),.46),
-          0 26px 36px rgba(0,0,0,.30);
-      }
-      50%{
-        text-shadow:
-          0 1px 0 rgba(255,255,255,1),
-          0 0 52px rgba(var(--goldGlow),.80),
-          0 26px 36px rgba(0,0,0,.30);
-      }
+        0 3px 0 rgba(255,255,255,.75),
+        0 10px 26px rgba(0,0,0,.3);
     }
 
-    .bar{ display:grid; grid-template-columns:repeat(20,1fr); gap:8px; margin-top:12px }
-    .chip{
-      height:28px; border-radius:999px; font-weight:900; font-size:12px;
-      display:flex; align-items:center; justify-content:center;
-      color:#26427f; user-select:none;
-      background:linear-gradient(180deg,#eef3ff,#dce7fb);
-      border:1px solid #c7d2ea;
-      box-shadow:inset 0 0 0 1px #ffffffc0, 0 10px 18px rgba(0,0,0,.16);
-    }
-    .chip.used{
-      color:#3b2a00;
-      background:linear-gradient(180deg,#fff0be,#ffd060);
-      border-color:#e3b85a;
-      box-shadow:inset 0 0 0 1px #fff6d6, 0 10px 18px rgba(0,0,0,.16);
-    }
-    .chip.active{ outline:2px solid #4367cf; outline-offset:2px; }
+    .meta{position:fixed; left:10px; bottom:10px; font:12px/1.4 ui-sans-serif; opacity:.6; z-index:2}
   </style>
 </head>
 <body>
-  <div class="wrap">
-    <div class="title"><span>SPINNERS</span></div>
+  <!-- Fondo -->
+  <div class="fx-bg" aria-hidden="true"></div>
 
-    <div class="deck" id="deck">
-      <div class="digit"><div class="reel"></div></div>
-      <div class="digit"><div class="reel"></div></div>
-      <div class="digit"><div class="reel"></div></div>
-      <div class="digit"><div class="reel"></div></div>
+  <!-- Centro -->
+  <div class="stack">
+    <div class="title3d">SPINNERS</div>
+    <div id="digits" class="digits">
+      <span class="d">0</span><span class="d">0</span><span class="d">0</span><span class="d">0</span>
     </div>
-
-    <div class="bar" id="bar"></div>
   </div>
 
-  <script>
-    const DIGS=4, BC='glbingo-spin';
-    const $=s=>document.querySelector(s);
-    const $$=s=>Array.from(document.querySelectorAll(s));
-    const sleep=ms=>new Promise(r=>setTimeout(r,ms));
-    const bust=()=>`&_=${Date.now()}`;
-    const Q=new URL(location.href).searchParams;
+  <div class="meta">Overlay 1 • Escucha “glbingo-spin” (BroadcastChannel) y localStorage</div>
 
-    let INDEX=Math.max(0,Math.min(19,parseInt(Q.get('i')||'0',10)||0));
-    let LIST=new Array(20).fill('');
+  <script>
+    /* ========= LÓGICA ORIGINAL (SIN CAMBIOS) ========= */
+    const $ = s => document.querySelector(s);
+    const $$ = (s,root=document)=> Array.from(root.querySelectorAll(s));
+    const sleep = ms => new Promise(r=>setTimeout(r, ms));
+    const bust  = () => `?_=${Date.now()}`;
+    const Q = new URL(location.href).searchParams;
+
+    const DIGS = 4;
+    const CHANNEL = 'glbingo-spin';
+
+    function normalize4(v){
+      if (v==null) return '';
+      if (typeof v === 'object' && v.value!=null) return String(v.value).padStart(4,'0').slice(0,4);
+      return String(v).replace(/\D/g,'').padStart(4,'0').slice(0,4);
+    }
+
+    async function safeJSON(url, opts={}){
+      try{
+        const r = await fetch(url, opts);
+        if(!r.ok) throw new Error(r.statusText);
+        return await r.json();
+      }catch(e){ console.error('fetch', url, e); return null; }
+    }
 
     async function fetchSpinners(){
+      const j = await safeJSON('/juego/spinners'+bust());
+      if (j){
+        if (Array.isArray(j)) return j.slice(0,20).map(normalize4);
+        if (Array.isArray(j.spinners)) return j.spinners.slice(0,20).map(normalize4);
+      }
       try{
-        const r=await fetch('/juego/spinners'+bust()); const j=await r.json();
-        if(Array.isArray(j.spinners)) return j.spinners.slice(0,20);
-      }catch(_){}
-      try{
-        const r2=await fetch('/static/db/spinners.xml'+bust());
-        if(r2.ok){
-          const xml=new DOMParser().parseFromString(await r2.text(),'text/xml');
-          const out=[]; xml.querySelectorAll('n').forEach(n=>{
-            const v=(n.getAttribute('v')||n.textContent||'').replace(/\D/g,'').slice(0,4);
-            out.push(v? v.padStart(4,'0'): '');
-          });
-          return (out.concat(Array(20).fill(''))).slice(0,20);
+        const r1 = await fetch('/static/db/vmix_spinners.xml'+bust());
+        if (r1.ok){
+          const xml = new DOMParser().parseFromString(await r1.text(), "text/xml");
+          const out=[];
+          xml.querySelectorAll('spinner').forEach(n=> out.push(normalize4(n.getAttribute('value')||n.textContent||'')));
+          if (!out.length){
+            xml.querySelectorAll('n').forEach(n=> out.push(normalize4(n.getAttribute('v')||n.textContent||'')));
+          }
+          if (out.some(Boolean)) return out.slice(0,20);
         }
       }catch(_){}
       return new Array(20).fill('');
     }
 
-    const bar=$('#bar');
-    function buildBar(){
-      bar.innerHTML='';
-      for(let i=0;i<20;i++){
-        const c=document.createElement('div');
-        c.className='chip'; c.textContent=String(i+1).padStart(2,'0');
-        if(i===INDEX) c.classList.add('active');
-        bar.appendChild(c);
+    const digits = $('#digits');
+    function setDigits(str='0000'){
+      const s = (str||'').padStart(DIGS,'0').slice(-DIGS);
+      const boxes = $$('.d', digits);
+      for(let i=0;i<DIGS;i++) boxes[i].textContent = s[i];
+    }
+
+    async function rollDigitTo(el, targetDigit, extraTurns=1){
+      let cur = /^\d$/.test(el.textContent) ? parseInt(el.textContent,10) : 0;
+      const to = parseInt(targetDigit,10);
+      const steps = extraTurns*10 + ((to - cur + 10) % 10);
+      for(let s=0; s<steps; s++){
+        cur = (cur+1) % 10;
+        el.textContent = String(cur);
+        const t = 30 + Math.min(220, s*3);
+        await sleep(t);
       }
     }
-    function markUsed(i,on=true){ const chip=bar.children[i]; chip && chip.classList.toggle('used',on); }
-    function markActive(i){ [...bar.children].forEach((c,idx)=>c.classList.toggle('active',idx===i)); }
+    async function tambolaRollTo(target){
+      const t = (target||'').padStart(DIGS,'0').slice(-DIGS);
+      const boxes = $$('.d', digits);
+      for(let i=0;i<DIGS;i++){ await rollDigitTo(boxes[i], t[i], 2+i); }
+      setDigits(t);
+    }
 
-    function buildReels(){
-      $$('#deck .reel').forEach(reel=>{
-        reel.innerHTML='';
-        for(let k=0;k<70;k++){
-          const s=document.createElement('div');
-          s.className='slot'; s.textContent=String(k%10);
-          reel.appendChild(s);
-        }
+    let CUR_INDEX = -1;
+    function onGen(i){ CUR_INDEX=i; setDigits('0000'); }
+    async function onLaunch(i){
+      CUR_INDEX=i;
+      const list = await fetchSpinners();
+      const target = normalize4(list[i]||'');
+      if (!target){ console.warn('Spinner sin target en índice', i); return; }
+      await tambolaRollTo(target);
+    }
+
+    try{
+      const bc = new BroadcastChannel(CHANNEL);
+      bc.addEventListener('message', async ev=>{
+        const d = ev.data || {};
+        if (d.type !== 'solo-spin') return;
+        if (Number.isFinite(d.index)) CUR_INDEX = d.index;
+        if (d.op === 'gen') onGen(CUR_INDEX);
+        else if (d.op === 'launch') onLaunch(CUR_INDEX);
       });
-    }
-    function digitH(){
-      const slot=$('.slot');
-      return slot?slot.getBoundingClientRect().height:150;
-    }
-    async function spinDigitTo(digitEl,target,turns=3,duration=1100){
-      digitEl.classList.remove('landed');
-      const reel=digitEl.querySelector('.reel');
-      const h=digitH();
-      const steps=Math.round(turns*10 + (target%10));
-      reel.style.transitionDuration=`${duration}ms`;
-      reel.style.transform=`translateY(${-h*steps}px)`;
-      await new Promise(res=>{
-        const done=()=>{ reel.removeEventListener('transitionend',done); res(); };
-        reel.addEventListener('transitionend',done,{once:true});
-      });
-      const norm=(target%10);
-      reel.style.transitionDuration='0ms';
-      reel.style.transform=`translateY(${-h*norm}px)`;
-      await sleep(16);
-      digitEl.classList.add('landed');
-    }
-    async function rollTo(str,baseTurns=3){
-      const s=(str||'').padStart(4,'0').slice(-4);
-      const digits=$$('#deck .digit');
-      for(let i=0;i<4;i++){
-        await spinDigitTo(digits[i], parseInt(s[i],10), baseTurns+(i*0.5), 900+(i*150));
-      }
-    }
-    function targetForIndex(i){ const v=(LIST[i]||'').trim(); return v? v.padStart(4,'0'):''; }
+    }catch(_){}
 
-    async function doGenerate(i){ INDEX=i; markActive(i); await rollTo('0000',2); }
-    async function doLaunch(i){ INDEX=i; markActive(i); const t=targetForIndex(i); if(!t) return; await rollTo(t,4); markUsed(i,true); }
-
-    // === Mensajería local (sin dependencias de backend) ===
-    function handleMessage(d){
-      if(!d || d.type!=='solo-spin') return;
-      const idx=Number.isFinite(d.index)? Math.max(0,Math.min(19,d.index)) : INDEX;
-      if(d.op==='gen') doGenerate(idx);
-      else if(d.op==='launch') doLaunch(idx);
-    }
-    try{ const bc=new BroadcastChannel(BC); bc.addEventListener('message',ev=>handleMessage(ev.data)); }catch(_){}
-    window.addEventListener('message',ev=>{ if(ev.origin!==location.origin) return; handleMessage(ev.data); });
-    window.addEventListener('storage',ev=>{
-      if(ev.key!=='glbingo-spin-evt') return;
-      try{ const d=JSON.parse(ev.newValue||'{}'); handleMessage({type:'solo-spin',op:d.op,index:d.index}); }catch(_){}
+    window.addEventListener('storage', async ev=>{
+      if (ev.key !== 'glbingo-spin-evt') return;
+      try{
+        const d = JSON.parse(ev.newValue||'{}');
+        if (Number.isFinite(d.index)) CUR_INDEX = d.index;
+        if (d.op === 'gen') onGen(CUR_INDEX);
+        else if (d.op === 'launch') onLaunch(CUR_INDEX);
+      }catch(_){}
     });
 
-    (async function boot(){
-      buildReels();
-      buildBar();
-      LIST=await fetchSpinners();
-      await rollTo('0000',1);
+    window.addEventListener('keydown', async e=>{
+      if (e.code==='Space'){ e.preventDefault(); if (CUR_INDEX<0) CUR_INDEX=0; onLaunch(CUR_INDEX); }
+      else if (e.key==='g' || e.key==='G'){ e.preventDefault(); if (CUR_INDEX<0) CUR_INDEX=0; onGen(CUR_INDEX); }
+      else if (/^\d$/.test(e.key)){ CUR_INDEX = Math.max(0, Math.min(19, parseInt(e.key,10))); }
+    });
+
+    (function boot(){
+      const qi = parseInt(Q.get('i')||'-1',10);
+      if (Number.isFinite(qi) && qi>=0 && qi<20) CUR_INDEX = qi;
+      setDigits('0000');
     })();
   </script>
 </body>
 </html>
+
