@@ -3251,2200 +3251,1368 @@ def api_figuras_por_fecha():
 import os, re, json, math, unicodedata, xml.etree.ElementTree as ET
 from datetime import date, datetime, timedelta
 from io import BytesIO
+# ====== PARCHE DE ARRANQUE (PÉGALO AL INICIO DE app.py) ======
+# Evita NameError en 'mm' incluso si el import real aparece más abajo
+try:
+    from reportlab.lib.units import mm  # import real si está disponible
+except Exception:
+    # Fallback: 1 mm en puntos (ReportLab trabaja en puntos)
+    mm = 2.834645669291339
 
-from flask import Flask, render_template, request, jsonify, send_file, redirect, url_for
+# Evita NameError en @login_required si Flask-Login no está instalado
+try:
+    from flask_login import login_required as _login_required
+    def login_required(f):
+        return _login_required(f)
+except Exception:
+    # Fallback 'no-op': deja pasar la vista sin exigir login
+    def login_required(f):
+        return f
+# ====== FIN PARCHE DE ARRANQUE ======
 
-# ReportLab
-from reportlab.lib.pagesizes import A4
+import os
+import random
+import pandas as pd
+import qrcode
+import xml.etree.ElementTree as ET
+from datetime import date, datetime, timedelta
+from io import BytesIO, StringIO
+from flask import Flask, request, render_template, send_file, redirect, url_for, flash, session, jsonify, Response, render_template_string, current_app
+import shutil
+import csv
+import math
+import unicodedata
+import json
+import re
+from threading import RLock
+from functools import wraps
+from werkzeug.routing import BuildError
+from werkzeug.utils import secure_filename
+from zipfile import ZipFile
+from PyPDF2 import PdfMerger
+
+# ReportLab imports
 from reportlab.pdfgen import canvas
+from reportlab.lib.pagesizes import A4, landscape
+from reportlab.lib.utils import ImageReader
+from reportlab.platypus import Table, TableStyle
 from reportlab.lib import colors
+from reportlab.lib.units import mm, cm, inch
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
-from reportlab.lib.utils import ImageReader  # tamaño real del logo
 
-# ------------------ App ------------------
-try:
-    app  # noqa: F821
-except NameError:
-
-    app.secret_key = "dev"
-
-# ------------------ Ajustes visuales ------------------
-FIG_BLOCK_SCALE       = 0.99  # escala global de las figuras
-FIG_FIXED_COLS        = 8     # columnas por fila para figuras (auto si None)
-LOGO_SCALE_DEFAULT    = 1.30  # escala del logo (1.0 = normal)
-
-# ------------------ Paths ------------------
-BASE_DIR   = os.path.dirname(os.path.abspath(__file__))
-STATIC_DIR = os.path.join(BASE_DIR, "static")
-DB_DIR     = os.path.join(STATIC_DIR, "db")
-IMG_DIR    = os.path.join(STATIC_DIR, "img")
-FONTS_DIR  = os.path.join(STATIC_DIR, "fonts")
-LOGS_DIR   = os.path.join(STATIC_DIR, "LOGS")
-
-for p in (DB_DIR, IMG_DIR, FONTS_DIR):
-    os.makedirs(p, exist_ok=True)
-
-# XMLs base
-FIGURAS_FECHA_XML  = os.path.join(DB_DIR, "figuras_por_fecha.xml")
-DATOS_FIGURAS_XML  = os.path.join(DB_DIR, "datos_figuras.xml")
-RESULTADOS_XML     = os.path.join(DB_DIR, "resultados_sorteo.xml")
-
-# Layout JSON (diseñador)
-LAYOUT_JSON = os.path.join(DB_DIR, "boletin_layout.json")
-
-# ------------------ Helpers ------------------
-def _is_fecha_iso(s: str) -> bool:
-    return bool(re.fullmatch(r"\d{4}-\d{2}-\d{2}", (s or "").strip()))
-
-def _money(v):
+# ---- Safe login URL helper (avoids BuildError for missing 'login' endpoint) ----
+def _login_url(**values):
     try:
-        return f"${float(v):,.2f}"
+        return url_for('login', **values)
     except Exception:
-        return "$0.00"
+        try:
+            return url_for('_login_demo', **values)
+        except Exception:
+            return '/_login_demo'
+# -------------------------------------------------------------------------------
 
-def _money_header(v):
+# ====== CONFIGURACIÓN GLOBAL ======
+app = Flask(__name__)
+app.secret_key = 'super_secreto_bingo_2025'
+app.config["JSON_AS_ASCII"] = False
+
+# ====== CONSTANTES Y PATHS (DEFINIDAS UNA SOLA VEZ) ======
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+STATIC_DIR = os.path.join(BASE_DIR, 'static')
+DATA_DIR = os.environ.get("DATA_DIR", os.path.join(BASE_DIR, "DATA"))
+PERSIST_ROOT = os.environ.get("DATA_DIR", "/data" if os.path.isdir("/data") else os.path.join(BASE_DIR, "DATA"))
+
+# Asegurar directorios principales
+os.makedirs(DATA_DIR, exist_ok=True)
+os.makedirs(PERSIST_ROOT, exist_ok=True)
+
+# ====== PATHS DE ARCHIVOS XML (SISTEMA CENTRALIZADO) ======
+def _persist_path(*rel_parts):
+    """Ruta dentro de DATA_DIR (crea la carpeta si no existe)."""
+    path = os.path.join(DATA_DIR, *rel_parts)
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    return path
+
+def _seed_file(src_rel, dst_abs):
+    """
+    Copia archivo inicial del repo → persistente, solo si NO existe.
+    """
+    src_abs = os.path.join(BASE_DIR, src_rel)
+    if not os.path.exists(dst_abs) and os.path.exists(src_abs):
+        shutil.copy2(src_abs, dst_abs)
+
+# Definir TODOS los paths XML en un solo lugar
+USUARIOS_XML            = _persist_path('usuarios', 'usuarios.xml')
+VENDEDORES_XML          = _persist_path('static', 'db', 'vendedores.xml')
+CAJA_XML                = _persist_path('static', 'db', 'caja.xml')
+ASIGNACIONES_XML        = _persist_path('static', 'db', 'asignaciones.xml')
+PAGOS_PREMIOS_XML       = _persist_path('static', 'db', 'pagos_premios.xml')
+RESULTADOS_SORTEO_XML   = _persist_path('static', 'db', 'resultados_sorteo.xml')
+SORTEOS_XML             = _persist_path('static', 'db', 'sorteos.xml')
+SPINNERS_XML            = _persist_path('static', 'db', 'spinners.xml')
+VMIX_REINTEGRO_XML      = _persist_path('static', 'db', 'vmix_reintegro.xml')
+VMIX_SPINNERS_XML       = _persist_path('static', 'db', 'vmix_spinners.xml')
+VMIX_VENDEDORES_XML     = _persist_path('static', 'db', 'vmix_vendedores.xml')
+VMIX_VENTAS_XML         = _persist_path('static', 'db', 'vmix_ventas.xml')
+LOGS_CAJA_XML           = _persist_path('static', 'LOGS', 'caja.xml')
+LOGS_IMPRESIONES_XML    = _persist_path('static', 'LOGS', 'impresiones.xml')
+CONTAB_BANCOS_XML       = _persist_path('static', 'CONTABILIDAD', 'bancos.xml')
+CONTAB_GASTOS_XML       = _persist_path('static', 'CONTABILIDAD', 'gastos.xml')
+CONTAB_SUELDOS_XML      = _persist_path('static', 'CONTABILIDAD', 'sueldos.xml')
+CONTAB_VENTAS_XML       = _persist_path('static', 'CONTABILIDAD', 'ventas.xml')
+IMPRESIONES_XML         = _persist_path('static', 'LOGS', 'impresiones.xml')  # Principal para logs
+FIGURAS_FECHA_XML       = _persist_path('static', 'db', 'figuras_por_fecha.xml')
+DATOS_FIGURAS_XML       = _persist_path('static', 'db', 'datos_figuras.xml')
+BINGO_XML               = _persist_path('static', 'db', 'datos_bingo.xml')
+BOLETOS_XML             = _persist_path('static', 'db', 'boletos.xml')  # Nuevo: para estructura de boletos
+GANADORES_XML           = _persist_path('static', 'db', 'ganadores.xml')  # Nuevo: para registrar ganadores
+
+# Directorios especiales
+REINTEGROS_DIR = os.path.join(DATA_DIR, "REINTEGROS")
+COMPROB_DIR = os.path.join(STATIC_DIR, "CONTABILIDAD", "comprobantes")
+BANK_FILES = os.path.join(COMPROB_DIR, "banco")
+GASTO_FILES = os.path.join(COMPROB_DIR, "gastos")
+RECIBOS_DIR = os.path.join(STATIC_DIR, "tmp", "recibos")
+
+# Crear todos los directorios necesarios
+for directory in [REINTEGROS_DIR, COMPROB_DIR, BANK_FILES, GASTO_FILES, RECIBOS_DIR]:
+    os.makedirs(directory, exist_ok=True)
+
+# Constantes del sistema
+BOLETOS_POR_PLANILLA = 20
+SERIE_MAP = {
+    "Srs_ib1.xlsx": "V",
+    "Srs_ib2.xlsx": "+",
+    "Srs_ib3.xlsx": "&",
+    "Srs_Manila.xlsx": "M"
+}
+
+ROLES = [
+    ('superadmin', 'Super Administrador'),
+    ('admin', 'Administrador'),
+    ('socio', 'Socio'),
+    ('cobrador', 'Cobrador'),
+    ('jugador', 'Jugador'),
+    ('impresion', 'Impresión'),
+]
+
+# ====== SISTEMA DE PERSISTENCIA UNIFICADO ======
+def _bind_persistent_dirs():
+    """Enlaza carpetas del repositorio con almacenamiento persistente."""
+    dirs_to_bind = [
+        "usuarios",
+        os.path.join("static", "db"),
+        os.path.join("static", "LOGS"),
+        os.path.join("static", "CONTABILIDAD"),
+    ]
+    
+    for repo_rel in dirs_to_bind:
+        repo_abs = os.path.join(BASE_DIR, repo_rel)
+        persist_abs = os.path.join(PERSIST_ROOT, repo_rel)
+        os.makedirs(persist_abs, exist_ok=True)
+        
+        # Copiar archivos iniciales si el directorio persistente está vacío
+        try:
+            if os.path.isdir(repo_abs) and not os.listdir(persist_abs):
+                for name in os.listdir(repo_abs):
+                    src = os.path.join(repo_abs, name)
+                    dst = os.path.join(persist_abs, name)
+                    if os.path.isdir(src):
+                        shutil.copytree(src, dst, dirs_exist_ok=True)
+                    elif os.path.isfile(src) and not os.path.exists(dst):
+                        shutil.copy2(src, dst)
+        except Exception as e:
+            print(f"Warning seeding {repo_rel}: {e}")
+        
+        # Crear enlace simbólico
+        try:
+            if not os.path.islink(repo_abs):
+                if os.path.isdir(repo_abs):
+                    shutil.rmtree(repo_abs)
+                elif os.path.exists(repo_abs):
+                    os.remove(repo_abs)
+                os.symlink(persist_abs, repo_abs, target_is_directory=True)
+        except Exception as e:
+            print(f"Warning binding {repo_rel}: {e}")
+
+# Ejecutar enlace de directorios
+_bind_persistent_dirs()
+
+# Sembrar archivos XML iniciales
+seed_pairs = [
+    ('usuarios/usuarios.xml', USUARIOS_XML),
+    ('static/db/vendedores.xml', VENDEDORES_XML),
+    ('static/db/caja.xml', CAJA_XML),
+    ('static/db/asignaciones.xml', ASIGNACIONES_XML),
+    ('static/db/pagos_premios.xml', PAGOS_PREMIOS_XML),
+    ('static/db/resultados_sorteo.xml', RESULTADOS_SORTEO_XML),
+    ('static/db/sorteos.xml', SORTEOS_XML),
+    ('static/db/spinners.xml', SPINNERS_XML),
+    ('static/db/vmix_reintegro.xml', VMIX_REINTEGRO_XML),
+    ('static/db/vmix_spinners.xml', VMIX_SPINNERS_XML),
+    ('static/db/vmix_vendedores.xml', VMIX_VENDEDORES_XML),
+    ('static/db/vmix_ventas.xml', VMIX_VENTAS_XML),
+    ('static/LOGS/caja.xml', LOGS_CAJA_XML),
+    ('static/LOGS/impresiones.xml', LOGS_IMPRESIONES_XML),
+    ('static/CONTABILIDAD/bancos.xml', CONTAB_BANCOS_XML),
+    ('static/CONTABILIDAD/gastos.xml', CONTAB_GASTOS_XML),
+    ('static/CONTABILIDAD/sueldos.xml', CONTAB_SUELDOS_XML),
+    ('static/CONTABILIDAD/ventas.xml', CONTAB_VENTAS_XML),
+    ('static/db/boletos.xml', BOLETOS_XML),  # Nuevo
+    ('static/db/ganadores.xml', GANADORES_XML),  # Nuevo
+]
+
+for src_rel, dst_path in seed_pairs:
+    _seed_file(src_rel, dst_path)
+
+# ====== HELPERS GENERALES ======
+def _to_int(v, default=0):
     try:
-        return f"${int(round(float(v))):,}".replace(",", ",")
+        return int(str(v).strip())
     except Exception:
-        return "$0"
+        return default
 
-def _safe_text(s, font_name):
+def _safe_float(x, default=0.0):
+    try:
+        return float(str(x).strip())
+    except Exception:
+        return default
+
+def _safe_text(s, font_name=""):
     s = "" if s is None else str(s)
     if font_name != "Helvetica":
         return s
     return unicodedata.normalize("NFKD", s).encode("ascii", "ignore").decode("ascii")
 
-def _es_largo(fecha_iso: str) -> str:
-    meses = ["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"]
-    dias  = ["lunes","martes","miércoles","jueves","viernes","sábado","domingo"]
-    d = datetime.fromisoformat(fecha_iso).date()
-    return f"{dias[d.weekday()].upper()}, {d.day} DE {meses[d.month-1].upper()} DE {d.year}"
-
-def _es_corta(fecha_iso: str) -> str:
-    meses = ["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"]
-    dias  = ["lunes","martes","miércoles","jueves","viernes","sábado","domingo"]
-    d = datetime.fromisoformat(fecha_iso).date()
-    return f"{dias[d.weekday()]}, {d.day} de {meses[d.month-1]} de {d.year}"
-
-def _ensure_xml(path, root_name):
-    if not os.path.exists(path):
-        os.makedirs(os.path.dirname(path), exist_ok=True)
-        ET.ElementTree(ET.Element(root_name)).write(path, encoding="utf-8", xml_declaration=True)
-        return
+def format_money(valor):
     try:
-        ET.parse(path)
-    except ET.ParseError:
-        ET.ElementTree(ET.Element(root_name)).write(path, encoding="utf-8", xml_declaration=True)
-
-# ------------------ Agenda / Figuras por fecha ------------------
-def _figuras_de_fecha(fecha_iso):
-    if not _is_fecha_iso(fecha_iso):
-        return []
-    _ensure_xml(FIGURAS_FECHA_XML, "agenda")
-    root = ET.parse(FIGURAS_FECHA_XML).getroot()
-    for d in root.findall("dia"):
-        if d.attrib.get("fecha") == fecha_iso:
-            out = []
-            for f in d.findall("fig"):
-                nom = (f.attrib.get("nombre") or "").strip()
-                try:
-                    val = float(f.attrib.get("valor") or 0.0)
-                except Exception:
-                    val = 0.0
-                if nom:
-                    out.append({"nombre": nom, "valor": val})
-            return out
-    return []
-
-# ------------------ Formas 5x5 ------------------
-def _load_shapes():
-    shapes = {}
-    if not os.path.exists(DATOS_FIGURAS_XML):
-        return shapes
-    try:
-        root = ET.parse(DATOS_FIGURAS_XML).getroot()
-    except ET.ParseError:
-        return shapes
-    for n in root.findall("figura"):
-        nombre = (n.attrib.get("nombre", "") or "").strip()
-        if not nombre:
-            continue
-        arr = [False] * 25
-        for i in range(1, 26):
-            cel = n.find(f'celda[@idx="{i}"]')
-            if cel is not None:
-                col = (cel.attrib.get("color", "#FFFFFF") or "").upper()
-                arr[i - 1] = (col == "#FF0000")
-        arr[12] = False  # centro libre
-        shapes[nombre.strip().lower()] = arr
-    return shapes
-
-# ------------------ Resultados (XML) ------------------
-def _cargar_resultados(fecha_iso):
-    data = {"items": [], "extras": {"comodin": {}, "gran_bonus": {}}}
-    if not _is_fecha_iso(fecha_iso):
-        return data
-    _ensure_xml(RESULTADOS_XML, "resultados")
-    root = ET.parse(RESULTADOS_XML).getroot()
-    dia = None
-    for d in root.findall("dia"):
-        if d.attrib.get("fecha") == fecha_iso:
-            dia = d
-            break
-    if dia is None:
-        return data
-
-    for f in dia.findall("fig"):
-        nom = f.attrib.get("nombre", "")
-        gs = []
-        for g in f.findall("ganador"):
-            try:
-                prem = float(g.attrib.get("premio") or 0.0)
-            except Exception:
-                prem = 0.0
-            gs.append({
-                "boleto": g.attrib.get("boleto", ""),
-                "nombre": g.attrib.get("nombre", ""),
-                "vendedor": g.attrib.get("vendedor", ""),
-                "sector": g.attrib.get("sector", ""),
-                "premio": prem
-            })
-        data["items"].append({"figura": nom, "ganadores": gs})
-
-    com = dia.find("comodin")
-    if com is not None:
-        data["extras"]["comodin"] = {
-            "boletos": com.attrib.get("boletos", ""),
-            "texto": com.attrib.get("texto", "")
-        }
-    bon = dia.find("granbonus")
-    if bon is not None:
-        nums = [n.strip() for n in (bon.attrib.get("numeros", "")).split(",") if n.strip()]
-        data["extras"]["gran_bonus"] = {
-            "numeros": nums,
-            "texto": bon.attrib.get("texto", "")
-        }
-    return data
-
-def _guardar_resultados(fecha_iso, resultados, extras=None):
-    if not _is_fecha_iso(fecha_iso):
-        raise ValueError("Fecha inválida")
-    _ensure_xml(RESULTADOS_XML, "resultados")
-    tree = ET.parse(RESULTADOS_XML)
-    root = tree.getroot()
-
-    for d in root.findall("dia"):
-        if d.attrib.get("fecha") == fecha_iso:
-            root.remove(d)
-            break
-
-    dia = ET.SubElement(root, "dia", {"fecha": fecha_iso})
-    for item in (resultados or []):
-        nom = (item.get("figura") or "").strip()
-        if not nom:
-            continue
-        fig = ET.SubElement(dia, "fig", {"nombre": nom})
-        for g in (item.get("ganadores") or []):
-            try:
-                prem = float(g.get("premio") or 0.0)
-            except Exception:
-                prem = 0.0
-            ET.SubElement(fig, "ganador", {
-                "boleto": (g.get("boleto") or "").strip(),
-                "nombre": (g.get("nombre") or "").strip(),
-                "vendedor": (g.get("vendedor") or "").strip(),
-                "sector": (g.get("sector") or "").strip(),
-                "premio": f"{prem:.2f}"
-            })
-    if extras:
-        com = extras.get("comodin") or {}
-        bon = extras.get("gran_bonus") or {}
-        if com:
-            ET.SubElement(dia, "comodin", {
-                "boletos": (com.get("boletos") or "").strip(),
-                "texto": (com.get("texto") or "").strip()
-            })
-        if bon:
-            nums = bon.get("numeros")
-            if isinstance(nums, (list, tuple)):
-                nums = ",".join(str(x) for x in nums)
-            ET.SubElement(dia, "granbonus", {
-                "numeros": (nums or "").strip(),
-                "texto": (bon.get("texto") or "").strip()
-            })
-    tree.write(RESULTADOS_XML, encoding="utf-8", xml_declaration=True)
-
-# ------------------ Reintegro desde LOGS ------------------
-def _find_image_case_insensitive(dirs, filename):
-    base = (filename or "").strip()
-    if not base:
-        return None
-    cands = [base]
-    if "." not in base:
-        cands += [base + ext for ext in (".png",".jpg",".jpeg",".webp",".gif")]
-    for d in dirs:
-        if not os.path.isdir(d):
-            continue
-        try:
-            files = os.listdir(d)
-        except Exception:
-            files = []
-        lowers = [f.lower() for f in files]
-        for cand in cands:
-            if cand.lower() in lowers:
-                return os.path.join(d, files[lowers.index(cand.lower())])
-        bases = {os.path.splitext(f)[0].lower(): f for f in files}
-        key = os.path.splitext(base)[0].lower()
-        if key in bases:
-            return os.path.join(d, bases[key])
-    return None
-
-def _reintegro_from_log_for_date(fecha_iso):
-    log_path = os.path.join(LOGS_DIR, "impresiones.xml")
-    if not os.path.exists(log_path):
-        for alt in (os.path.join(DB_DIR, "impresiones.xml"), os.path.join(BASE_DIR, "impresiones.xml")):
-            if os.path.exists(alt):
-                log_path = alt
-                break
-        else:
-            return {"archivo": None, "imagen": None, "cantidad": None, "fecha": None}
-
-    try:
-        root = ET.parse(log_path).getroot()
-    except ET.ParseError:
-        return {"archivo": None, "imagen": None, "cantidad": None, "fecha": None}
-
-    records = []
-    for imp in root.findall("impresion"):
-        fs = (imp.findtext("fecha_sorteo") or imp.findtext("fecha") or "").strip()
-        rein = (imp.findtext("reintegro_especial") or imp.findtext("reintegro") or "").strip()
-        cant = (imp.findtext("cantidad_reintegro_especial") or imp.findtext("cant_reintegro_especial") or "").strip()
-        if rein:
-            records.append((fs, rein, cant))
-
-    chosen = None
-    for item in reversed(records):
-        if _is_fecha_iso(fecha_iso) and item[0] == fecha_iso:
-            chosen = item
-            break
-    if chosen is None and records:
-        chosen = records[-1]
-
-    if chosen is None:
-        return {"archivo": None, "imagen": None, "cantidad": None, "fecha": None}
-
-    nombre_archivo = chosen[1]
-    dirs = [
-        os.path.join(STATIC_DIR, "REINTEGROS"),
-        os.path.join(STATIC_DIR, "reintegros"),
-        os.path.join(IMG_DIR, "reintegros"),
-    ]
-    img = _find_image_case_insensitive(dirs, nombre_archivo)
-    return {"archivo": nombre_archivo, "imagen": img, "cantidad": chosen[2], "fecha": chosen[0]}
-
-# ------------------ Layout JSON ------------------
-def _read_json(path, default_obj):
-    if not os.path.exists(path):
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump(default_obj, f, ensure_ascii=False, indent=2)
-        return default_obj
-    try:
-        with open(path, "r", encoding="utf-8") as f:
-            return json.load(f)
+        v = float(str(valor).replace(",", "."))
     except Exception:
-        return default_obj
+        return f"${valor}"
+    if abs(v - 1.0) < 1e-9:
+        return "$1"
+    if v < 1.0:
+        s = f"{v:.2f}".replace(".", ",")
+        return f"{s} ctvs"
+    if abs(v - int(v)) < 1e-9:
+        return f"${int(v)}"
+    s = f"{v:.2f}".rstrip("0").rstrip(".")
+    return f"${s}"
 
-def _write_json(path, obj):
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(obj, f, ensure_ascii=False, indent=2)
-
-# --- Auto-fit para que entren todas las figuras en A4 ---
-def _default_layout(figs, scale=1.0, fixed_cols=None):
-    W, H = A4
-    n = max(1, len(figs))
-
-    header_h = 120
-    top_y = header_h + 1
-    bottom_reserved = 1
-    avail_h = max(120.0, H - top_y - bottom_reserved)
-
-    margin_x = 10
-    gap_x = 5
-    gap_row = 5
-    extra_v = 22 + 8 + 18
-
-    best = None
-    if fixed_cols:
-        cols = max(1, min(int(fixed_cols), n))
-        rows = math.ceil(n / cols)
-        size_w = (W - 2*margin_x - (cols-1)*gap_x) / cols
-        size_h = (avail_h - (rows-1)*gap_row - rows*extra_v) / rows
-        size = min(size_w, size_h)
-        best = (size, cols, rows)
-    else:
-        for cols in range(14, 3, -1):
-            rows = math.ceil(n / cols)
-            size_w = (W - 2 * margin_x - (cols - 1) * gap_x) / cols
-            size_h = (avail_h - (rows - 1) * gap_row - rows * extra_v) / rows
-            size = min(size_w, size_h)
-            if size <= 28:
-                continue
-            if best is None or size > best[0]:
-                best = (size, cols, rows)
-
-    if best is None:
-        size, cols, rows = 72, min(n, 8), math.ceil(n / min(n, 8))
-    else:
-        size, cols, rows = best
-
-    size *= float(scale)
-
-    positions = {}
-    x0 = margin_x
-    y0 = top_y
-    for i, f in enumerate(figs):
-        col = i % cols
-        row = i // cols
-        x = x0 + col * (size + gap_x)
-        y = y0 + row * (size + gap_row + extra_v)
-        positions[f["nombre"]] = {"x": float(x), "y": float(y), "size": float(size)}
-
-    return {
-        "logo":  {"x": 12, "y": 8, "w": 420, "h": 110},
-        "title": {"x": 220, "y": 32, "size": 18, "align": "left"},
-        "total": {"x": W - 22, "y": 24, "size": 56, "align": "right"},
-        "figs": positions
-    }
-
-def _layout_for(fecha_base, figs, scale=1.0, force_autofit=False, fixed_cols=None):
-    data = _read_json(LAYOUT_JSON, {"default": {}})
-    if fecha_base in data and not force_autofit:
-        return data[fecha_base]
-    return _default_layout(figs, scale=scale, fixed_cols=fixed_cols)
-
-# ------------------ PDF helpers (dibujo) ------------------
-def _register_font():
+def fecha_ddmmyyyy(fecha_iso):
     try:
-        for p in [
-            os.path.join(FONTS_DIR, "DejaVuSans.ttf"),
-            "C:\\Windows\\Fonts\\arial.ttf",
-            "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-        ]:
-            if os.path.exists(p):
-                pdfmetrics.registerFont(TTFont("GLTTF", p))
-                return "GLTTF"
+        return datetime.strptime(fecha_iso, "%Y-%m-%d").strftime("%d-%m-%Y")
     except Exception:
-        pass
-    return "Helvetica"
+        return fecha_iso
 
-def _chip(c, x, y_top, w, txt, font, bg="#1F58FF", fs=10):
-    h = 18
-    y = y_top - h
-    c.setFillColor(colors.HexColor(bg)); c.roundRect(x, y, w, h, 6, 0, 1)
-    c.setFillColor(colors.white); c.setFont(font, fs); c.drawCentredString(x + w/2, y + 4, txt)
+def require_session(f):
+    @wraps(f)
+    def wrapper(*args, **kwargs):
+        if 'usuario' not in session:
+            return redirect(_login_url())
+        return f(*args, **kwargs)
+    return wrapper
 
-def _bar(c, x, y_base, w, txt, font, bg="#173A9E", fs=10):
-    h = 18
-    y = y_base - h
-    c.setFillColor(colors.HexColor(bg)); c.roundRect(x, y, w, h, 6, 0, 1)
-    c.setFillColor(colors.white); c.setFont(font, fs); c.drawCentredString(x + w/2, y + 4, txt)
+def _is_superadmin():
+    rol_raw = session.get('rol') or ''
+    rol_n = rol_raw.lower().replace('-', ' ').replace('_', ' ').strip()
+    if rol_n in {'superadmin', 'super administrador', 'superadministrador'}:
+        return True
+    usuario = (session.get('usuario') or '').strip().upper()
+    if usuario == 'GLSTUDIOS':
+        return True
+    return False
 
-def _draw_star(c, cx, cy, r_outer, r_inner, color_hex="#FF0000"):
-    pts = []
-    for i in range(10):
-        ang = math.radians(-90 + i * 36)
-        r = r_outer if i % 2 == 0 else r_inner
-        pts.append((cx + r * math.cos(ang), cy + r * math.sin(ang)))
-    p = c.beginPath()
-    p.moveTo(pts[0][0], pts[0][1])
-    for (px, py) in pts[1:]:
-        p.lineTo(px, py)
-    p.close()
-    c.setFillColor(colors.HexColor(color_hex))
-    c.drawPath(p, fill=1, stroke=0)
-
-def _grid5(c, x, y_top, size, mask):
-    cell = (size - 4) / 5.0
-    for r in range(5):
-        for col in range(5):
-            idx = r*5 + col
-            on  = bool(mask[idx]) if mask else False
-            px  = x + col*(cell+1)
-            py  = y_top - (r+1)*(cell+1)
-            c.setFillColor(colors.HexColor("#1F58FF") if on else colors.HexColor("#E8EEFF"))
-            c.rect(px, py, cell, cell, stroke=0, fill=1)
-    c.setStrokeColor(colors.HexColor("#27418B"))
-    c.rect(x-1, y_top-(5*(cell+1))-1, 5*(cell+1)-1, 5*(cell+1)-1, stroke=1, fill=0)
-    cx = x + 2*(cell+1) + cell/2.0
-    cy = y_top - (3*(cell+1)) + cell/2.0
-    _draw_star(c, cx, cy, r_outer=cell*0.42, r_inner=cell*0.20, color_hex="#FF0000")
-
-def _draw_ultrablack(c, text, x, y, size, font):
-    c.setFont(font, size)
-    c.setFillColor(colors.black)
-    for dx, dy in [(0,0),(0.25,0),(0,-0.25),(0.25,-0.25),(0.15,-0.15),(-0.15,-0.15)]:
-        c.drawRightString(x+dx, y+dy, text)
-
-# --------- Helpers de SPINNERS (Extras) ----------
-def _parse_spinners(extras: dict):
-    """
-    Lee extras y extrae lista de spinners (hasta 20) y el valor por spinner.
-    Busca en:
-      - extras['spinners'] -> {'numeros': '...', 'valor'/'texto': '...'}
-      - fallback: extras['comodin'] -> usa 'boletos' como numeros y 'texto' como valor
-    """
-    extras = extras or {}
-    block = extras.get("spinners") or {}
-    if not block:
-        block = extras.get("comodin") or {}
-
-    raw_nums = (block.get("numeros") or (block.get("boletos") or "")).strip()
-    raw_val  = (block.get("valor") or (block.get("texto") or "")).strip()
-
-    tokens = re.findall(r"\d{1,4}", raw_nums)
-    nums = [t.zfill(4) for t in tokens][:20]
-
-    m = re.search(r"(\d+(?:[.,]\d{1,2})?)", raw_val)
-    valor = None
-    if m:
+# ====== NUEVO: SISTEMA DE DETECCIÓN DE GANADORES ======
+def _cargar_figuras_del_dia(fecha_iso):
+    """Carga las figuras programadas para el día."""
+    figuras = []
+    if os.path.exists(FIGURAS_FECHA_XML):
         try:
-            valor = float(m.group(1).replace(",", "."))
-        except Exception:
-            valor = None
+            tree = ET.parse(FIGURAS_FECHA_XML)
+            root = tree.getroot()
+            for dia in root.findall('dia'):
+                if dia.get('fecha') == fecha_iso:
+                    for fig in dia.findall('fig'):
+                        figuras.append({
+                            'nombre': fig.get('nombre', ''),
+                            'valor': _safe_float(fig.get('valor', 0)),
+                            'patron': _cargar_patron_figura(fig.get('nombre', ''))
+                        })
+                    break
+        except Exception as e:
+            print(f"Error cargando figuras: {e}")
+    return figuras
 
-    return {"nums": nums, "valor": valor}
-
-def _draw_spinners_card(c, x, y, w, h, nums, valor, font):
-    """
-    Tarjeta SPINNERS con 'pastillas' de 4 cuadritos.
-    - Las filas se **CENTRAN** horizontalmente.
-    - Se ajusta tamaño para encajar sin recortar.
-    """
-    # Tarjeta
-    c.setFillColor(colors.HexColor("#F8FAFF"))
-    c.setStrokeColor(colors.HexColor("#CBD5F1"))
-    c.roundRect(x, y, w, h, 10, stroke=1, fill=1)
-
-    pad = 10
-    inner_x = x + pad
-    inner_y = y + pad
-    inner_w = w - 2*pad
-    inner_h = h - 2*pad
-
-    # Título + valor
-    c.setFillColor(colors.HexColor("#0F172A")); c.setFont(font, 10)
-    c.drawString(inner_x, y + h - pad - 6, "SPINNERS")
-    if valor is not None:
-        c.setFillColor(colors.HexColor("#334155")); c.setFont(font, 9)
-        c.drawRightString(x + w - pad, y + h - pad - 6, f"Valor c/u: {_money(valor)}")
-
-    # Parámetros visuales
-    title_h     = 18          # espacio reservado para el título
-    spinner_gap = 12          # separación entre spinners
-    row_gap     = 8           # separación entre filas
-    box_gap     = 3           # separación entre dígitos
-    pill_pad    = 6           # padding interno de la pastilla
-    grid_h      = max(10, inner_h - title_h)
-
-    n = len(nums)
-    if n == 0:
-        return
-
-    # Elegimos per_row y tamaño de box maximizando el encaje
-    best = None  # (box_size, per_row, rows)
-    max_per_row = min(n, 8)
-    for per_row in range(max_per_row, 0, -1):
-        rows = math.ceil(n / per_row)
-
-        # Ancho disponible -> box por ancho
-        max_box_w = ((inner_w - (per_row - 1) * spinner_gap) / per_row - 2 * pill_pad - 3 * box_gap) / 4.0
-        # Alto disponible -> box por alto
-        max_box_h = ((grid_h - (rows - 1) * row_gap) / rows - 2 * pill_pad)
-
-        box = min(max_box_w, max_box_h, 18)  # límite superior estético
-        if box >= 10:  # mínimo legible
-            if best is None or box > best[0]:
-                best = (box, per_row, rows)
-
-    if best is None:
-        best = (8.0, min(n, 6), math.ceil(n / min(n, 6)))
-
-    box, per_row, rows = best
-    fs = max(9, min(14, box * 0.70))
-
-    pill_h = 2 * pill_pad + box
-    pill_w = 2 * pill_pad + 4 * box + 3 * box_gap
-
-    # Dibujo centrado por fila
-    c.setFont(font, fs)
-    idx = 0
-    for r in range(rows):
-        remaining = n - idx
-        count = min(per_row, remaining)
-        row_w = count * pill_w + (count - 1) * spinner_gap
-        start_x = inner_x + max(0, (inner_w - row_w) / 2.0)  # <-- centrado
-        y_row = inner_y + grid_h - pill_h - r * (pill_h + row_gap)
-
-        for j in range(count):
-            cur_x = start_x + j * (pill_w + spinner_gap)
-
-            # Pastilla
-            c.setFillColor(colors.HexColor("#EEF2FF"))
-            c.setStrokeColor(colors.HexColor("#C7D2FE"))
-            c.roundRect(cur_x, y_row, pill_w, pill_h, 7, stroke=1, fill=1)
-
-            # 4 cuadritos
-            s = re.sub(r"\D", "", str(nums[idx]))[:4].rjust(4, "0")
-            xx = cur_x + pill_pad
-            yy = y_row + pill_pad
-            for ch in s:
-                c.setFillColor(colors.white)
-                c.setStrokeColor(colors.HexColor("#94A3B8"))
-                c.roundRect(xx, yy, box, box, 3, stroke=1, fill=1)
-
-                c.setFillColor(colors.HexColor("#111827"))
-                tx = xx + (box - pdfmetrics.stringWidth(ch, font, fs)) / 2.0
-                ty = yy + (box - fs) / 2.0 - 0.5
-                c.drawString(tx, ty, ch)
-
-                xx += box + box_gap
-
-            idx += 1
-            if idx >= n:
-                break
-
-# ------------------ Rutas Flask ------------------
-
-@app.get("/api/figuras-manana")
-def api_figuras_manana():
-    base = (request.args.get("fecha") or date.today().isoformat()).strip()
-    if not _is_fecha_iso(base):
-        base = date.today().isoformat()
-    manana = (datetime.fromisoformat(base) + timedelta(days=1)).date().isoformat()
-    figs = _figuras_de_fecha(manana)
-    total = sum((f.get("valor") or 0.0) for f in figs)
-    return jsonify({"ok": True, "fecha": manana, "figuras": figs, "total": total})
-
-@app.get("/api/resultados")
-def api_resultados():
-    fecha = (request.args.get("fecha") or date.today().isoformat()).strip()
-    if not _is_fecha_iso(fecha):
-        fecha = date.today().isoformat()
-    return jsonify({"ok": True, **_cargar_resultados(fecha)})
-
-@app.post("/boletin/guardar")
-def boletin_guardar():
-    fecha = (request.form.get("fecha") or "").strip()
-    raw = (request.form.get("resultados") or "").strip()
-    raw_extras = (request.form.get("extras") or "").strip()
-    resultados = []
-    extras = None
-    if raw:
+def _cargar_patron_figura(nombre_figura):
+    """Carga el patrón (matriz 5x5) de una figura desde datos_figuras.xml."""
+    patron = [[False for _ in range(5)] for _ in range(5)]  # 5x5
+    
+    if os.path.exists(DATOS_FIGURAS_XML):
         try:
-            tmp = json.loads(raw)
-            if isinstance(tmp, list):
-                resultados = tmp
-        except Exception:
-            pass
-    if raw_extras:
+            tree = ET.parse(DATOS_FIGURAS_XML)
+            root = tree.getroot()
+            
+            for figura in root.findall('figura'):
+                if figura.get('nombre', '').lower() == nombre_figura.lower():
+                    # Cargar celdas
+                    for celda in figura.findall('celda'):
+                        idx = int(celda.get('idx', 0)) - 1  # 0-24
+                        if 0 <= idx <= 24:
+                            fila = idx // 5
+                            col = idx % 5
+                            color = celda.get('color', '#FFFFFF').upper()
+                            # Rojo (#FF0000) significa que esa celda debe marcarse
+                            patron[fila][col] = (color == '#FF0000')
+                    break
+        except Exception as e:
+            print(f"Error cargando patrón de figura {nombre_figura}: {e}")
+    
+    # Centro (N3) siempre es gratis (True)
+    patron[2][2] = True
+    
+    return patron
+
+def _cargar_estructura_boletos(fecha_iso):
+    """
+    Carga la estructura de todos los boletos vendidos para el día.
+    Retorna dict: {numero_boleto: {vendedor: '', numeros: matriz_5x5}}
+    """
+    boletos = {}
+    
+    # 1. Buscar en asignaciones.xml los rangos de boletos por vendedor
+    vendedores_rangos = {}
+    if os.path.exists(ASIGNACIONES_XML):
         try:
-            tmp = json.loads(raw_extras)
-            if isinstance(tmp, dict):
-                extras = tmp
-        except Exception:
-            pass
+            tree = ET.parse(ASIGNACIONES_XML)
+            root = tree.getroot()
+            for dia in root.findall('dia'):
+                if dia.get('fecha') == fecha_iso:
+                    for vendedor in dia.findall('vendedor'):
+                        seudonimo = vendedor.get('seudonimo', '')
+                        for planilla in vendedor.findall('planilla'):
+                            rango = planilla.get('rango', '')
+                            if '-' in rango:
+                                inicio, fin = map(int, rango.split('-'))
+                                for boleto_num in range(inicio, fin + 1):
+                                    vendedores_rangos[boleto_num] = seudonimo
+                    break
+        except Exception as e:
+            print(f"Error cargando asignaciones: {e}")
+    
+    # 2. Buscar en impresiones.xml los números de los boletos
+    if os.path.exists(IMPRESIONES_XML):
+        try:
+            tree = ET.parse(IMPRESIONES_XML)
+            root = tree.getroot()
+            
+            for impresion in root.findall('impresion'):
+                if impresion.get('tipo') == 'boletos':
+                    imp_fecha = impresion.find('fecha_sorteo')
+                    if imp_fecha is not None and imp_fecha.text == fecha_iso:
+                        desde = _to_int(impresion.get('desde', 0))
+                        hasta = _to_int(impresion.get('hasta', 0))
+                        
+                        # Generar números de serie para estos boletos
+                        for i in range(desde, hasta + 1):
+                            boleto_num = i
+                            vendedor = vendedores_rangos.get(boleto_num, 'DESCONOCIDO')
+                            
+                            # Generar matriz 5x5 aleatoria (simulando el boleto real)
+                            # En un sistema real, esto vendría de tu base de datos de boletos
+                            numeros_boleto = _generar_numeros_boleto(boleto_num)
+                            
+                            boletos[boleto_num] = {
+                                'numero': boleto_num,
+                                'vendedor': vendedor,
+                                'numeros': numeros_boleto,
+                                'marcados': [[False for _ in range(5)] for _ in range(5)]
+                            }
+        except Exception as e:
+            print(f"Error cargando impresiones: {e}")
+    
+    return boletos
+
+def _generar_numeros_boleto(boleto_num):
+    """Genera números aleatorios para un boleto según reglas Bingo."""
+    import random
+    random.seed(boleto_num)  # Para consistencia
+    
+    numeros = []
+    # Columna B: 1-15
+    numeros.append(sorted(random.sample(range(1, 16), 5)))
+    # Columna I: 16-30
+    numeros.append(sorted(random.sample(range(16, 31), 5)))
+    # Columna N: 31-45 (con centro libre)
+    nums_n = sorted(random.sample(range(31, 46), 4))
+    nums_n.insert(2, 0)  # Centro libre
+    numeros.append(nums_n)
+    # Columna G: 46-60
+    numeros.append(sorted(random.sample(range(46, 61), 5)))
+    # Columna O: 61-75
+    numeros.append(sorted(random.sample(range(61, 76), 5)))
+    
+    # Transponer para tener matriz 5x5
+    matriz = [[numeros[col][fila] for col in range(5)] for fila in range(5)]
+    return matriz
+
+def _actualizar_marcados_en_boletos(boletos, numero_marcado):
+    """
+    Actualiza qué números están marcados en todos los boletos.
+    Retorna lista de boletos actualizados.
+    """
+    boletos_actualizados = []
+    
+    for boleto_num, datos in boletos.items():
+        actualizado = False
+        for fila in range(5):
+            for col in range(5):
+                if datos['numeros'][fila][col] == numero_marcado:
+                    datos['marcados'][fila][col] = True
+                    actualizado = True
+        
+        if actualizado:
+            boletos_actualizados.append({
+                'numero': boleto_num,
+                'vendedor': datos['vendedor'],
+                'marcados': datos['marcados']
+            })
+    
+    return boletos_actualizados
+
+def _detectar_ganadores(boletos, figuras, numeros_marcados):
+    """
+    Detecta qué boletos han completado alguna figura.
+    Retorna lista de ganadores.
+    """
+    ganadores = []
+    
+    for boleto_num, datos_boleto in boletos.items():
+        marcados = datos_boleto['marcados']
+        
+        for figura in figuras:
+            nombre_fig = figura['nombre']
+            patron = figura['patron']
+            
+            # Verificar si el patrón coincide
+            coincide = True
+            for fila in range(5):
+                for col in range(5):
+                    # Si el patrón requiere marcado (True) y el boleto no lo tiene marcado
+                    if patron[fila][col] and not marcados[fila][col]:
+                        coincide = False
+                        break
+                if not coincide:
+                    break
+            
+            if coincide:
+                # ¡Tenemos un ganador!
+                ganadores.append({
+                    'fecha': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                    'boleto': boleto_num,
+                    'figura': nombre_fig,
+                    'vendedor': datos_boleto['vendedor'],
+                    'premio': figura['valor'],
+                    'numeros_marcados': numeros_marcados[:]  # Copia de los números marcados
+                })
+    
+    return ganadores
+
+def _registrar_ganador(ganador):
+    """Registra un ganador en el XML de ganadores."""
     try:
-        _guardar_resultados(fecha, resultados, extras)
-        return jsonify({"ok": True})
+        if not os.path.exists(GANADORES_XML):
+            root = ET.Element('ganadores')
+            tree = ET.ElementTree(root)
+            tree.write(GANADORES_XML, encoding='utf-8', xml_declaration=True)
+        
+        tree = ET.parse(GANADORES_XML)
+        root = tree.getroot()
+        
+        # Crear elemento ganador
+        elem = ET.Element('ganador', {
+            'fecha': ganador['fecha'],
+            'boleto': str(ganador['boleto']),
+            'figura': ganador['figura'],
+            'vendedor': ganador['vendedor'],
+            'premio': str(ganador['premio'])
+        })
+        
+        # Agregar números marcados
+        numeros_elem = ET.SubElement(elem, 'numeros_marcados')
+        numeros_elem.text = ','.join(map(str, ganador['numeros_marcados']))
+        
+        root.append(elem)
+        
+        # Guardar
+        try:
+            ET.indent(tree, space="  ", level=0)
+        except:
+            pass
+        tree.write(GANADORES_XML, encoding='utf-8', xml_declaration=True)
+        
+        return True
     except Exception as e:
-        return jsonify({"ok": False, "error": str(e)}), 400
-
-@app.get("/api/boletin-layout/get")
-def api_layout_get():
-    fecha = (request.args.get("fecha") or date.today().isoformat()).strip()
-    if not _is_fecha_iso(fecha):
-        fecha = date.today().isoformat()
-    manana = (datetime.fromisoformat(fecha) + timedelta(days=1)).date().isoformat()
-    figs = _figuras_de_fecha(manana)
-    lay  = _layout_for(fecha, figs, scale=FIG_BLOCK_SCALE, fixed_cols=FIG_FIXED_COLS)
-    return jsonify({"ok": True, "layout": lay, "figuras": figs})
-
-@app.post("/api/boletin-layout/save")
-def api_layout_save():
-    payload = request.get_json(force=True, silent=True) or {}
-    fecha = (payload.get("fecha") or date.today().isoformat()).strip()
-    if not _is_fecha_iso(fecha):
-        fecha = date.today().isoformat()
-    lay = payload.get("layout") or {}
-    data = _read_json(LAYOUT_JSON, {"default": {}})
-    data[fecha] = lay
-    _write_json(LAYOUT_JSON, data)
-    return jsonify({"ok": True})
-
-@app.get("/")
-def home():
-    return redirect(url_for("boletin_view"))
-
-@app.get("/boletin")
-def boletin_view():
-    q = (request.args.get("fecha") or date.today().isoformat()).strip()
-    if not _is_fecha_iso(q):
-        q = date.today().isoformat()
-    try:
-        return render_template("boletin.html", fecha_inicial=q)
-    except Exception:
-        pdf_url = url_for("boletin_pdf", fecha=q)
-        return f'''
-        <html><body style="font-family:Arial, sans-serif; background:#0b1324; color:#e5e7eb;">
-            <div style="max-width:920px;margin:40px auto;padding:16px;background:#111827;border-radius:12px;">
-                <h2>Boletín</h2>
-                <p>Fecha seleccionada: {q}</p>
-                <p><a style="background:#10b981;color:#fff;padding:8px 12px;border-radius:8px;text-decoration:none"
-                      href="{pdf_url}" target="_blank">Ver PDF</a></p>
-            </div>
-        </body></html>
-        '''
-
-# ------------------ PDF principal ------------------
-@app.get("/boletin/pdf")
-def boletin_pdf():
-    try:
-        fecha = (request.args.get("fecha") or date.today().isoformat()).strip()
-        if not _is_fecha_iso(fecha):
-            fecha = date.today().isoformat()
-
-        # escala de figuras + columnas
-        qscale = request.args.get("scale")
-        qcols  = request.args.get("cols")
-        fixed_cols = int(qcols) if qcols else (FIG_FIXED_COLS or None)
-        if qscale is None:
-            scale = FIG_BLOCK_SCALE
-            force_autofit = False
-        else:
-            try:
-                scale = float(qscale)
-            except Exception:
-                scale = FIG_BLOCK_SCALE
-            scale = max(0.5, min(1.2, scale))
-            force_autofit = True
-
-        # Escalas opcionales
-        def _float_arg(name, default):
-            v = request.args.get(name)
-            if v is None:
-                return default
-            try:
-                return float(v)
-            except Exception:
-                return default
-
-        LOGO_SCALE = max(0.5, min(2.0, _float_arg("logo_scale", LOGO_SCALE_DEFAULT)))
-        REIN_SCALE = max(0.5, min(1.6, _float_arg("rein_scale", 1.05)))
-        SPIN_SCALE = max(0.5, min(1.6, _float_arg("spin_scale", 1.00)))
-
-        dt = datetime.fromisoformat(fecha).date()
-        manana = (dt + timedelta(days=1)).isoformat()
-
-        figs_manana  = _figuras_de_fecha(manana)
-        total_manana = sum((f.get("valor") or 0.0) for f in figs_manana)
-        resultados   = _cargar_resultados(fecha)
-        shapes       = _load_shapes()
-        layout       = _layout_for(fecha, figs_manana, scale=scale, force_autofit=force_autofit, fixed_cols=fixed_cols)
-
-        # Reintegro (por fecha) desde LOGS
-        rein_log = _reintegro_from_log_for_date(fecha)
-
-        # SPINNERS (Extras)
-        sp_data = _parse_spinners(resultados.get("extras") or {})
-
-        # Backfill posiciones
-        default_figs_pos = _default_layout(figs_manana, scale=scale, fixed_cols=fixed_cols)["figs"]
-        layout.setdefault("figs", {})
-        for f in figs_manana:
-            n = f["nombre"]
-            if n not in layout["figs"]:
-                layout["figs"][n] = default_figs_pos.get(n, {"x": 50, "y": 148, "size": 96})
-
-        buf = BytesIO()
-        c = canvas.Canvas(buf, pagesize=A4)
-        W, H = A4
-
-        FONT = _register_font()
-        T = lambda s: _safe_text(s, FONT)
-
-        # ---------- Header ----------
-        header_h = 120
-        c.setFillColor(colors.HexColor("#E7B91E"))
-        c.rect(0, H - header_h, W, header_h, 0, 1)
-
-        # Logo
-        logo_candidates = [
-            os.path.join(BASE_DIR, "static", "golpe_suerte_logo.png"),
-            os.path.join(IMG_DIR, "logo.png"),
-            os.path.join(IMG_DIR, "golpe_suerte_logo.png"),
-            os.path.join(BASE_DIR, "static", "img", "logo.png"),
-        ]
-        logo = next((p for p in logo_candidates if os.path.exists(p)), None)
-        L = layout.get("logo", {"x": 12, "y": 8, "w": 420, "h": 110})
-        if logo:
-            img = ImageReader(logo)
-            iw, ih = img.getSize()
-            s = min(L["w"]/iw, L["h"]/ih) * float(LOGO_SCALE)
-            draw_w = iw * s
-            draw_h = ih * s
-            if draw_w > L["w"] or draw_h > L["h"]:
-                f = min(L["w"]/draw_w, L["h"]/draw_h, 1.0)
-                draw_w *= f
-                draw_h *= f
-            c.drawImage(img, L["x"], H - (L["y"] + draw_h),
-                        width=draw_w, height=draw_h,
-                        preserveAspectRatio=True, mask="auto")
-
-        # Título + fecha
-        c.setFillColor(colors.black)
-        c.setFont(FONT, 18)
-        c.drawCentredString(W/2, H - 42, T("JUEGO HOY"))
-        c.setFont(FONT, 11)
-        c.drawCentredString(W/2, H - 58, T(_es_corta(manana).capitalize()))
-
-        # Total a jugar
-        TL = layout.get("total", {"x": W - 22, "y": 24, "size": 56, "align": "right"})
-        c.setFillColor(colors.white); c.setFont(FONT, 11)
-        c.drawRightString(W - 18, H - 22, T("PREMIO TOTAL"))
-        amount = T(_money_header(total_manana))
-        _draw_ultrablack(c, amount,
-                         TL.get("x", W - 22),
-                         H - (TL.get("y", 24) + TL.get("size", 56)),
-                         TL.get("size", 56), FONT)
-
-        # ---------- Figuras de mañana ----------
-        fig_lay = layout.get("figs", {})
-        for f in figs_manana:
-            name = f["nombre"]; val = f.get("valor") or 0.0
-            pos = fig_lay.get(name) or {}
-            bx = float(pos.get("x", 50)); by = float(pos.get("y", header_h + 28)); bw = float(pos.get("size", 96))
-
-            _chip(c, bx, H - by, bw, T(_money(val)), FONT, "#1F58FF", 10)
-            grid_top = H - by - 22
-            mask = shapes.get(name.strip().lower(), [False] * 25)
-            _grid5(c, bx, grid_top, bw, mask)
-            _bar(c, bx, grid_top - (bw + 8), bw, T(name.upper()), FONT, "#0E2E8E", 10)
-
-        # ---------- Resultados ----------
-        block_h_extra = 22 + 8 + 18
-        max_depth = header_h
-        for f in figs_manana:
-            pos = fig_lay.get(f["nombre"]) or {}
-            by   = float(pos.get("y", header_h + 28))
-            bw   = float(pos.get("size", 96))
-            depth = by + (bw + block_h_extra)
-            if depth > max_depth:
-                max_depth = depth
-
-        depth = max_depth + 28
-        y = H - depth
-        MIN_Y_FIRST_PAGE = 120
-        if y < MIN_Y_FIRST_PAGE:
-            y = MIN_Y_FIRST_PAGE
-
-        # Banda compacta
-        c.setFillColor(colors.HexColor("#2B2370")); c.rect(0, y, W, 16, 0, 1)
-        c.setFillColor(colors.white); c.setFont(FONT, 10)
-        c.drawCentredString(W/2, y + 4, T(f"RESULTADOS SORTEO { _es_largo(fecha) }"))
-        y -= 4
-
-        agenda = _figuras_de_fecha(fecha)
-        premio_map = {a["nombre"].strip().lower(): (a.get("valor") or 0.0) for a in agenda}
-
-        def ensure_space(hmin=70, top_margin=16):
-            nonlocal y
-            if y - hmin < top_margin:
-                c.showPage()
-                y = H - top_margin
-
-        def bloque(fig, ganadores, premio_total):
-            nonlocal y
-            ensure_space(120)
-            y -= 16
-            c.setFillColor(colors.HexColor("#EDF2FF")); c.rect(14, y, W - 28, 18, 0, 1)
-            c.setFillColor(colors.HexColor("#203880")); c.setFont(FONT, 10)
-            c.drawCentredString(W / 2, y + 5, T(fig.upper()))
-            c.drawRightString(W - 20, y + 5, T(f"Premio total { _money(premio_total) }"))
-            y -= 20
-
-            c.setFillColor(colors.HexColor("#6B7280")); c.setFont(FONT, 9)
-            c.drawString(20, y, T("Boleto"))
-            c.drawString(86, y, T("Nombre (Vendedor)"))
-            c.drawString(320, y, T("Sector"))
-            c.drawRightString(W - 20, y, T("Premio"))
-            y -= 8
-            c.setStrokeColor(colors.HexColor("#CBD5F1")); c.line(14, y, W - 14, y)
-            y -= 8
-
-            par = True
-            for g in (ganadores or []):
-                ensure_space(30)
-                if par:
-                    c.setFillColor(colors.HexColor("#F7F9FF")); c.rect(14, y - 12, W - 28, 14, 0, 1)
-                par = not par
-                c.setFillColor(colors.black); c.setFont(FONT, 9)
-                nombre = g.get("nombre", ""); vendedor = g.get("vendedor", "")
-                nomvend = nombre if not vendedor else f"{nombre}  ({vendedor})"
-                c.drawString(20, y - 9, T(g.get("boleto", "")))
-                c.drawString(86, y - 9, T(nomvend))
-                c.drawString(320, y - 9, T(g.get("sector", "")))
-                try:
-                    prem = float(g.get("premio") or 0.0)
-                except Exception:
-                    prem = 0.0
-                c.drawRightString(W - 20, y - 9, T(_money(prem)))
-                y -= 14
-            y -= 4
-
-        for item in (resultados.get("items") or []):
-            nom = item.get("figura", "")
-            gan = item.get("ganadores") or []
-            premio = premio_map.get(nom.strip().lower(), 0.0)
-            if premio == 0.0:
-                premio = sum((g.get("premio") or 0.0) for g in gan)
-            bloque(nom, gan, premio)
-
-        # ---------- Tarjetas inferiores ----------
-        margin = 12
-        espacio_disponible = (y - margin)
-
-        # SPINNERS (izquierda)
-        sp_base_h = 86
-        sp_base_w = 360
-        sp_h = sp_base_h * SPIN_SCALE
-        sp_w = sp_base_w * SPIN_SCALE
-        if espacio_disponible < (sp_h + 20):
-            factor = max(0.40, (espacio_disponible - 20) / max(sp_h, 1))
-            sp_h *= factor
-            sp_w *= factor
-        if sp_data["nums"] or (sp_data["valor"] is not None):
-            _draw_spinners_card(c, margin, margin, sp_w, sp_h, sp_data["nums"], sp_data["valor"], FONT)
-
-        # REINTEGRO (derecha)
-        rein_base_h = 90
-        rein_base_w = int(rein_base_h * 3.75)
-        card_h = rein_base_h * REIN_SCALE
-        card_w = rein_base_w * REIN_SCALE
-        if espacio_disponible < (card_h + 20):
-            factor = max(0.40, (espacio_disponible - 20) / max(card_h, 1))
-            card_h *= factor
-            card_w *= factor
-
-        rein_x = W - margin - card_w
-        base_y = margin
-
-        if rein_log.get("imagen"):
-            c.setFillColor(colors.HexColor("#D1D5DB"))
-            c.roundRect(rein_x+2.5, base_y-2.5, card_w, card_h, 10, stroke=0, fill=1)
-            c.setFillColor(colors.white); c.setStrokeColor(colors.HexColor("#CBD5F1"))
-            c.roundRect(rein_x, base_y, card_w, card_h, 10, stroke=1, fill=1)
-
-            gap = 25
-            label_w = card_w * 0.45
-            img_w   = card_w - label_w - gap - 10
-            label_x = rein_x + 8
-            img_x   = label_x + label_w + gap
-            inner_y = base_y + 8
-            inner_h = card_h - 16
-
-            c.setFillColor(colors.HexColor("#190042"))
-            c.setFont(FONT, max(12, int(16 * REIN_SCALE)))
-            text_y = inner_y + (inner_h / 2) - 6
-            c.drawString(label_x, text_y, "REINTEGRO")
-
-            c.setStrokeColor(colors.HexColor("#0C8A3E"))
-            c.setLineWidth(1)
-            c.line(label_x, text_y - 4, label_x + (label_w * 0.60), text_y - 4)
-
-            c.drawImage(
-                rein_log["imagen"], img_x, inner_y,
-                width=img_w, height=inner_h,
-                preserveAspectRatio=True, anchor='sw', mask='auto'
-            )
-
-        c.showPage()
-        c.save()
-        buf.seek(0)
-        return send_file(buf, as_attachment=True,
-                         download_name=f"boletin_{fecha}.pdf",
-                         mimetype="application/pdf")
-
-    except Exception:
-        import traceback
-        print("[/boletin/pdf ERROR]\n", traceback.format_exc())
-        return "Error generando PDF", 500
-
-
-# (opcional) arrancar si se ejecuta directo
-
-
-
-
-
-
-# ------------------------------------------------------------------------------
-# Run
-# FIN BOLETIN CERRADO ------------------------------------------------------------------------------
-
-
-
-
-
-
-
-
-
-
-#PAGO DE PREMIOS
-
-# =========================
-#  PAGO DE PREMIOS (MÓDULO)
-# =========================
-# No toca boletín ni "figuras de mañana"
-
-import os, re, json, xml.etree.ElementTree as ET
-from datetime import date, datetime, timedelta
-from io import BytesIO
-
-from flask import request, jsonify, send_file, render_template, session
-from reportlab.pdfgen import canvas
-from reportlab.lib.pagesizes import A4
-from reportlab.lib.utils import ImageReader, simpleSplit
-from reportlab.pdfbase.pdfmetrics import stringWidth
-
-# ---- Rutas base / compatibilidad con tu app principal ----
-BASE_DIR   = os.path.dirname(os.path.abspath(__file__))
-STATIC_DIR = os.path.join(BASE_DIR, "static")
-DB_DIR     = os.path.join(STATIC_DIR, "db")
-IMG_DIR    = os.path.join(STATIC_DIR, "img")
-
-RESULTADOS_XML = os.path.join(DB_DIR, "resultados_sorteo.xml")
-
-def _pp_is_fecha_iso(s):
-    try:
-        datetime.fromisoformat((s or "").strip()); return True
-    except Exception:
+        print(f"Error registrando ganador: {e}")
         return False
 
-def _safe_float(x, default=0.0):
-    try:
-        return float(x)
-    except Exception:
-        return default
+# ====== GESTIÓN DE USUARIOS ======
+def leer_usuarios():
+    if not os.path.exists(USUARIOS_XML):
+        return []
+    tree = ET.parse(USUARIOS_XML)
+    root = tree.getroot()
+    usuarios = []
+    for elem in root.findall('usuario'):
+        usuarios.append({
+            'nombre': elem.find('nombre').text,
+            'clave': elem.find('clave').text,
+            'rol': elem.find('rol').text,
+            'email': elem.find('email').text if elem.find('email') is not None else '',
+            'estado': elem.find('estado').text,
+            'avatar': elem.find('avatar').text if elem.find('avatar') is not None else 'avatar-male.png'
+        })
+    return usuarios
 
-def _ensure_xml(path, root_name):
-    os.makedirs(os.path.dirname(path), exist_ok=True)
+def guardar_usuarios(usuarios):
+    root = ET.Element('usuarios')
+    for u in usuarios:
+        user_elem = ET.SubElement(root, 'usuario')
+        ET.SubElement(user_elem, 'nombre').text = u['nombre']
+        ET.SubElement(user_elem, 'clave').text = u['clave']
+        ET.SubElement(user_elem, 'rol').text = u['rol']
+        ET.SubElement(user_elem, 'email').text = u.get('email', '')
+        ET.SubElement(user_elem, 'estado').text = u['estado']
+        ET.SubElement(user_elem, 'avatar').text = u.get('avatar', 'avatar-male.png')
+    tree = ET.ElementTree(root)
+    tree.write(USUARIOS_XML, encoding='utf-8', xml_declaration=True)
+
+def obtener_usuario(nombre):
+    usuarios = leer_usuarios()
+    for u in usuarios:
+        if u['nombre'] == nombre:
+            return u
+    return None
+
+def eliminar_usuario(nombre):
+    usuarios = leer_usuarios()
+    usuarios = [u for u in usuarios if u['nombre'] != nombre]
+    guardar_usuarios(usuarios)
+
+# ====== RUTAS PRINCIPALES ======
+@app.route('/', methods=['GET', 'POST'])
+def login():
+    if request.method == 'POST':
+        usuario = request.form['usuario']
+        clave = request.form['clave']
+        usuarios = leer_usuarios()
+        user = next((u for u in usuarios if u['nombre'] == usuario and u['clave'] == clave and u['estado'] == 'activo'), None)
+        if user:
+            session['usuario'] = user['nombre']
+            session['rol'] = user['rol']
+            session['avatar'] = user.get('avatar', 'avatar-male.png')
+            return redirect(url_for('dashboard'))
+        else:
+            flash('Usuario o clave incorrectos o usuario inactivo', 'error')
+    return render_template('login.html')
+
+@app.route('/dashboard')
+@require_session
+def dashboard():
+    return render_template(
+        'dashboard.html',
+        usuario=session.get('usuario',''),
+        rol=session.get('rol',''),
+        avatar=session.get('avatar','avatar-male.png')
+    )
+
+@app.get('/api/dashboard/hoy')
+def api_dashboard_hoy():
+    fecha = (request.args.get('fecha') or date.today().isoformat()).strip()
+    try:
+        datetime.fromisoformat(fecha)
+    except Exception:
+        fecha = date.today().isoformat()
+    
+    # Datos básicos del dashboard
+    data = {
+        "fecha": fecha,
+        "boletos_impresos": 0,
+        "vendidos_total": 0,
+        "devueltos_total": 0,
+        "ingresos_brutos": 0.0,
+        "ganancia_vendedores": 0.0,
+        "ganancia_empresa": 0.0,
+        "efectivo": 0.0,
+        "transferencia": 0.0,
+        "planillas_impresas": 0,
+        "planillas_asignadas": 0,
+        "planillas_blanco": 0,
+        "vendedores": [],
+        "config": {
+            "valor_boleto": 0.0,
+            "comision_vendedor": 0.0,
+            "comision_extra_meta": 0.0,
+            "meta_boletos": 0
+        }
+    }
+    
+    return jsonify({"ok": True, **data})
+
+@app.route('/logout')
+def logout():
+    session.clear()
+    return redirect(_login_url())
+
+# ====== SECCIÓN DE USUARIOS ======
+@app.route('/usuarios')
+@require_session
+def usuarios():
+    lista_usuarios = leer_usuarios()
+    roles = [r[1] for r in ROLES]
+    return render_template(
+        'usuarios.html',
+        usuarios=lista_usuarios,
+        roles=roles,
+        usuario=session['usuario'],
+        rol=session['rol'],
+        avatar=session.get('avatar', 'avatar-male.png')
+    )
+
+@app.route('/usuarios/guardar', methods=['POST'])
+@require_session
+def guardar_usuario():
+    nombre = request.form['username']
+    clave = request.form['password']
+    rol = request.form['rol']
+    email = request.form.get('email', '')
+    avatar_filename = request.form.get('avatar_select', 'avatar-male.png')
+    estado = 'activo'
+
+    usuarios = leer_usuarios()
+    existe = False
+    for u in usuarios:
+        if u['nombre'] == nombre:
+            u['clave'] = clave
+            u['rol'] = rol
+            u['email'] = email
+            u['avatar'] = avatar_filename
+            u['estado'] = estado
+            existe = True
+    if not existe:
+        usuarios.append({
+            'nombre': nombre,
+            'clave': clave,
+            'rol': rol,
+            'email': email,
+            'avatar': avatar_filename,
+            'estado': estado
+        })
+    guardar_usuarios(usuarios)
+    flash('Usuario guardado correctamente', 'success')
+    return redirect(url_for('usuarios'))
+
+@app.route('/usuarios/editar/<nombre>', methods=['GET', 'POST'])
+@require_session
+def editar_usuario(nombre):
+    user = obtener_usuario(nombre)
+    if not user:
+        flash(f'Usuario "{nombre}" no encontrado', 'error')
+        return redirect(url_for('usuarios'))
+    
+    if request.method == 'POST':
+        user['clave'] = request.form['password']
+        user['rol'] = request.form['rol']
+        user['email'] = request.form.get('email', '')
+        user['avatar'] = request.form.get('avatar_select', user['avatar'])
+        usuarios = leer_usuarios()
+        for u in usuarios:
+            if u['nombre'] == nombre:
+                u.update(user)
+        guardar_usuarios(usuarios)
+        flash('Usuario editado correctamente', 'success')
+        return redirect(url_for('usuarios'))
+    
+    return render_template(
+        'usuarios_editar.html',
+        user=user,
+        roles=[r[1] for r in ROLES],
+        usuario=session['usuario'],
+        rol=session['rol'],
+        avatar=session.get('avatar', 'avatar-male.png')
+    )
+
+@app.route('/usuarios/eliminar/<nombre>', methods=['POST'])
+@require_session
+def eliminar_usuario_route(nombre):
+    eliminar_usuario(nombre)
+    flash('Usuario eliminado correctamente', 'success')
+    return redirect(url_for('usuarios'))
+
+# ====== IMPRESIÓN DE BOLETOS ======
+def _read_df_for_series(archivo: str) -> pd.DataFrame:
+    """Lee XLSX o CSV como texto."""
+    path = os.path.join(DATA_DIR, archivo)
     if not os.path.exists(path):
-        ET.ElementTree(ET.Element(root_name)).write(path, encoding="utf-8", xml_declaration=True)
-        return
+        raise FileNotFoundError(f"No existe el archivo de serie: {archivo}")
+    if archivo.lower().endswith(".csv"):
+        return pd.read_csv(path, dtype=str, keep_default_na=False).fillna("")
+    return pd.read_excel(path, dtype=str).fillna("")
+
+def _send_bytesio(buf: BytesIO, filename: str, mimetype: str = None):
+    """Envía BytesIO como archivo."""
     try:
-        ET.parse(path)
-    except ET.ParseError:
-        ET.ElementTree(ET.Element(root_name)).write(path, encoding="utf-8", xml_declaration=True)
+        return send_file(buf, download_name=filename, as_attachment=True, mimetype=mimetype)
+    except TypeError:
+        return send_file(buf, attachment_filename=filename, as_attachment=True, mimetype=mimetype)
 
-# Intenta usar una TTF del sistema; si no, Helvetica
-def _pp_register_font():
-    try:
-        from reportlab.pdfbase import pdfmetrics
-        from reportlab.pdfbase.ttfonts import TTFont
-        for p in [
-            os.path.join(STATIC_DIR, "fonts", "DejaVuSans.ttf"),
-            "C:\\Windows\\Fonts\\arial.ttf",
-            "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-        ]:
-            if os.path.exists(p):
-                pdfmetrics.registerFont(TTFont("GLTTF", p))
-                return "GLTTF"
-    except Exception:
-        pass
-    return "Helvetica"
+# Configuración PDF
+BLEED = 5 * mm
+w, h = A4
+OFFSET_X = -20
+OFFSET_Y = 5
+MARGEN_IZQ = 20
+MARGEN_SUP = 60
+ESPACIO_X = 140
+ESPACIO_Y = 115
+COLUMNAS = 2
+FILAS = 4
+SIZE_NUM = 23
+SIZE_INFO = 12
+SIZE_ID_BIG = 18
+REINTEGRO_W = 41
+REINTEGRO_H = 41
+DELTA_Y_FILA_3 = 2
+DELTA_Y_FILA_4 = 5
 
-_PPFONT     = _pp_register_font()
-_PPBOLDFONT = "Helvetica-Bold"
-_ppT        = lambda s: "" if s is None else str(s)
-
-# ---- Archivos del módulo ----
-PAGOS_XML   = os.path.join(DB_DIR, "pagos_premios.xml")
-RECIBOS_DIR = os.path.join(STATIC_DIR, "tmp", "recibos")
-CFG_JSON    = os.path.join(DB_DIR, "pagos_config.json")
-
-os.makedirs(RECIBOS_DIR, exist_ok=True)
-_ensure_xml(PAGOS_XML, "pagos")
-
-CFG_DEFAULT = {
-    "company_name": "Gran Sorteo Ventanas",
-    "city_default": "Vinces",
-    "letterhead": "HOJA-MEMBRETADA.png"  # en static/img/
+# Offsets por celda
+per_cell_offsets = {
+    0: {"grid_x": -80, "grid_y": 20,  "info_x": 5,   "info_y": 20,  "rein_x": 215, "rein_y": 30},
+    1: {"grid_x": -160, "grid_y":20,  "info_x": -70, "info_y": 20,  "rein_x": 140, "rein_y": 30},
+    2: {"grid_x": -80, "grid_y": 80,  "info_x": 5,   "info_y": 82,  "rein_x": 215, "rein_y": -25},
+    3: {"grid_x": -160, "grid_y":80,  "info_x": -70, "info_y": 82,  "rein_x": 140, "rein_y": -25},
+    4: {"grid_x": -80, "grid_y": 140, "info_x": 5,   "info_y": 140, "rein_x": 215, "rein_y": -85},
+    5: {"grid_x": -160, "grid_y":140, "info_x": -70, "info_y": 140, "rein_x": 140, "rein_y": -85},
+    6: {"grid_x": -80, "grid_y": 200, "info_x": 5,   "info_y": 200, "rein_x": 215, "rein_y": -145},
+    7: {"grid_x": -160, "grid_y":200, "info_x": -70, "info_y": 200, "rein_x": 140, "rein_y": -145},
 }
 
-def _cfg_read():
-    if not os.path.exists(CFG_JSON):
-        with open(CFG_JSON, "w", encoding="utf-8") as f:
-            json.dump(CFG_DEFAULT, f, ensure_ascii=False, indent=2)
-        return CFG_DEFAULT.copy()
-    try:
-        with open(CFG_JSON, "r", encoding="utf-8") as f:
-            data = json.load(f)
-        for k, v in CFG_DEFAULT.items():
-            data.setdefault(k, v)
-        return data
-    except Exception:
-        return CFG_DEFAULT.copy()
-
-def _cfg_write(obj):
-    with open(CFG_JSON, "w", encoding="utf-8") as f:
-        json.dump(obj, f, ensure_ascii=False, indent=2)
-
-# ---- Utilidades de pagos ----
-def _pp_premio_key(fecha_iso, figura_nombre, boleto):
-    return f"{(fecha_iso or '').strip()}||{(figura_nombre or '').strip().lower()}||{(boleto or '').strip()}"
-
-def _pp_leer_pagos_map():
-    _ensure_xml(PAGOS_XML, "pagos")
-    try:
-        root = ET.parse(PAGOS_XML).getroot()
-    except ET.ParseError:
-        root = ET.Element("pagos")
-    out = {}
-    for p in root.findall("pago"):
-        k = p.attrib.get("key") or _pp_premio_key(
-            p.attrib.get("fecha_sorteo", ""),
-            p.attrib.get("figura", ""),
-            p.attrib.get("boleto", "")
-        )
-        out[k] = p.attrib
-    return out
-
-def _pp_guardar_pago_registro(pago_dict):
-    _ensure_xml(PAGOS_XML, "pagos")
-    tree = ET.parse(PAGOS_XML); root = tree.getroot()
-    ET.SubElement(root, "pago", pago_dict)
-    tree.write(PAGOS_XML, encoding="utf-8", xml_declaration=True)
-
-def _pp_iter_ganadores_de_fecha(fecha_iso):
-    if not _pp_is_fecha_iso(fecha_iso): return
-    _ensure_xml(RESULTADOS_XML, "resultados")
-    try:
-        root = ET.parse(RESULTADOS_XML).getroot()
-    except ET.ParseError:
-        return
-    dia = None
-    for d in root.findall("dia"):
-        if d.attrib.get("fecha") == fecha_iso:
-            dia = d; break
-    if dia is None: return
-    for fig in dia.findall("fig"):
-        figura = fig.attrib.get("nombre", "")
-        for g in fig.findall("ganador"):
-            yield {
-                "fecha": fecha_iso,
-                "figura": figura,
-                "boleto": g.attrib.get("boleto",""),
-                "nombre": g.attrib.get("nombre",""),
-                "vendedor": g.attrib.get("vendedor",""),
-                "sector": g.attrib.get("sector",""),
-                "premio": _safe_float(g.attrib.get("premio"))
-            }
-
-def _pp_ultima_fecha_con_resultados():
-    _ensure_xml(RESULTADOS_XML, "resultados")
-    try:
-        root = ET.parse(RESULTADOS_XML).getroot()
-    except ET.ParseError:
-        return date.today().isoformat()
-    fechas = []
-    for d in root.findall("dia"):
-        f = (d.attrib.get("fecha") or "").strip()
-        if _pp_is_fecha_iso(f): fechas.append(f)
-    return (sorted(fechas)[-1] if fechas else date.today().isoformat())
-
-# -------------------- Helpers de dibujo (justificado) --------------------
-def _wrap_words(text, font, size, max_width):
-    words = (text or "").split()
-    lines, cur = [], []
-    for w in words:
-        trial = " ".join(cur + [w])
-        if stringWidth(trial, font, size) <= max_width or not cur:
-            cur.append(w)
-        else:
-            lines.append(cur); cur = [w]
-    if cur: lines.append(cur)
-    return lines
-
-def _draw_justified_paragraph(c, text, x, y, width, font, size, leading, min_justify_ratio=0.65):
-    """
-    Dibuja párrafo JUSTIFICADO entre [x, x+width]. Devuelve el nuevo y.
-    Las líneas demasiado cortas se dibujan alineadas a la izquierda.
-    """
-    lines_words = _wrap_words(text, font, size, width)
-    for idx, words in enumerate(lines_words):
-        line = " ".join(words)
-        n_spaces = max(len(words) - 1, 0)
-        line_w = stringWidth(line, font, size)
-
-        to = c.beginText()
-        to.setTextOrigin(x, y)
-        to.setFont(font, size)
-
-        # Última línea o línea corta -> izquierda normal
-        if idx == len(lines_words) - 1 or n_spaces == 0 or (line_w / float(width)) < min_justify_ratio:
-            to.textLine(line)
-        else:
-            extra = (width - line_w)
-            to.setWordSpace(extra / n_spaces)
-            to.textLine(line)
-        c.drawText(to)
-        y -= leading
-    return y
-
-# ---- Generador de ACTA PDF (título centrado, texto justificado) ----
-def _pp_generate_recibo_pdf(recibo_id, payload):
-    cfg = _cfg_read()
-    out = os.path.join(RECIBOS_DIR, f"{recibo_id}.pdf")
-
-    buf = BytesIO()
-    c = canvas.Canvas(buf, pagesize=A4)
-    W, H = A4
-
-    # Fondo membrete "cover"
-    letter = (payload.get("letterhead") or cfg.get("letterhead") or "").strip()
-    letter_path = os.path.join(IMG_DIR, letter)
-    if os.path.exists(letter_path):
-        img = ImageReader(letter_path)
-        iw, ih = img.getSize()
-        s = max(W/float(iw), H/float(ih))
-        tw, th = iw*s, ih*s
-        c.drawImage(img, (W-tw)/2.0, (H-th)/2.0, width=tw, height=th, mask="auto")
-
-    # Márgenes
-    LM, RM = 64, 64
-    TOP    = 240     # bajamos todo más
-    WIDTH  = W - LM - RM
-    LEAD   = 16
-    y = H - TOP
-    T = _ppT
-
-    # ---- TÍTULO CENTRADO ----
-    c.setFont(_PPBOLDFONT, 13)
-    c.drawCentredString(W/2, y, T(f"Acta {recibo_id.upper()}"))
-    y -= 28
-
-    # Ciudad y Fecha (centradas)
-    c.setFont(_PPFONT, 11)
-    c.drawCentredString(W/2, y, T(f"Ciudad: {payload.get('ciudad', cfg.get('city_default',''))}")); y -= 16
-    c.drawCentredString(W/2, y, T(f"Fecha: {payload.get('fecha_pago','')}")); y -= 26
-
-    # ---- PÁRRAFOS JUSTIFICADOS ----
-    empresa  = payload.get("empresa") or cfg.get("company_name","")
-    monto    = _safe_float(payload.get("premio"))
-    cobr     = T(payload.get("cobrador_nombre",""))
-    planilla = T(payload.get("ganador_nombre",""))
-    figura   = T(payload.get("figura",""))
-    boleto   = T(payload.get("boleto",""))
-    fsort    = T(payload.get("fecha_sorteo",""))
-
-    # Párrafo 1 (con el texto de planilla entre paréntesis)
-    p1 = (f"La empresa {empresa} hace la entrega formal de un premio valorado en "
-          f"$ {monto:.2f} al señor(a) {cobr} "
-          + (f"({planilla}) " if planilla else "")
-          + "en calidad de ganador(a).")
-    c.setFont(_PPFONT, 11)
-    y = _draw_justified_paragraph(c, p1, LM, y, WIDTH, _PPFONT, 11, LEAD)
-
-    # Párrafo 2
-    p2 = (f"Ganador(a) de la figura {figura} con el boleto No. {boleto} "
-          f"del sorteo realizado el día {fsort}.")
-    y = _draw_justified_paragraph(c, p2, LM, y, WIDTH, _PPFONT, 11, LEAD)
-
-    # Caducidad
-    try:
-        f_sorteo = datetime.fromisoformat(fsort).date()
-        f_caduca = f_sorteo + timedelta(days=30)
-        hoy_pago = datetime.fromisoformat(T(payload.get("fecha_pago",""))).date()
-        dias = (f_caduca - hoy_pago).days
-        p3 = f"Caducidad del premio: {f_caduca.isoformat()} (quedaban {dias} días)."
-        y = _draw_justified_paragraph(c, p3, LM, y, WIDTH, _PPFONT, 10, 14)
-    except Exception:
-        pass
-
-    y -= 10
-    p4 = "El ganador firma como constancia de haber recibido el premio ganado a conformidad."
-    y = _draw_justified_paragraph(c, p4, LM, y, WIDTH, _PPFONT, 11, LEAD)
-
-    # ---- FIRMA (más abajo) ----
-    y = max(y - 48, 260)  # garantiza que quede bien abajo
-    x1, x2 = LM + 140, W - RM - 140
-    c.setLineWidth(1)
-    c.line(x1, y, x2, y)
-    y -= 18
-    c.setFont(_PPFONT, 12)
-    c.drawCentredString(W/2, y, cobr.upper()); y -= 14
-    c.setFont(_PPFONT, 10)
-    c.drawCentredString(W/2, y, f"C.I.: {T(payload.get('cobrador_ci',''))}    Telf: {T(payload.get('cobrador_tel','-'))}")
-    y -= 18
-    c.setFont(_PPFONT, 9)
-    c.drawCentredString(W/2, y, "Firma de quien cobra")
-
-    c.save()
-    with open(out, "wb") as f:
-        f.write(buf.getvalue())
-    return out
-
-# ------------------ Rutas del módulo ------------------
-
-@app.get("/pago-premios")
-def pagos_premios_view():
-    try:
-        return render_template("pago_premios.html", fecha_inicial=_pp_ultima_fecha_con_resultados())
-    except Exception:
-        f = _pp_ultima_fecha_con_resultados()
-        return f"""
-        <html><body style="font-family:Arial;background:#0b1324;color:#e5e7eb">
-            <div style="max-width:920px;margin:40px auto;padding:16px;background:#111827;border-radius:12px;">
-                <h2>Pago de premios</h2>
-                <p>Instala <code>templates/pago_premios.html</code>. Por ahora, usa las APIs:</p>
-                <ul>
-                    <li><code>/api/premios/ultima-fecha</code></li>
-                    <li><code>/api/premios-pendientes?fecha={f}</code></li>
-                </ul>
-            </div>
-        </body></html>
-        """
-
-@app.get("/api/pagos/config")
-def api_pagos_config_get():
-    return jsonify({"ok": True, "config": _cfg_read()})
-
-@app.post("/api/pagos/config")
-def api_pagos_config_set():
-    data = request.get_json(silent=True) or {}
-    cfg = _cfg_read()
-    for k in ("company_name","city_default","letterhead"):
-        if k in data and isinstance(data[k], str):
-            cfg[k] = data[k].strip()
-    _cfg_write(cfg)
-    return jsonify({"ok": True, "config": cfg})
-
-@app.get("/api/premios/ultima-fecha")
-def api_premios_ultima_fecha():
-    return jsonify({"ok": True, "fecha": _pp_ultima_fecha_con_resultados()})
-
-@app.get("/api/premios-pendientes")
-def api_premios_pendientes():
-    fecha = (request.args.get("fecha") or _pp_ultima_fecha_con_resultados()).strip()
-    if not _pp_is_fecha_iso(fecha):
-        fecha = _pp_ultima_fecha_con_resultados()
-
-    pagos = _pp_leer_pagos_map()
-    hoy = datetime.now().date()
-    f_sorteo = datetime.fromisoformat(fecha).date()
-    caduca = f_sorteo + timedelta(days=30)
-
-    out = []
-    for g in _pp_iter_ganadores_de_fecha(fecha) or []:
-        k = _pp_premio_key(fecha, g["figura"], g["boleto"])
-        pp = pagos.get(k)
-        out.append({
-            **g,
-            "key": k,
-            "pagado": bool(pp),
-            "expirado": (hoy > caduca),
-            "fecha_caduca": caduca.isoformat(),
-            "recibo_id": (pp or {}).get("recibo_id"),
-            "pagado_por": (pp or {}).get("pagado_por"),
-            "fecha_pago": (pp or {}).get("fecha_pago")
-        })
-    return jsonify({"ok": True, "items": out})
-
-@app.post("/api/premios/pagar")
-def api_premio_pagar():
-    fecha = (request.form.get("fecha") or "").strip()
-    figura = (request.form.get("figura") or "").strip()
-    boleto = (request.form.get("boleto") or "").strip()
-    ganador_nombre = (request.form.get("ganador_nombre") or "").strip()
-    premio = _safe_float(request.form.get("premio"))
-    cobr_ci  = (request.form.get("cobrador_ci") or "").strip()
-    cobr_nom = (request.form.get("cobrador_nombre") or "").strip()
-    ciudad   = (request.form.get("ciudad") or "").strip() or _cfg_read().get("city_default","")
-    empresa  = (request.form.get("empresa") or "").strip() or _cfg_read().get("company_name","")
-    tel      = (request.form.get("telefono") or "").strip()
-
-    if not (_pp_is_fecha_iso(fecha) and figura and boleto and cobr_ci and cobr_nom):
-        return jsonify({"ok": False, "msg": "Datos incompletos."}), 400
-
-    f_sorteo = datetime.fromisoformat(fecha).date()
-    if datetime.now().date() > f_sorteo + timedelta(days=30):
-        return jsonify({"ok": False, "msg": "Premio caducado (más de 30 días)."}), 400
-
-    key = _pp_premio_key(fecha, figura, boleto)
-    pagos = _pp_leer_pagos_map()
-    if key in pagos:
-        return jsonify({"ok": False, "msg": "Este premio ya fue pagado."}), 400
-
-    pagado_por = session.get("usuario", "GLSTUDIOS")
-    fecha_pago = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    recibo_id  = re.sub(r'[^A-Za-z0-9]', '', f"{fecha}-{figura}-{boleto}-{int(datetime.now().timestamp())}")
-
-    payload = {
-        "fecha_sorteo": fecha, "ciudad": ciudad, "empresa": empresa,
-        "cobrador_ci": cobr_ci, "cobrador_nombre": cobr_nom, "cobrador_tel": tel,
-        "ganador_nombre": ganador_nombre, "figura": figura, "boleto": boleto,
-        "premio": premio, "fecha_pago": fecha_pago
-    }
-    try:
-        _pp_generate_recibo_pdf(recibo_id, payload)
-    except Exception as e:
-        return jsonify({"ok": False, "msg": f"Error generando acta: {e}"}), 500
-
-    _pp_guardar_pago_registro({
-        "key": key,
-        "fecha_sorteo": fecha,
-        "figura": figura,
-        "boleto": boleto,
-        "ganador_nombre": ganador_nombre,
-        "premio": f"{premio:.2f}",
-        "cobrador_ci": cobr_ci,
-        "cobrador_nombre": cobr_nom,
-        "pagado_por": pagado_por,
-        "fecha_pago": fecha_pago,
-        "recibo_id": recibo_id
-    })
-    return jsonify({"ok": True, "recibo": f"/recibos/{recibo_id}.pdf", "recibo_id": recibo_id})
-
-@app.get("/recibos/<rid>.pdf")
-def pagos_descargar_recibo(rid):
-    p = os.path.join(RECIBOS_DIR, f"{rid}.pdf")
-    if not os.path.exists(p):
-        return "No encontrado", 404
-    return send_file(p, as_attachment=False, download_name=f"{rid}.pdf", mimetype="application/pdf")
-
-
-
-#FIN PAGO DE PREOS
-
-
-
-
-
-#SORTEOS CODIGOS GENERALES #
-
-# -*- coding: utf-8 -*-
-# GL Bingo — Sorteo + XMLs vMix (ventas, figuras, spinners, reintegro)
-# Versión unificada: guarda XMLs en DATA/static/db y espejo en static/db
-
-from flask import Flask, render_template, request, jsonify, redirect, url_for, send_from_directory
-import os, re
-from datetime import date, datetime
-import xml.etree.ElementTree as ET
-
-
-app.secret_key = "glbingo"
-
-# -------------------- Paths base --------------------
-BASE_DIR    = os.path.dirname(os.path.abspath(__file__))
-STATIC_DIR  = os.path.join(BASE_DIR, "static")
-DATA_DIR    = os.path.join(BASE_DIR, "DATA")                 # carpeta de datos viva
-DB_STATIC   = os.path.join(STATIC_DIR, "db")                 # espejo servible por /static/db/...
-DB_DATA     = os.path.join(DATA_DIR, "static", "db")         # **principal** para Juego
-
-# asegurar directorios
-for d in (STATIC_DIR, DB_STATIC, DATA_DIR, DB_DATA, os.path.join(DB_DATA, "spinners"), os.path.join(STATIC_DIR, "LOGS")):
-    os.makedirs(d, exist_ok=True)
-
-LOGS_DIR = os.path.join(STATIC_DIR, "LOGS")  # tus logs ya están bajo static
-
-# --------------- Helpers de escritura ---------------
-def _write_xml_both(tree: ET.ElementTree, relpath: str):
-    """Escribe el XML tanto en DATA/static/db/<relpath> como en static/db/<relpath>."""
-    # destino en DATA
-    dst_data   = os.path.join(DB_DATA, relpath)
-    os.makedirs(os.path.dirname(dst_data), exist_ok=True)
-    tree.write(dst_data, encoding="utf-8", xml_declaration=True)
-    # espejo en STATIC
-    dst_static = os.path.join(DB_STATIC, relpath)
-    os.makedirs(os.path.dirname(dst_static), exist_ok=True)
-    tree.write(dst_static, encoding="utf-8", xml_declaration=True)
-    return {"data": dst_data, "static": dst_static}
-
-def _write_text_both(text: str, relpath: str):
-    dst_data   = os.path.join(DB_DATA, relpath)
-    dst_static = os.path.join(DB_STATIC, relpath)
-    os.makedirs(os.path.dirname(dst_data), exist_ok=True)
-    os.makedirs(os.path.dirname(dst_static), exist_ok=True)
-    with open(dst_data, "w", encoding="utf-8") as f:   f.write(text)
-    with open(dst_static, "w", encoding="utf-8") as f: f.write(text)
-    return {"data": dst_data, "static": dst_static}
-
-# --------------- Rutas de archivos (relativas) ---------------
-# Entradas
-FIGS_XML_REL        = "figuras_por_fecha.xml"
-ASIG_XML_REL        = "asignaciones.xml"
-IMP_XML_PATH        = os.path.join(LOGS_DIR, "impresiones.xml")  # ya estabas en static/LOGS
-CATALOGO_FIGXML_REL = "datos_figuras.xml"                        # opcional
-
-# Salidas vMix (todas en /db)
-VMIX_VENTAS_REL       = "vmix_ventas.xml"
-VMIX_FIG_NOMB_REL     = "vmix_figuras_nombres.xml"
-VMIX_FIG_COLORES_REL  = "vmix_figuras_colores.xml"
-VMIX_FIG_GRID_REL     = "vmix_figuras.xml"            # 25 celdas
-VMIX_SPINNERS_REL     = "vmix_spinners.xml"           # PRIORIDAD para Juego
-STD_SPINNERS_REL      = "spinners.xml"                # Fallback para Juego
-VMIX_REINTEGRO_REL    = "vmix_reintegro.xml"
-
-# Nuevos pedidos
-XML_FIGURAS_LISTA_REL = "xml_figuras_lista.xml"       # presentación (25 columnas)
-XML_FIGURAS_2COL_REL  = "xml_figuras.xml"             # tablero (2 columnas)
-SPINNERS_HIST_DIR_REL = "spinners"                    # carpeta para YYYY-MM-DD.xml
-
-# Para leer entradas, preferimos DATA si existe; fallback a STATIC
-def _in_db_existing(relname: str) -> str:
-    p_data   = os.path.join(DB_DATA, relname)
-    p_static = os.path.join(DB_STATIC, relname)
-    if os.path.exists(p_data):   return p_data
-    if os.path.exists(p_static): return p_static
-    return p_data  # por defecto apuntamos a DATA
-
-# --------------- Constantes de tablero ---------------
-COLOR_ON  = "#ff0037"
-COLOR_OFF = "#E8E8E8"
-
-POS_25_ROW = [
-    "B1","I1","N1","G1","O1",
-    "B2","I2","N2","G2","O2",
-    "B3","I3","N3","G3","O3",
-    "B4","I4","N4","G4","O4",
-    "B5","I5","N5","G5","O5",
-]
-POS_25_COL = [
-    "B1","B2","B3","B4","B5",
-    "I1","I2","I3","I4","I5",
-    "N1","N2","N3","N4","N5",
-    "G1","G2","G3","G4","G5",
-    "O1","O2","O3","O4","O5",
-]
-
-# ---------------- Utils ----------------
-def _parse_float(x):
-    try:
-        return float(str(x).replace(",", "."))
-    except:
-        return 0.0
-
-def _fmt_int(x):
-    try:
-        n = int(round(float(x)))
-        return str(n)
-    except:
-        return "0"
-
-def code_for(name: str) -> str:
-    n = (name or "").strip().upper()
-    if n.startswith("TABLA LLENA 1"): return "TL1"
-    if n.startswith("TABLA LLENA 2"): return "TL2"
-    if n.startswith("TABLA LLENA 3"): return "TL3"
-    if n.startswith("TABLA LLENA 4"): return "TL4"
-    return re.sub(r"[^A-Z0-9]", "", n)[:4] or "FIG"
-
-def _san4(v: str) -> str:
-    """Normaliza string a 4 dígitos (0-9). Vacío => ''."""
-    if v is None: return ""
-    v = re.sub(r"\D", "", str(v))[:4]
-    return v.zfill(4) if v else ""
-
-# ---------------- Lecturas ----------------
-def get_figuras_del_dia(fecha):
-    """TL1..TL4 + resto (nombre/valor) desde figuras_por_fecha.xml."""
-    tl = [0.0, 0.0, 0.0, 0.0]
-    resto = []
-    FIGS_XML = _in_db_existing(FIGS_XML_REL)
-    if not os.path.exists(FIGS_XML):
-        return tl, resto
-    root = ET.parse(FIGS_XML).getroot()
-    dia = root.find(f".//dia[@fecha='{fecha}']")
-    if dia is None:
-        return tl, resto
-    for fig in dia.findall("fig"):
-        nombre = (fig.attrib.get("nombre","") or "").strip()
-        val    = _parse_float(fig.attrib.get("valor","0"))
-        low    = nombre.lower()
-        if "llena" in low and "1" in low:   tl[0] = val
-        elif "llena" in low and "2" in low: tl[1] = val
-        elif "llena" in low and "3" in low: tl[2] = val
-        elif "llena" in low and "4" in low: tl[3] = val
-        else:
-            resto.append({"nombre": nombre, "valor": _fmt_int(val)})
-    return tl, resto
-
-def get_asignaciones_del_dia(fecha):
-    filas = []
-    ASIG_XML = _in_db_existing(ASIG_XML_REL)
-    if not os.path.exists(ASIG_XML):
-        return filas
-    root = ET.parse(ASIG_XML).getroot()
-    dia  = root.find(f".//dia[@fecha='{fecha}']")
-    if dia is None:
-        return filas
-    for vend in dia.findall("vendedor"):
-        nom = vend.attrib.get("seudonimo") or \
-              (" ".join([vend.attrib.get("nombre",""), vend.attrib.get("apellido","")]).strip() or "—")
-        for p in vend.findall("planilla"):
-            r = (p.attrib.get("rango","") or "").strip()
-            if r and "-" in r:
-                a,b = r.split("-",1)
-                desde, hasta = a.strip(), b.strip()
-            else:
-                desde = p.attrib.get("desde","") or p.attrib.get("inicio","") or "0"
-                hasta = p.attrib.get("hasta","") or p.attrib.get("fin","")    or "0"
-            filas.append({"desde":desde, "hasta":hasta, "vendedor":nom})
-    return filas
-
-def buscar_vendedor_por_boleto(fecha, boleto):
-    try:
-        num = int(str(boleto).strip())
-    except:
-        return ""
-    for f in get_asignaciones_del_dia(fecha):
-        try:
-            a = int(re.sub(r"\D","", f["desde"]) or 0)
-            b = int(re.sub(r"\D","", f["hasta"]) or 0)
-        except:
-            continue
-        if a <= num <= b:
-            return f["vendedor"]
-    return ""
-
-def get_impresiones_info(fecha):
-    serie = "—"; primer = 0; ultimo = 0; total_b = 0; valor_b = 0; rein = "—"
-    if not os.path.exists(IMP_XML_PATH):
-        return dict(
-            serie_detectada=serie, primer_boleto=str(primer), ultimo_boleto=str(ultimo),
-            boletos_impresos=_fmt_int(total_b), valor_boleto=_fmt_int(valor_b), reintegro_dia=rein
-        )
-    root = ET.parse(IMP_XML_PATH).getroot()
-    primera = None; ultima  = None
-    for n in root.findall("impresion"):
-        if n.attrib.get("tipo") != "boletos": continue
-        if (n.findtext("fecha_sorteo") or "").strip() != fecha: continue
-        try: total_b += int(n.findtext("total_boletos") or "0")
-        except: pass
-        valor_b = _parse_float(n.findtext("valor") or "0")
-        if (n.findtext("reintegro_especial") or "").strip():
-            rein = n.findtext("reintegro_especial").strip()
-        try:
-            d = int(n.attrib.get("desde","0") or 0)
-            h = int(n.attrib.get("hasta","0") or 0)
-            if primera is None or d < primera: primera = d
-            if ultima  is None or h > ultima:  ultima  = h
-        except: pass
-        if n.attrib.get("serie_archivo"): serie = n.attrib.get("serie_archivo")
-    primer = primera or 0
-    ultimo = ultima or 0
-    return dict(
-        serie_detectada=serie, primer_boleto=str(primer), ultimo_boleto=str(ultimo),
-        boletos_impresos=_fmt_int(total_b), valor_boleto=_fmt_int(valor_b), reintegro_dia=rein
-    )
-
-# --------- Catálogo de figuras dibujadas (opcional) ----------
-def load_catalogo_figuras():
-    """Índice por código con sus celdas."""
-    catalogo = {}
-    CATALOGO_FIGXML = _in_db_existing(CATALOGO_FIGXML_REL)
-    if not os.path.exists(CATALOGO_FIGXML):
-        return catalogo
-    root = ET.parse(CATALOGO_FIGXML).getroot()
-    for f in root.findall(".//figura"):
-        nombre = (f.attrib.get("nombre","") or "").strip()
-        codigo = code_for(nombre)
-        cbloq  = f.attrib.get("centro_bloqueado","0")
-        celdas = []
-        for c in f.findall("celda"):
-            idx   = int(c.attrib.get("idx","0") or 0)
-            color = (c.attrib.get("color","#FFFFFF") or "#FFFFFF").upper()
-            pos   = c.attrib.get("pos") or (POS_25_ROW[idx-1] if 1 <= idx <= 25 else "B1")
-            celdas.append({"idx": idx, "color": color, "pos": pos})
-        if len(celdas) < 25:
-            ya = {x["idx"] for x in celdas}
-            for i in range(1,26):
-                if i not in ya:
-                    celdas.append({"idx": i, "color": "#FFFFFF", "pos": POS_25_ROW[i-1]})
-            celdas.sort(key=lambda x:x["idx"])
-        catalogo[codigo] = {"nombre": nombre, "centro_bloqueado": cbloq, "celdas": celdas}
-    return catalogo
-
-# ======================== Escritura de XMLs ========================
-def grid_colors_for(codigo, catalogo):
-    """25 colores ON/OFF para una figura."""
-    if codigo in ("TL1","TL2") and codigo not in catalogo:
-        return [COLOR_ON] * 25
-    if codigo not in catalogo:
-        return [COLOR_OFF] * 25
-    cols = []
-    for cel in sorted(catalogo[codigo]["celdas"], key=lambda x:x["idx"]):
-        raw = (cel["color"] or "#FFFFFF").upper()
-        on = raw not in ("#FFFFFF", "#FFF", "#FFFFFF00", "TRANSPARENT")
-        cols.append(COLOR_ON if on else COLOR_OFF)
-    if len(cols) < 25:
-        cols += [COLOR_OFF] * (25 - len(cols))
-    return cols[:25]
-
-def write_vmix_ventas(fecha, imp):
-    root = ET.Element("ventas", {"fecha": fecha})
-    ET.SubElement(root, "serie").text            = imp["serie_detectada"]
-    ET.SubElement(root, "primer_boleto").text    = imp["primer_boleto"]
-    ET.SubElement(root, "ultimo_boleto").text    = imp["ultimo_boleto"]
-    ET.SubElement(root, "valor_boleto").text     = _fmt_int(imp["valor_boleto"])
-    ET.SubElement(root, "boletos_impresos").text = _fmt_int(imp["boletos_impresos"])
-    _write_xml_both(ET.ElementTree(root), VMIX_VENTAS_REL)
-
-def write_vmix_figuras_listas(fecha, tl, resto):
-    """vmix_figuras_nombres.xml y vmix_figuras_colores.xml. Retorna lista ordenada del día."""
-    fig_elegidas = []
-    if tl[0] > 0: fig_elegidas.append({"nombre":"Tabla Llena 1","valor":_fmt_int(tl[0])})
-    if tl[1] > 0: fig_elegidas.append({"nombre":"Tabla Llena 2","valor":_fmt_int(tl[1])})
-    if tl[2] > 0: fig_elegidas.append({"nombre":"Tabla Llena 3","valor":_fmt_int(tl[2])})
-    if tl[3] > 0: fig_elegidas.append({"nombre":"Tabla Llena 4","valor":_fmt_int(tl[3])})
-    fig_elegidas += resto
-
-    root = ET.Element("figuras_nombres", {"fecha": fecha})
-    for f in fig_elegidas:
-        ET.SubElement(root, "fig", {"nombre": f["nombre"], "valor": f["valor"]})
-    _write_xml_both(ET.ElementTree(root), VMIX_FIG_NOMB_REL)
-
-    root2 = ET.Element("figuras_colores", {"fecha": fecha})
-    for f in fig_elegidas:
-        ET.SubElement(root2, "fig", {"nombre": f["nombre"], "valor": f["valor"], "codigo": code_for(f["nombre"]), "color": ""})
-    _write_xml_both(ET.ElementTree(root2), VMIX_FIG_COLORES_REL)
-
-    return fig_elegidas
-
-def write_vmix_figuras_grid(fecha, figuras_dia, catalogo):
-    """vmix_figuras.xml (cada figura con 25 celdas idx/pos/color)."""
-    root = ET.Element("figuras")
-    ahora = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    for f in figuras_dia:
-        nombre = f["nombre"]; codigo = code_for(nombre)
-        nodo_f = ET.SubElement(root, "figura", {
-            "nombre": nombre, "fecha": ahora,
-            "centro_bloqueado": "1" if (codigo in catalogo and catalogo[codigo].get("centro_bloqueado","0") == "1") else "0"
-        })
-        cols = grid_colors_for(codigo, catalogo)
-        for i, col in enumerate(cols, start=1):
-            ET.SubElement(nodo_f, "celda", {"idx": str(i), "color": col, "pos": POS_25_ROW[i-1]})
-    _write_xml_both(ET.ElementTree(root), VMIX_FIG_GRID_REL)
-
-def write_xml_figuras_lista_presentacion(fecha, figuras_dia, catalogo):
-    """
-    <juego><filaFiguras> ... 25 columnas en orden B1..B5,I1..I5,N1..N5,G1..G5,O1..O5 </filaFiguras></juego>
-    """
-    root = ET.Element("juego")
-    ident = 1
-    for f in figuras_dia:
-        nombre = f["nombre"]; valor = f["valor"]; codigo = code_for(nombre)
-        fila = ET.SubElement(root, "filaFiguras")
-        ET.SubElement(fila, "figuraIDENTIFICADOR").text = str(ident)
-        ET.SubElement(fila, "figuraNOMBRE").text        = nombre
-        ET.SubElement(fila, "figuraVALOR").text         = valor
-        ET.SubElement(fila, "figuraESTADO").text        = "inactivo"
-
-        cols = grid_colors_for(codigo, catalogo)
-        pos_to_col = {POS_25_ROW[i]: cols[i] for i in range(25)}
-        for lab in POS_25_COL:  # orden columna-primero
-            ET.SubElement(fila, f"figura{lab}").text = pos_to_col[lab]
-        ident += 1
-    _write_xml_both(ET.ElementTree(root), XML_FIGURAS_LISTA_REL)
-
-def write_xml_figuras_tablero_2columnas(fecha, figuras_dia):
-    """
-    <juego fecha="..."><filaTablero><colA>Nombre|Valor|Estado</colA><colB>...</colB></filaTablero></juego>
-    """
-    root = ET.Element("juego", {"fecha": fecha})
-    fila = ET.SubElement(root, "filaTablero")
-    a = figuras_dia[0] if len(figuras_dia) >= 1 else None
-    b = figuras_dia[1] if len(figuras_dia) >= 2 else None
-    def pack(fig): return f"{fig['nombre']}|{fig['valor']}|inactivo" if fig else ""
-    ET.SubElement(fila, "colA").text = pack(a)
-    ET.SubElement(fila, "colB").text = pack(b)
-    _write_xml_both(ET.ElementTree(root), XML_FIGURAS_2COL_REL)
-
-# ================== Spinners (estándar) ==================
-def make_spinners_tree(vals, fecha_iso: str):
-    root = ET.Element("spinners", {"fecha": fecha_iso})
-    for i in range(20):
-        v = _san4(vals[i] if i < len(vals) else "")
-        n = ET.SubElement(root, "n", {"i": str(i+1)})
-        if v:
-            n.set("v", v)
-    return ET.ElementTree(root)
-
-def save_spinners(vals, fecha_iso: str | None = None):
-    """
-    Guarda spinners en:
-      - vmix_spinners.xml (prioridad para Juego)
-      - spinners.xml      (fallback)
-      - spinners/YYYY-MM-DD.xml (histórico)
-    Y en **ambas ubicaciones**: DATA/static/db y static/db.
-    """
-    if not fecha_iso:
-        fecha_iso = date.today().isoformat()
-    tree = make_spinners_tree(vals, fecha_iso)
-
-    _write_xml_both(tree, VMIX_SPINNERS_REL)
-    _write_xml_both(tree, STD_SPINNERS_REL)
-    # histórico por fecha
-    hist_rel = os.path.join(SPINNERS_HIST_DIR_REL, f"{fecha_iso}.xml")
-    _write_xml_both(tree, hist_rel)
-
-    return {
-        "vmix": os.path.join(DB_DATA, VMIX_SPINNERS_REL),
-        "std":  os.path.join(DB_DATA, STD_SPINNERS_REL),
-        "hist": os.path.join(DB_DATA, hist_rel),
-    }
-
-def read_spinners_current():
-    """Devuelve lista de 20 (4 dígitos) desde vmix_spinners.xml o spinners.xml."""
-    for rel in (VMIX_SPINNERS_REL, STD_SPINNERS_REL):
-        p = _in_db_existing(rel)
-        if os.path.exists(p):
-            try:
-                root = ET.parse(p).getroot()
-                out=[]
-                for n in root.findall(".//n"):
-                    v = n.attrib.get("v") or (n.text or "")
-                    v = _san4(v)
-                    out.append(v if v else "")
-                return (out + [""]*20)[:20]
-            except:
-                pass
-    return [""]*20
-
-def write_vmix_reintegro(fecha, reinteg_name):
-    root = ET.Element("reintegro", {"fecha": fecha})
-    ET.SubElement(root, "archivo").text = reinteg_name or ""
-    ET.SubElement(root, "ruta").text    = "static/REINTEGROS/" + (reinteg_name or "")
-    _write_xml_both(ET.ElementTree(root), VMIX_REINTEGRO_REL)
-
-# ---------------- Rutas ----------------
-
-from flask import render_template, request
-
-@app.route("/juego/spinner_overlay")
-def spinner_overlay():
-    return render_template("spinner_overlay.html")
-
-
-
-
-@app.route("/")
-def root():
-    return redirect(url_for("sorteo", fecha=date.today().isoformat()))
-
-@app.route("/sorteo")
-def sorteo():
-    fecha = request.args.get("fecha") or date.today().isoformat()
-    imp = get_impresiones_info(fecha)
-    tl, resto = get_figuras_del_dia(fecha)
-    asignaciones = get_asignaciones_del_dia(fecha)
-    total_boletos_x_valor = int(_fmt_int(imp["boletos_impresos"])) * int(_fmt_int(imp["valor_boleto"]))
-    total_premios = int(round(sum(tl) + sum(_parse_float(f["valor"]) for f in resto)))
-    return render_template(
-        "sorteo.html",
-        fecha=fecha,
-        serie_detectada=imp["serie_detectada"],
-        primer_boleto=imp["primer_boleto"],
-        ultimo_boleto=imp["ultimo_boleto"],
-        reintegro_dia=imp["reintegro_dia"],
-        valor_boleto=_fmt_int(imp["valor_boleto"]),
-        boletos_impresos=_fmt_int(imp["boletos_impresos"]),
-        total_a_jugar=_fmt_int(total_boletos_x_valor),
-        total_premios=_fmt_int(total_premios),
-        tl1=_fmt_int(tl[0]), tl2=_fmt_int(tl[1]), tl3=_fmt_int(tl[2]), tl4=_fmt_int(tl[3]),
-        figs_resto=resto,
-        asignaciones=asignaciones
-    )
-
-@app.route("/api/vendedor-por-boleto", methods=["GET","POST"])
-def api_vend_boleto():
-    if request.method == "POST":
-        data = request.get_json(silent=True) or {}
-        fecha  = data.get("fecha",""); boleto = data.get("boleto","")
-    else:
-        fecha  = request.args.get("fecha",""); boleto = request.args.get("boleto","")
-    vendedor = buscar_vendedor_por_boleto(fecha, boleto)
-    return jsonify(ok=True, vendedor=vendedor)
-
-# --------- NUEVOS endpoints de spinners ---------
-@app.get("/api/spinners")
-def api_spinners_get():
-    return jsonify(ok=True, spinners=read_spinners_current())
-
-@app.post("/api/spinners/guardar")
-def api_spinners_guardar():
-    data  = request.get_json(silent=True) or {}
-    fecha = data.get("fecha") or date.today().isoformat()
-    vals  = data.get("spinners", [])
-    files = save_spinners(vals, fecha)
-    return jsonify(ok=True, files=files, fecha=fecha)
-
-# --------- Activar sorteo (escribe TODO) ---------
-@app.post("/api/activar-sorteo")
-def sorteo_activar():
-    data  = request.get_json(silent=True) or {}
-    fecha = data.get("fecha")
-    spins = data.get("spinners", [])
-    if not fecha:
-        return jsonify(ok=False, mensaje="Falta la fecha")
-
-    imp = get_impresiones_info(fecha)
-    tl, resto = get_figuras_del_dia(fecha)
-
-    # 1) ventas
-    write_vmix_ventas(fecha, imp)
-
-    # 2) listas (nombres y códigos)
-    figuras_dia = write_vmix_figuras_listas(fecha, tl, resto)
-
-    # 3) grid 25 celdas
-    catalogo = load_catalogo_figuras()
-    write_vmix_figuras_grid(fecha, figuras_dia, catalogo)
-
-    # 4) PRESENTACIÓN (25 columnas en el orden correcto)
-    write_xml_figuras_lista_presentacion(fecha, figuras_dia, catalogo)
-
-    # 5) TABLERO (2 columnas)
-    write_xml_figuras_tablero_2columnas(fecha, figuras_dia)
-
-    # 6) spinners y reintegro (GUARDADO ESTÁNDAR => Juego los ve)
-    save_spinners(spins, fecha)
-    write_vmix_reintegro(fecha, imp["reintegro_dia"])
-
-    return jsonify(ok=True, mensaje="XMLs generados/reemplazados correctamente.")
-
-# --------- (Opcional) servir DATA por URL para depurar ---------
-@app.route("/data-db/<path:rel>")
-def serve_data_db(rel):
-    """Útil para ver que realmente se escribió en DATA/static/db/."""
-    return send_from_directory(DB_DATA, rel, as_attachment=False)
-
-# ----------------- MAIN -----------------
-if __name__ == "__main__":
-    app.run(debug=True)
-
-
-
-
-#FIN SORTEO #
-
-
-
-
-
-# ================= CONTABILIDAD: helpers y rutas =================
-# Seguridad por rol, gastos, banco, resumen, y endpoints de curvas por vendedor
-
-import os
-import xml.etree.ElementTree as ET
-from datetime import datetime, date, timedelta
-from flask import jsonify, render_template, request, redirect, url_for, session, flash
-from werkzeug.utils import secure_filename
-
-# === Comprobantes (subidas) ===
-ALLOWED_EXTS = {"pdf", "png", "jpg", "jpeg", "webp"}
-COMPROB_DIR = os.path.join("static", "CONTABILIDAD", "comprobantes")
-BANK_FILES  = os.path.join(COMPROB_DIR, "banco")
-GASTO_FILES = os.path.join(COMPROB_DIR, "gastos")
-os.makedirs(BANK_FILES, exist_ok=True)
-os.makedirs(GASTO_FILES, exist_ok=True)
-
-def _ext_ok(filename: str) -> bool:
-    ext = os.path.splitext(filename or "")[1].lower().lstrip(".")
-    return ext in ALLOWED_EXTS
-
-def _save_upload(fs, folder: str, base: str) -> str:
-    """Guarda archivo y retorna ruta relativa desde /static (ej: CONTABILIDAD/comprobantes/banco/xx.pdf)."""
-    fname = secure_filename(fs.filename or "")
-    ext = os.path.splitext(fname)[1].lower()
-    if not ext or ext.lstrip(".") not in ALLOWED_EXTS:
-        raise ValueError("extensión no permitida")
-    path = os.path.join(folder, f"{base}{ext}")
-    fs.save(path)
-    rel = os.path.relpath(path, "static").replace("\\", "/")
-    return rel
-
-# ---- Archivo de gastos ----
-GASTOS_XML = os.path.join('static', 'CONTABILIDAD', 'gastos.xml')
-os.makedirs(os.path.dirname(GASTOS_XML), exist_ok=True)
-if not os.path.exists(GASTOS_XML):
-    ET.ElementTree(ET.Element('gastos')).write(GASTOS_XML, encoding='utf-8', xml_declaration=True)
-
-def _xml_read(path):
-    tree = ET.parse(path)
+# Logs de impresión
+_LOG_LOCK = RLock()
+
+def _ensure_logs_file():
+    if not os.path.exists(IMPRESIONES_XML):
+        root = ET.Element('impresiones')
+        tree = ET.ElementTree(root)
+        tmp_path = IMPRESIONES_XML + ".tmp"
+        tree.write(tmp_path, encoding='utf-8', xml_declaration=True)
+        os.replace(tmp_path, IMPRESIONES_XML)
+
+def _read_logs_root():
+    _ensure_logs_file()
+    tree = ET.parse(IMPRESIONES_XML)
     return tree, tree.getroot()
 
-def _xml_write(tree, path):
+def _write_logs_tree(tree):
     try:
         ET.indent(tree, space="  ", level=0)
     except Exception:
         pass
-    tree.write(path, encoding='utf-8', xml_declaration=True)
+    tmp_path = IMPRESIONES_XML + ".tmp"
+    tree.write(tmp_path, encoding='utf-8', xml_declaration=True)
+    os.replace(tmp_path, IMPRESIONES_XML)
 
-# ---- Gastos CRUD ----
-def _gasto_row(elem):
-    return {
-        "id": elem.get("id"),
-        "fecha": elem.findtext("fecha", ""),
-        "categoria": elem.findtext("categoria", ""),
-        "medio": elem.findtext("medio", ""),     # caja | banco
-        "monto": float(elem.findtext("monto", "0") or 0),
-        "descripcion": elem.findtext("descripcion", ""),
-        "creado_por": elem.findtext("creado_por", ""),
-        "comprobante": elem.findtext("comprobante", ""),
-    }
+def _iter_impresiones():
+    _, root = _read_logs_root()
+    for n in root.findall('impresion'):
+        yield n
 
-def _gastos_list(desde_iso, hasta_iso):
-    _, root = _xml_read(GASTOS_XML)
-    out = []
-    for g in root.findall("gasto"):
-        f = g.findtext("fecha", "")
-        if not f:
-            continue
-        if f >= desde_iso and f <= hasta_iso:
-            out.append(_gasto_row(g))
-    out.sort(key=lambda x: (x["fecha"], x["id"]))
-    return out
-
-def _gasto_add(data, usuario, comp_path=None, gid_forced=None, monto_comprobante=None):
-    tree, root = _xml_read(GASTOS_XML)
-    gid = gid_forced or str(int(datetime.now().timestamp()*1000))
-    g = ET.SubElement(root, "gasto", {"id": gid})
-    ET.SubElement(g, "fecha").text = (data.get("fecha") or date.today().isoformat())
-    ET.SubElement(g, "categoria").text = (data.get("categoria") or "Gasto")
-    ET.SubElement(g, "medio").text = (data.get("medio") or "caja")
-    ET.SubElement(g, "monto").text = str(float(data.get("monto") or 0))
-    ET.SubElement(g, "descripcion").text = (data.get("descripcion") or "")
-    ET.SubElement(g, "creado_por").text = (usuario or "sistema")
-    if comp_path:
-        ET.SubElement(g, "comprobante").text = comp_path
-    if monto_comprobante is not None:
-        ET.SubElement(g, "monto_comprobante").text = str(float(monto_comprobante))
-    _xml_write(tree, GASTOS_XML)
-    return gid
-
-def _gasto_delete(gid):
-    tree, root = _xml_read(GASTOS_XML)
-    for g in root.findall("gasto"):
-        if g.get("id") == gid:
-            root.remove(g); _xml_write(tree, GASTOS_XML); return True
-    return False
-
-# ---- Auxiliares generales ----
-def _daterange(d1_iso, d2_iso):
-    d1 = datetime.fromisoformat(d1_iso).date()
-    d2 = datetime.fromisoformat(d2_iso).date()
-    curr = d1
-    while curr <= d2:
-        yield curr.isoformat()
-        curr += timedelta(days=1)
-
-def _safe_int(x, d=0):
-    try: return int(str(x).strip() or d)
-    except Exception: return d
-
-def _safe_float(x, d=0.0):
-    try: return float(str(x).strip() or d)
-    except Exception: return d
-
-def _to_bool(x):
-    s = str(x or '').strip().lower()
-    return s in ('1', 'true', 't', 'yes', 'si', 'sí')
-
-# ---- Impresos (desde LOG de impresión) ----
-def _sum_impresos(desde_iso, hasta_iso):
-    total = 0
-    for n in _iter_impresiones():  # definido en tu app (impresión de boletos)
-        if (n.get('tipo') or '').lower() != 'boletos':
-            continue
-        f = (n.findtext('fecha_sorteo') or '').strip()
-        if f and (desde_iso <= f <= hasta_iso):
-            try:
-                total += int(n.findtext('total_boletos') or '0')
-            except Exception:
-                pass
-    return total
-
-# ---- Lectura flexible de CAJA (cobros) ----
-def _caja_iter_cobros_dia(root_dia: ET.Element):
-    """
-    Itera cobros pagados del nodo <dia>.
-    Soporta:
-      A) <cobros><cobro vendidos=".." devueltos=".." efectivo=".." transferencia=".." pagado="1" .../></cobros>
-      B) <vendedor><vendidos>..</vendidos><devueltos>..</devueltos>...</vendedor>
-    """
-    # A) Nuevo
-    cobros = root_dia.find('cobros')
-    if cobros is not None:
-        for c in cobros.findall('cobro'):
-            yield {
-                "seudonimo": c.attrib.get('seudonimo', ''),
-                "vendidos": _safe_int(c.attrib.get('vendidos', 0)),
-                "devueltos": _safe_int(c.attrib.get('devueltos', 0)),
-                "efectivo": _safe_float(c.attrib.get('efectivo', 0)),
-                "transferencia": _safe_float(c.attrib.get('transferencia', 0)),
-                "pagado": _to_bool(c.attrib.get('pagado', '0')),
-            }
-        return
-    # B) Antiguo
-    for v in root_dia.findall('vendedor'):
-        yield {
-            "seudonimo": v.attrib.get('seudonimo', ''),
-            "vendidos": _safe_int(v.findtext('vendidos', 0)),
-            "devueltos": _safe_int(v.findtext('devueltos', 0)),
-            "efectivo": _safe_float(v.findtext('efectivo', 0)),
-            "transferencia": _safe_float(v.findtext('transferencia', 0)),
-            "pagado": _to_bool(v.findtext('pagado', 'false') or v.attrib.get('pagado')),
-        }
-
-# ---- Caja (vendidos/devueltos/recaudo/comisiones, efectivo/transferencia) ----
-def _sum_caja(desde_iso, hasta_iso):
-    vendidos = devueltos = 0
-    total_recaudado = gan_vendedores = a_caja = 0.0
-    tot_efectivo = tot_transfer = 0.0
-
-    # Abrimos una sola vez el XML de caja
-    _, root = _leer_xml(CAJA_XML)
-
-    for f in _daterange(desde_iso, hasta_iso):
-        dia = root.find(f"./dia[@fecha='{f}']")
-        if dia is None:
-            continue
-
-        cfg = get_configuracion_dia(f)
-        valor     = _safe_float(cfg.get("valor_boleto"), 0.0)
-        pct_base  = _safe_float(cfg.get("comision_vendedor"), 0.0)
-        pct_extra = _safe_float(cfg.get("comision_extra_meta"), 0.0)
-        meta      = _safe_int(cfg.get("meta_boletos"), 0)
-
-        for r in _caja_iter_cobros_dia(dia):
-            if not r.get('pagado'):
-                continue
-
-            vend = _safe_int(r.get('vendidos', 0))
-            dev  = _safe_int(r.get('devueltos', 0))
-
-            vendidos  += vend
-            devueltos += dev
-
-            total_venta = vend * valor
-            pct = pct_base + (pct_extra if vend >= meta else 0.0)
-
-            gan_v = total_venta * pct / 100.0
-            caja  = total_venta - gan_v
-
-            total_recaudado += total_venta
-            gan_vendedores  += gan_v
-            a_caja          += caja
-
-            tot_transfer += _safe_float(r.get('transferencia', 0))
-            tot_efectivo += _safe_float(r.get('efectivo', 0))
-
-    return {
-        "vendidos": vendidos,
-        "devueltos": devueltos,
-        "total_recaudado": round(total_recaudado, 2),
-        "gan_vendedores": round(gan_vendedores, 2),
-        "a_pagar_caja": round(a_caja, 2),
-        "efectivo": round(tot_efectivo, 2),
-        "transferencia": round(tot_transfer, 2)
-    }
-
-# ---- Asignaciones: planillas / entregados ----
-def _sum_asignaciones(desde_iso, hasta_iso):
-    path_asig = globals().get("ASIGNACIONES_XML", "static/db/asignaciones.xml")
-    boletos_por_planilla = int(globals().get("BOLETOS_POR_PLANILLA", 20))
-    if not os.path.exists(path_asig):
-        return 0, 0
-    try:
-        root = ET.parse(path_asig).getroot()
-    except ET.ParseError:
-        return 0, 0
-
-    planillas = 0
-    for d in root.findall("dia"):
-        f = (d.attrib.get("fecha") or "").strip()
-        if not f or f < desde_iso or f > hasta_iso:
-            continue
-        for _ in d.findall("vendedor"):
-            planillas += len(_.findall("planilla"))
-    entregados = planillas * boletos_por_planilla
-    return planillas, entregados
-
-# ---- Premios (pagados / por caducar / caducados) ----
-def _sum_premios(desde_iso, hasta_iso):
-    pagos_map = _pp_leer_pagos_map()  # ya definido en tu módulo de premios
-    hoy = date.today()
-
-    total_pagado = 0.0
-    por_caducar = 0
-    caducados   = 0
-
-    for f in _daterange(desde_iso, hasta_iso):
-        f_sorteo = datetime.fromisoformat(f).date()
-        caduca = f_sorteo + timedelta(days=30)
-        for g in (_pp_iter_ganadores_de_fecha(f) or []):
-            k = _pp_premio_key(f, g["figura"], g["boleto"])
-            pp = pagos_map.get(k)
-            premio_val = _safe_float(g.get("premio", 0), 0)
-            if pp:
-                total_pagado += _safe_float(pp.get("premio", premio_val), premio_val)
-            else:
-                if hoy > caduca:
-                    caducados += 1
-                elif 0 <= (caduca - hoy).days <= 5:
-                    por_caducar += 1
-
-    return {
-        "premios_pagados_total": round(total_pagado, 2),
-        "premios_por_caducar": por_caducar,
-        "premios_caducados": caducados
-    }
-
-def _premios_pagados_detalle(desde_iso, hasta_iso):
-    pagos = _pp_leer_pagos_map()
-    items = []
-    for p in pagos.values():
-        f = (p.get("fecha_sorteo") or "").strip()
-        if not f or f < desde_iso or f > hasta_iso:
-            continue
+def _append_log_impresion_boletos(*, usuario, serie_archivo, desde, hasta, fecha_sorteo, total_boletos,
+                                 valor, telefono, reintegro_especial, cant_reintegro_especial,
+                                 incluir_aleatorio, excedente=0, lote=''):
+    with _LOG_LOCK:
+        tree, root = _read_logs_root()
+        elem = ET.Element('impresion', attrib={
+            'fecha_hora': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+            'usuario': str(usuario or ''),
+            'tipo': 'boletos',
+            'serie_archivo': str(serie_archivo or ''),
+            'desde': str(desde or ''),
+            'hasta': str(hasta or '')
+        })
+        def add(tag, val):
+            c = ET.SubElement(elem, tag)
+            c.text = '' if val is None else str(val)
+        
+        add('valor', valor)
+        add('telefono', telefono)
+        add('fecha_sorteo', fecha_sorteo)
+        add('reintegro_especial', reintegro_especial)
+        add('cant_reintegro_especial', cant_reintegro_especial)
+        add('incluir_aleatorio', '1' if incluir_aleatorio else '0')
+        add('total_boletos', total_boletos)
         try:
-            items.append({
-                "fecha_sorteo": f,
-                "figura": p.get("figura", ""),
-                "boleto": p.get("boleto", ""),
-                "ganador": p.get("ganador_nombre", ""),
-                "premio": _safe_float(p.get("premio", 0), 0),
-                "fecha_pago": p.get("fecha_pago", ""),
-                "recibo_id": p.get("recibo_id", ""),
-                "pagado_por": p.get("pagado_por", "")
-            })
+            tp = int(math.ceil(int(total_boletos) / 20.0))
         except Exception:
-            pass
-    items.sort(key=lambda x: (x["fecha_sorteo"], x["figura"], x["boleto"]))
-    return items
+            tp = ''
+        add('total_planillas', tp)
+        add('excedente', '1' if excedente else '0')
+        add('lote', lote)
+        
+        root.append(elem)
+        _write_logs_tree(tree)
 
-# ---- Ruta HTML protegida ----
+# Generador de PDF para boletos
+def generar_pdf_boletos_excel(ids, registros, valor, telefono, nombre, reintegro_especial,
+                             cant_especial, reintegros, incluir_aleatorio, fecha_sorteo):
+    buf = BytesIO()
+    c = canvas.Canvas(buf, pagesize=A4)
+    c.translate(OFFSET_X, OFFSET_Y)
+
+    fecha_num = fecha_ddmmyyyy(fecha_sorteo)
+    precio_str = format_money(valor)
+
+    N = len(registros)
+    esp_idx = random.sample(range(N), min(N, cant_especial)) if reintegro_especial else []
+    ale_idx = [i for i in range(N) if i not in esp_idx] if incluir_aleatorio else []
+
+    for start in range(0, N, FILAS * COLUMNAS):
+        page = registros[start:start + FILAS * COLUMNAS]
+
+        for i, row in enumerate(page):
+            pos = start + i
+            col = i % COLUMNAS
+            fil = i // COLUMNAS
+
+            ancho_b = (w + 2 * MARGEN_IZQ - ESPACIO_X * (COLUMNAS - 1)) / COLUMNAS
+            alto_b = (h + 2 * MARGEN_SUP - ESPACIO_Y * (FILAS - 1)) / FILAS
+            x0 = MARGEN_IZQ + col * (ancho_b + ESPACIO_X)
+            y0 = h - MARGEN_SUP - fil * (alto_b + ESPACIO_Y)
+            if fil == 2: y0 -= DELTA_Y_FILA_3
+            if fil == 3: y0 -= DELTA_Y_FILA_4
+
+            size = min(ancho_b, alto_b) / 5
+            offs = per_cell_offsets[i]
+
+            # Rejilla 5×5
+            bx0 = x0 + ancho_b - size * 5 + offs['grid_x']
+            by0 = y0 + offs['grid_y']
+            c.setFont('Helvetica-Bold', SIZE_NUM)
+            
+            for r in range(5):
+                for j, letra in enumerate('bingo'):
+                    cx = bx0 + j * size
+                    cy = by0 - r * size
+                    if letra == 'n' and r == 2:
+                        # QR
+                        try:
+                            buf_qr = BytesIO()
+                            qrcode.make(f"{ids[pos]}|{fecha_sorteo}").save(buf_qr, format="PNG")
+                            buf_qr.seek(0)
+                            c.drawImage(ImageReader(buf_qr), cx + 2, cy + 2, size - 4, size - 4, mask="auto")
+                        except Exception:
+                            c.setFillGray(0.95)
+                            c.rect(cx, cy, size, size, stroke=0, fill=1)
+                            c.setFillGray(0.0)
+                            c.setFont("Helvetica", 6)
+                            c.drawCentredString(cx + size/2, cy + size/2 - 3, "QR")
+                    else:
+                        v = str(row.get(f"{letra}{r+1}", "-"))
+                        c.drawCentredString(cx + size / 2, cy + size * 0.28, v)
+
+            # Texto inferior
+            boleto_text = f"{ids[pos]}{SERIE_MAP.get(nombre, nombre)}"
+            x_info = x0 + offs['info_x']
+            y_info = y0 - size * 5 + offs['info_y']
+
+            c.setFont('Helvetica-Bold', SIZE_ID_BIG)
+            c.drawString(x_info, y_info, boleto_text)
+
+            # Reintegro
+            img = None
+            if pos in esp_idx and reintegro_especial:
+                img = reintegro_especial
+            elif pos in ale_idx and reintegros:
+                others = [r for r in reintegros if r != reintegro_especial]
+                img = random.choice(others) if others else None
+
+            if img:
+                path_img = os.path.join(REINTEGROS_DIR, img)
+                if os.path.exists(path_img):
+                    c.drawImage(ImageReader(path_img), x0 + offs['rein_x'], y0 - offs['rein_y'], 
+                               REINTEGRO_W, REINTEGRO_H, mask="auto")
+
+        c.showPage()
+        c.translate(OFFSET_X, OFFSET_Y)
+
+    c.save()
+    buf.seek(0)
+    return buf
+
+@app.route('/impresion', methods=['GET', 'POST'])
+@require_session
+def impresion():
+    files = sorted(f for f in os.listdir(DATA_DIR)
+                   if f.lower().endswith(('.xlsx', '.csv')))
+    series = [(f, SERIE_MAP.get(f, f)) for f in files]
+    reintegros = sorted(f for f in os.listdir(REINTEGROS_DIR)
+                        if f.lower().endswith('.png')) if os.path.exists(REINTEGROS_DIR) else []
+    fecha_hoy = date.today().strftime('%Y-%m-%d')
+
+    if request.method != 'POST':
+        return render_template(
+            'impresion_boletos_excel.html',
+            series=series, reintegros=reintegros, fecha_hoy=fecha_hoy,
+            username=session.get('usuario',''),
+            usuario=session.get('usuario',''),
+            rol=session.get('rol',''),
+            avatar=session.get('avatar','avatar-male.png'),
+            permisos=session.get('permisos', [])
+        )
+
+    form_type = (request.form.get('form_type') or '').strip().lower()
+
+    # ---- BOLETOS ----
+    if form_type == 'boletos':
+        serie_archivo = (request.form.get('serie_archivo') or '').strip()
+        start = (request.form.get('serie_inicio') or '').strip()
+        end = (request.form.get('serie_fin') or '').strip()
+        valor = (request.form.get('valor') or '1.00').strip()
+        telefono = (request.form.get('telefono') or '').strip()
+        fecha_str = (request.form.get('fecha_sorteo') or fecha_hoy).strip()
+        rein_esp = (request.form.get('reintegro_especial') or '').strip()
+        cntesp = _to_int(request.form.get('cant_reintegro_especial'), 0)
+        incA_raw = (request.form.get('incluir_aleatorio') or '1').strip().lower()
+        incA = incA_raw in ('1', 'true', 'on', 'si', 'sí')
+
+        if not serie_archivo:
+            flash('Selecciona una serie para imprimir boletos.', 'warning')
+            return redirect(url_for('impresion'))
+
+        try:
+            df = _read_df_for_series(serie_archivo)
+        except Exception as e:
+            flash(str(e), 'danger')
+            return redirect(url_for('impresion'))
+
+        id_col = df.columns[0]
+        all_ids = df[id_col].astype(str).tolist()
+        if not all_ids:
+            flash('La serie seleccionada no contiene datos.', 'danger')
+            return redirect(url_for('impresion'))
+
+        if not start:
+            start = all_ids[0]
+        if not end:
+            end = start
+
+        if start not in all_ids:
+            flash(f'Boleto inicial "{start}" no existe en la serie.', 'danger')
+            return redirect(url_for('impresion'))
+        if end not in all_ids:
+            flash(f'Boleto final "{end}" no existe en la serie.', 'danger')
+            return redirect(url_for('impresion'))
+
+        s_idx = all_ids.index(start)
+        e_idx = all_ids.index(end) + 1
+        if e_idx <= s_idx:
+            e_idx = s_idx + 1
+
+        ids = all_ids[s_idx:e_idx]
+        registros = df.iloc[s_idx:e_idx].to_dict('records')
+
+        # Log
+        _append_log_impresion_boletos(
+            usuario=session.get('usuario', ''),
+            serie_archivo=serie_archivo,
+            desde=start, hasta=end,
+            fecha_sorteo=fecha_str,
+            total_boletos=len(ids),
+            valor=valor, telefono=telefono,
+            reintegro_especial=rein_esp,
+            cant_reintegro_especial=cntesp,
+            incluir_aleatorio=incA,
+        )
+
+        rein_list = sorted(f for f in os.listdir(REINTEGROS_DIR) 
+                          if f.lower().endswith('.png')) if os.path.exists(REINTEGROS_DIR) else []
+        buf_b = generar_pdf_boletos_excel(
+            ids, registros, valor, telefono,
+            serie_archivo, rein_esp, cntesp,
+            rein_list, incA, fecha_str
+        )
+        return _send_bytesio(buf_b, 'boletos_bingo.pdf', 'application/pdf')
+
+    flash('Formulario no reconocido.', 'warning')
+    return redirect(url_for('impresion'))
+
+# ====== VENDEDORES ======
+def cargar_vendedores_xml():
+    vendedores = []
+    if not os.path.exists(VENDEDORES_XML):
+        return vendedores
+    
+    tree = ET.parse(VENDEDORES_XML)
+    root = tree.getroot()
+    
+    for idx, v in enumerate(root.findall('vendedor')):
+        vendedores.append({
+            'id': idx,
+            'nombre': (v.findtext('nombre') or '').strip(),
+            'apellido': (v.findtext('apellido') or '').strip(),
+            'seudonimo': (v.findtext('seudonimo') or '').strip(),
+        })
+    return vendedores
+
+def guardar_vendedor(nombre, apellido, seudonimo):
+    nombre = (nombre or '').strip()
+    apellido = (apellido or '').strip()
+    seudonimo = (seudonimo or '').strip()
+
+    if not os.path.exists(VENDEDORES_XML):
+        root = ET.Element('vendedores')
+        tree = ET.ElementTree(root)
+    else:
+        tree = ET.parse(VENDEDORES_XML)
+        root = tree.getroot()
+
+    v = ET.SubElement(root, 'vendedor')
+    ET.SubElement(v, 'nombre').text = nombre
+    ET.SubElement(v, 'apellido').text = apellido
+    ET.SubElement(v, 'seudonimo').text = seudonimo
+
+    tree.write(VENDEDORES_XML, encoding='utf-8', xml_declaration=True)
+
+@app.route('/vendedores', methods=['GET', 'POST'])
+@require_session
+def vendedores():
+    if request.method == 'POST':
+        if 'editar' in request.form:
+            idx = int(request.form['id'])
+            nombre = request.form['nombre'].strip()
+            apellido = request.form['apellido'].strip()
+            seudonimo = request.form['seudonimo'].strip()
+            # Implementar editar_vendedor si es necesario
+            flash("Función de edición pendiente", "info")
+        elif 'eliminar' in request.form:
+            idx = int(request.form['id'])
+            # Implementar eliminar_vendedor si es necesario
+            flash("Función de eliminación pendiente", "info")
+        else:
+            nombre = request.form['nombre'].strip()
+            apellido = request.form['apellido'].strip()
+            seudonimo = request.form['seudonimo'].strip()
+            if nombre and apellido and seudonimo:
+                guardar_vendedor(nombre, apellido, seudonimo)
+                flash("¡Vendedor agregado!", "success")
+            else:
+                flash("Todos los campos son obligatorios.", "danger")
+        
+        return redirect(url_for('vendedores'))
+
+    vendedores_list = cargar_vendedores_xml()
+    return render_template('vendedores.html', vendedores=vendedores_list)
+
+# ====== SORTEO ======
+@app.route('/sorteo')
+def sorteo():
+    fecha = request.args.get('fecha') or date.today().isoformat()
+    return render_template('sorteo.html', fecha=fecha)
+
+# ====== NUEVO: SISTEMA DE BINGO CON DETECCIÓN DE GANADORES ======
+# Variables globales para el juego en curso
+_JUEGO_ESTADO = {
+    'numeros_marcados': [],
+    'boletos': {},
+    'figuras': [],
+    'ganadores': [],
+    'fecha_juego': date.today().isoformat(),
+    'lock': RLock()
+}
+
+def _inicializar_juego(fecha_iso):
+    """Inicializa el estado del juego para una fecha específica."""
+    with _JUEGO_ESTADO['lock']:
+        _JUEGO_ESTADO['fecha_juego'] = fecha_iso
+        _JUEGO_ESTADO['numeros_marcados'] = []
+        _JUEGO_ESTADO['ganadores'] = []
+        
+        # Cargar figuras del día
+        _JUEGO_ESTADO['figuras'] = _cargar_figuras_del_dia(fecha_iso)
+        
+        # Cargar estructura de boletos
+        _JUEGO_ESTADO['boletos'] = _cargar_estructura_boletos(fecha_iso)
+        
+        # Cargar ganadores previos
+        _JUEGO_ESTADO['ganadores'] = _cargar_ganadores_dia(fecha_iso)
+        
+        print(f"Juego inicializado para {fecha_iso}: {len(_JUEGO_ESTADO['boletos'])} boletos, {len(_JUEGO_ESTADO['figuras'])} figuras")
+
+def _cargar_ganadores_dia(fecha_iso):
+    """Carga ganadores ya registrados para el día."""
+    ganadores = []
+    if os.path.exists(GANADORES_XML):
+        try:
+            tree = ET.parse(GANADORES_XML)
+            root = tree.getroot()
+            for ganador in root.findall('ganador'):
+                # Solo cargar ganadores del día actual
+                ganadores.append({
+                    'boleto': ganador.get('boleto', ''),
+                    'figura': ganador.get('figura', ''),
+                    'vendedor': ganador.get('vendedor', ''),
+                    'premio': _safe_float(ganador.get('premio', 0)),
+                    'fecha': ganador.get('fecha', '')
+                })
+        except Exception as e:
+            print(f"Error cargando ganadores: {e}")
+    return ganadores
+
+def _marcar_numero_y_detectar(numero):
+    """
+    Marca un número y detecta si hay ganadores.
+    Retorna: (exito, mensaje, ganadores_nuevos)
+    """
+    with _JUEGO_ESTADO['lock']:
+        # Verificar que el juego esté inicializado
+        if not _JUEGO_ESTADO['figuras']:
+            return False, "Juego no inicializado. Configura las figuras primero.", []
+        
+        if not _JUEGO_ESTADO['boletos']:
+            return False, "No hay boletos cargados para el día.", []
+        
+        # Verificar que el número sea válido
+        if numero < 1 or numero > 75:
+            return False, f"Número {numero} fuera de rango (1-75).", []
+        
+        # Verificar que no esté ya marcado
+        if numero in _JUEGO_ESTADO['numeros_marcados']:
+            return False, f"El número {numero} ya está marcado.", []
+        
+        # Marcar el número
+        _JUEGO_ESTADO['numeros_marcados'].append(numero)
+        
+        # Actualizar boletos con el número marcado
+        boletos_actualizados = _actualizar_marcados_en_boletos(
+            _JUEGO_ESTADO['boletos'], 
+            numero
+        )
+        
+        # Detectar nuevos ganadores
+        nuevos_ganadores = _detectar_ganadores(
+            _JUEGO_ESTADO['boletos'],
+            _JUEGO_ESTADO['figuras'],
+            _JUEGO_ESTADO['numeros_marcados']
+        )
+        
+        # Filtrar solo ganadores nuevos (no registrados previamente)
+        ganadores_nuevos = []
+        for ganador in nuevos_ganadores:
+            # Verificar si ya está en la lista de ganadores
+            ya_ganador = any(
+                g['boleto'] == ganador['boleto'] and 
+                g['figura'] == ganador['figura']
+                for g in _JUEGO_ESTADO['ganadores']
+            )
+            
+            if not ya_ganador:
+                # Registrar el ganador
+                if _registrar_ganador(ganador):
+                    _JUEGO_ESTADO['ganadores'].append(ganador)
+                    ganadores_nuevos.append(ganador)
+        
+        # Actualizar XML del bingo
+        _actualizar_xml_bingo()
+        
+        mensaje = f"Número {numero} marcado correctamente."
+        if ganadores_nuevos:
+            mensaje += f" ¡{len(ganadores_nuevos)} nuevo(s) ganador(es)!"
+        
+        return True, mensaje, ganadores_nuevos
+
+def _actualizar_xml_bingo():
+    """Actualiza el XML del bingo con el estado actual."""
+    try:
+        root = ET.Element("bingo")
+        balotas = ET.SubElement(root, "balotas")
+        
+        # Balotas 1-75
+        for n in range(1, 76):
+            estado = "n" if n in _JUEGO_ESTADO['numeros_marcados'] else ""
+            ultimo = "X" if n == _JUEGO_ESTADO['numeros_marcados'][-1] if _JUEGO_ESTADO['numeros_marcados'] else "" else ""
+            ET.SubElement(balotas, "balota", numero=str(n), estado=estado, ultimo=ultimo)
+        
+        # Últimos 5 números marcados
+        ultimos5 = _JUEGO_ESTADO['numeros_marcados'][-5:] if len(_JUEGO_ESTADO['numeros_marcados']) >= 5 else _JUEGO_ESTADO['numeros_marcados']
+        root.find("ultimos5").text = ",".join(map(str, ultimos5))
+        
+        # Total marcadas
+        root.find("totalMarcadas").text = str(len(_JUEGO_ESTADO['numeros_marcados']))
+        
+        # Último marcado
+        ultimo = _JUEGO_ESTADO['numeros_marcados'][-1] if _JUEGO_ESTADO['numeros_marcados'] else ""
+        root.find("ultimoMarcado").text = str(ultimo)
+        
+        # Stinger (para efectos de sonido)
+        root.find("stinger").text = str(ultimo)
+        
+        # Guardar
+        tree = ET.ElementTree(root)
+        tree.write(BINGO_XML, encoding='utf-8', xml_declaration=True)
+        
+    except Exception as e:
+        print(f"Error actualizando XML bingo: {e}")
+
+# ====== RUTAS DEL JUEGO ======
+@app.route('/juego')
+def juego():
+    fecha = request.args.get('fecha') or date.today().isoformat()
+    
+    # Inicializar juego para esta fecha
+    _inicializar_juego(fecha)
+    
+    return render_template('juego.html', fecha=fecha)
+
+@app.get('/xml/bingo')
+def juego_xml_bingo():
+    # Asegurar que el XML existe
+    if not os.path.exists(BINGO_XML):
+        _actualizar_xml_bingo()
+    
+    resp = make_response(send_file(BINGO_XML, mimetype="application/xml"))
+    resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    resp.headers["Pragma"] = "no-cache"
+    return resp
+
+@app.post('/juego/marcar')
+def juego_marcar():
+    data = request.get_json(silent=True) or {}
+    numero = _to_int(data.get("numero", 0))
+    
+    if not numero:
+        return jsonify(success=False, error="Número inválido"), 400
+    
+    # Marcar número y detectar ganadores
+    exito, mensaje, ganadores_nuevos = _marcar_numero_y_detectar(numero)
+    
+    if not exito:
+        return jsonify(success=False, error=mensaje), 400
+    
+    respuesta = {
+        'success': True,
+        'numero': numero,
+        'total_marcados': len(_JUEGO_ESTADO['numeros_marcados']),
+        'ultimos5': _JUEGO_ESTADO['numeros_marcados'][-5:] if len(_JUEGO_ESTADO['numeros_marcados']) >= 5 else _JUEGO_ESTADO['numeros_marcados'],
+        'mensaje': mensaje
+    }
+    
+    # Si hay ganadores nuevos, incluirlos en la respuesta
+    if ganadores_nuevos:
+        respuesta['ganadores_nuevos'] = ganadores_nuevos
+        respuesta['total_ganadores'] = len(_JUEGO_ESTADO['ganadores'])
+    
+    return jsonify(respuesta)
+
+@app.post('/juego/reversa')
+def juego_reversa():
+    with _JUEGO_ESTADO['lock']:
+        if _JUEGO_ESTADO['numeros_marcados']:
+            # Eliminar el último número marcado
+            ultimo = _JUEGO_ESTADO['numeros_marcados'].pop()
+            
+            # Actualizar XML
+            _actualizar_xml_bingo()
+            
+            return jsonify({
+                'success': True,
+                'numero_eliminado': ultimo,
+                'total_marcados': len(_JUEGO_ESTADO['numeros_marcados']),
+                'mensaje': f'Número {ultimo} eliminado (reversa)'
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'error': 'No hay números para eliminar'
+            }), 400
+
+@app.post('/juego/reset')
+def juego_reset():
+    with _JUEGO_ESTADO['lock']:
+        _JUEGO_ESTADO['numeros_marcados'] = []
+        _actualizar_xml_bingo()
+        
+        return jsonify({
+            'success': True,
+            'mensaje': 'Juego reiniciado',
+            'total_marcados': 0
+        })
+
+@app.get('/juego/estado')
+def juego_estado():
+    """Obtiene el estado completo del juego."""
+    with _JUEGO_ESTADO['lock']:
+        return jsonify({
+            'success': True,
+            'fecha': _JUEGO_ESTADO['fecha_juego'],
+            'numeros_marcados': _JUEGO_ESTADO['numeros_marcados'],
+            'total_marcados': len(_JUEGO_ESTADO['numeros_marcados']),
+            'total_boletos': len(_JUEGO_ESTADO['boletos']),
+            'total_figuras': len(_JUEGO_ESTADO['figuras']),
+            'total_ganadores': len(_JUEGO_ESTADO['ganadores']),
+            'ganadores': _JUEGO_ESTADO['ganadores'],
+            'ultimos5': _JUEGO_ESTADO['numeros_marcados'][-5:] if len(_JUEGO_ESTADO['numeros_marcados']) >= 5 else _JUEGO_ESTADO['numeros_marcados']
+        })
+
+@app.get('/juego/ganadores')
+def juego_ganadores():
+    """Obtiene la lista de ganadores."""
+    with _JUEGO_ESTADO['lock']:
+        return jsonify({
+            'success': True,
+            'ganadores': _JUEGO_ESTADO['ganadores']
+        })
+
+@app.get('/juego/inicializar/<fecha>')
+def juego_inicializar_fecha(fecha):
+    """Inicializa el juego para una fecha específica."""
+    try:
+        datetime.fromisoformat(fecha)  # Validar formato
+        _inicializar_juego(fecha)
+        
+        return jsonify({
+            'success': True,
+            'fecha': fecha,
+            'boletos_cargados': len(_JUEGO_ESTADO['boletos']),
+            'figuras_cargadas': len(_JUEGO_ESTADO['figuras']),
+            'ganadores_existentes': len(_JUEGO_ESTADO['ganadores'])
+        })
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': f'Fecha inválida o error: {str(e)}'
+        }), 400
+
+# ====== BOLETÍN ======
+@app.route('/boletin')
+def boletin():
+    fecha = request.args.get('fecha') or date.today().isoformat()
+    return render_template('boletin.html', fecha_inicial=fecha)
+
+# ====== PAGO DE PREMIOS ======
+@app.route('/pago-premios')
+def pagos_premios_view():
+    return render_template('pago_premios.html')
+
+# ====== CONTABILIDAD ======
 @app.route("/contabilidad")
+@require_session
 def contabilidad():
-    if 'usuario' not in session:
-        return redirect(_login_url())
     rol = session.get('rol', '')
     if rol not in ('Super Administrador', 'Administrador'):
         flash('Acceso restringido a Contabilidad', 'error')
         return redirect(url_for('dashboard'))
+    
     return render_template(
         "contabilidad.html",
         usuario=session.get('usuario', ''),
@@ -5452,1256 +4620,45 @@ def contabilidad():
         avatar=session.get('avatar', 'avatar-male.png')
     )
 
-# ========================= BANCO (Empresa) =========================
-BANCOS_XML = os.path.join('static', 'CONTABILIDAD', 'bancos.xml')
-os.makedirs(os.path.dirname(BANCOS_XML), exist_ok=True)
-if not os.path.exists(BANCOS_XML):
-    ET.ElementTree(ET.Element('bancos')).write(BANCOS_XML, encoding='utf-8', xml_declaration=True)
-
-def _bank_xml():
-    tree = ET.parse(BANCOS_XML)
-    return tree, tree.getroot()
-
-def _bank_write(tree):
-    try:
-        ET.indent(tree, space="  ", level=0)
-    except Exception:
-        pass
-    tree.write(BANCOS_XML, encoding='utf-8', xml_declaration=True)
-
-def _bank_row(e: ET.Element):
-    return {
-        "id": e.get("id"),
-        "fecha": e.findtext("fecha", ""),
-        "cuenta": e.findtext("cuenta", "Empresa"),
-        "tipo": (e.findtext("tipo", "ingreso") or "").lower(),
-        "monto": float(e.findtext("monto", "0") or 0),
-        "referencia": e.findtext("referencia", ""),
-        "creado_por": e.findtext("creado_por", ""),
-        "comprobante": e.findtext("comprobante", ""),
-        "locked": (e.findtext("locked", "false") == "true"),
-    }
-
-def _bank_get(mid: str):
-    tree, root = _bank_xml()
-    for e in root.findall("mov"):
-        if e.get("id") == mid:
-            return tree, root, e
-    return tree, root, None
-
-def _bank_add(fecha:str, cuenta:str, tipo:str, monto:float, referencia:str, creado_por:str,
-              comprobante:str=None, locked:bool=False, forced_id:str=None, monto_comprobante:float=None):
-    tree, root = _bank_xml()
-    mid = forced_id or str(int(datetime.now().timestamp()*1000))
-    m = ET.SubElement(root, "mov", {"id": mid})
-    ET.SubElement(m, "fecha").text = (fecha or date.today().isoformat())
-    ET.SubElement(m, "cuenta").text = (cuenta or "Empresa")
-    ET.SubElement(m, "tipo").text = (tipo or "ingreso")  # ingreso | egreso | transferencia
-    ET.SubElement(m, "monto").text = str(float(monto or 0))
-    ET.SubElement(m, "referencia").text = (referencia or "")
-    ET.SubElement(m, "creado_por").text = (creado_por or "sistema")
-    if comprobante:
-        ET.SubElement(m, "comprobante").text = comprobante
-    ET.SubElement(m, "locked").text = "true" if locked else "false"
-    if monto_comprobante is not None:
-        ET.SubElement(m, "monto_comprobante").text = str(float(monto_comprobante))
-    _bank_write(tree)
-    return mid
-
-def _bank_list(desde:str, hasta:str, cuenta:str=None):
-    _, root = _bank_xml()
-    items = []
-    for e in root.findall('mov'):
-        f = e.findtext('fecha') or ''
-        if not f:
-            continue
-        if desde and f < desde:  # fuera de rango inferior
-            continue
-        if hasta and f > hasta:  # fuera de rango superior
-            continue
-        if cuenta and (e.findtext('cuenta') or 'Empresa') != cuenta:
-            continue
-        items.append(_bank_row(e))
-    items.sort(key=lambda x: (x["fecha"], x["id"]))
-    return items
-
-def _bank_delete(mid:str):
-    tree, root, e = _bank_get(mid)
-    if e is None:
-        return False
-    if (e.findtext("locked", "false") == "true"):
-        return False
-    root.remove(e); _bank_write(tree); return True
-
-def _bank_saldo(cuenta:str="Empresa", hasta:str=None):
-    _, root = _bank_xml()
-    total = 0.0
-    for e in root.findall('mov'):
-        if (e.findtext('cuenta') or 'Empresa') != cuenta:
-            continue
-        f = e.findtext('fecha') or ''
-        if hasta and f > hasta:
-            continue
-        tipo = (e.findtext('tipo') or 'ingreso').lower()
-        monto = float(e.findtext('monto') or 0)
-        if tipo == 'ingreso':
-            total += monto
-        else:
-            total -= monto
-    return round(total, 2)
-
-def _require_admin():
-    return session.get('rol', '') in ('Super Administrador', 'Administrador')
-
-# -------------------- Rutas Banco (REST) --------------------
-@app.get("/api/banco/saldo")
-def api_banco_saldo():
-    cuenta = request.args.get("cuenta") or "Empresa"
-    hasta = request.args.get("hasta") or date.today().isoformat()
-    return jsonify({"ok": True, "cuenta": cuenta, "hasta": hasta, "saldo": _bank_saldo(cuenta, hasta)})
-
-@app.get("/api/banco/movimientos")
-def api_banco_movimientos():
-    cuenta = request.args.get("cuenta") or "Empresa"
-    desde = request.args.get("desde") or (date.today() - timedelta(days=30)).isoformat()
-    hasta = request.args.get("hasta") or date.today().isoformat()
-    return jsonify({"ok": True, "items": _bank_list(desde, hasta, cuenta)})
-
-@app.post("/api/banco/deposito")
-def api_banco_deposito():
-    if not _require_admin():
-        return jsonify({"ok": False, "error": "no-autorizado"}), 403
-
-    if request.content_type and "multipart/form-data" in request.content_type:
-        form = request.form
-        file = request.files.get("comprobante")
-        if not file or not file.filename:
-            return jsonify({"ok": False, "error": "comprobante-requerido"}), 400
-        if not _ext_ok(file.filename):
-            return jsonify({"ok": False, "error": "ext-archivo-no-valida"}), 400
-
-        monto = float(form.get("monto") or 0)
-        monto_comp = float(form.get("monto_confirm") or form.get("monto_comprobante") or 0)
-        if round(monto, 2) != round(monto_comp, 2):
-            return jsonify({"ok": False, "error": "monto-comprobante-difiere"}), 400
-
-        mid = str(int(datetime.now().timestamp()*1000))
-        comp_rel = _save_upload(file, BANK_FILES, f"dep_{mid}")
-        _bank_add(
-            fecha = form.get("fecha") or date.today().isoformat(),
-            cuenta = form.get("cuenta") or "Empresa",
-            tipo = "ingreso",
-            monto = monto,
-            referencia = form.get("referencia") or "Depósito",
-            creado_por = session.get('usuario', 'sistema'),
-            comprobante = comp_rel,
-            locked = True,
-            forced_id = mid,
-            monto_comprobante = monto_comp
-        )
-        return jsonify({"ok": True, "id": mid, "saldo": _bank_saldo(form.get('cuenta') or "Empresa")})
-    else:
-        return jsonify({"ok": False, "error": "usar-multipart-con-comprobante"}), 400
-
-@app.post("/api/banco/retiro")
-def api_banco_retiro():
-    if not _require_admin():
-        return jsonify({"ok": False, "error": "no-autorizado"}), 403
-    data = request.get_json(force=True) or {}
-    mid = _bank_add(
-        fecha = data.get("fecha") or date.today().isoformat(),
-        cuenta = data.get("cuenta") or "Empresa",
-        tipo = "egreso",
-        monto = float(data.get("monto") or 0),
-        referencia = data.get("referencia") or "Retiro",
-        creado_por = session.get('usuario', 'sistema'),
-        locked = False
-    )
-    return jsonify({"ok": True, "id": mid, "saldo": _bank_saldo(data.get("cuenta") or "Empresa")})
-
-@app.delete("/api/banco/movimientos/<mid>")
-def api_banco_borrar(mid):
-    if not _require_admin():
-        return jsonify({"ok": False, "error": "no-autorizado"}), 403
-    ok = _bank_delete(mid)
-    if not ok:
-        return jsonify({"ok": False, "error": "mov-bloqueado-o-inexistente"}), 400
-    return jsonify({"ok": True})
-
-# -------------------- API: GASTOS --------------------
-@app.get("/api/gastos")
-def api_gastos_list():
-    if 'usuario' not in session:
-        return jsonify({"ok": False, "error": "no-auth"}), 401
-    desde = (request.args.get("desde") or (date.today() - timedelta(days=30)).isoformat()).strip()
-    hasta = (request.args.get("hasta") or date.today().isoformat()).strip()
-    return jsonify({"ok": True, "items": _gastos_list(desde, hasta)})
-
-@app.post("/api/gastos")
-def api_gastos_add():
-    if 'usuario' not in session:
-        return jsonify({"ok": False, "error": "no-auth"}), 401
-
-    if request.content_type and "multipart/form-data" in request.content_type:
-        form = request.form
-        # Regla: solo se pueden ingresar gastos del día actual
-        hoy = date.today().isoformat()
-        fecha_form = (form.get("fecha") or hoy).strip()
-        if fecha_form != hoy:
-            return jsonify({"ok": False, "error": "solo-hoy"}), 400
-
-        file = request.files.get("comprobante")
-        if not file or not file.filename:
-            return jsonify({"ok": False, "error": "comprobante-requerido"}), 400
-        if not _ext_ok(file.filename):
-            return jsonify({"ok": False, "error": "ext-archivo-no-valida"}), 400
-
-        monto = float(form.get("monto") or 0)
-        monto_comp = float(form.get("monto_confirm") or form.get("monto_comprobante") or 0)
-        if round(monto, 2) != round(monto_comp, 2):
-            return jsonify({"ok": False, "error": "monto-comprobante-difiere"}), 400
-
-        gid = str(int(datetime.now().timestamp()*1000))
-        comp_rel = _save_upload(file, GASTO_FILES, f"gasto_{gid}")
-        data = dict(form)
-        data["fecha"] = fecha_form
-        _gasto_add(data, session.get('usuario'), comp_rel, gid_forced=gid, monto_comprobante=monto_comp)
-        return jsonify({"ok": True, "id": gid})
-    else:
-        return jsonify({"ok": False, "error": "usar-multipart-con-comprobante"}), 400
-
-@app.delete("/api/gastos/<gid>")
-def api_gastos_delete(gid):
-    if 'usuario' not in session:
-        return jsonify({"ok": False, "error": "no-auth"}), 401
-    ok = _gasto_delete(gid)
-    return jsonify({"ok": ok})
-
-# -------------------- API: RESUMEN CONTABLE --------------------
-@app.get("/api/contabilidad/resumen")
-def api_contabilidad_resumen():
-    desde = (request.args.get("desde") or (date.today() - timedelta(days=30)).isoformat()).strip()
-    hasta = (request.args.get("hasta") or date.today().isoformat()).strip()
-    try:
-        if datetime.fromisoformat(desde) > datetime.fromisoformat(hasta):
-            desde, hasta = hasta, desde
-    except Exception:
-        pass
-
-    impresos = _sum_impresos(desde, hasta)
-    caja     = _sum_caja(desde, hasta)
-    premios  = _sum_premios(desde, hasta)
-
-    gastos_items = _gastos_list(desde, hasta)
-    gastos_total  = round(sum(g["monto"] for g in gastos_items if (g["categoria"] or "").lower() != "sueldo"), 2)
-    sueldos_total = round(sum(g["monto"] for g in gastos_items if (g["categoria"] or "").lower() == "sueldo"), 2)
-    gastos_caja   = round(sum(g["monto"] for g in gastos_items if g["medio"] == "caja"), 2)
-    gastos_banco  = round(sum(g["monto"] for g in gastos_items if g["medio"] == "banco"), 2)
-
-    banco_items = _bank_list(desde, hasta, "Empresa")
-    planillas_asignadas, boletos_entregados = _sum_asignaciones(desde, hasta)
-
-    gan_empresa   = round(caja["total_recaudado"] - caja["gan_vendedores"], 2)
-    utilidad_neta = round(gan_empresa - premios["premios_pagados_total"] - gastos_total - sueldos_total, 2)
-
-    saldo_caja  = round(caja["efectivo"]      - gastos_caja, 2)
-    saldo_banco = round(caja["transferencia"] - gastos_banco, 2)
-
-    premios_detalle = _premios_pagados_detalle(desde, hasta)
-
-    return jsonify({
-        "ok": True,
-        "rango": {"desde": desde, "hasta": hasta},
-        "planillas_asignadas": planillas_asignadas,
-        "boletos_entregados": boletos_entregados,
-        "boletos_impresos": impresos,
-        "boletos_vendidos": caja["vendidos"],
-        "boletos_devueltos": caja["devueltos"],
-        "ingresos_brutos": caja["total_recaudado"],
-        "ganancia_vendedores": caja["gan_vendedores"],
-        "ganancia_empresa": gan_empresa,
-        "premios_pagados_total": premios["premios_pagados_total"],
-        "premios_por_caducar": premios["premios_por_caducar"],
-        "premios_caducados": premios["premios_caducados"],
-        "gastos_total": gastos_total,
-        "sueldos_total": sueldos_total,
-        "utilidad_neta": utilidad_neta,
-        "efectivo_cobrado": caja["efectivo"],
-        "transferencias_cobradas": caja["transferencia"],
-        "saldo_caja": saldo_caja,
-        "saldo_banco": saldo_banco,
-        "gastos": gastos_items,
-        "banco": banco_items,
-        "premios_detalle": premios_detalle
-    })
-
-# ---- ENDPOINTS para curvas por vendedor (ventas / devueltos / combinado) ----
-def _caja_iter_cobros_rango(desde_iso, hasta_iso):
-    _, root = _leer_xml(CAJA_XML)
-    for f in _daterange(desde_iso, hasta_iso):
-        dia = root.find(f"./dia[@fecha='{f}']")
-        if dia is None:
-            continue
-        for r in _caja_iter_cobros_dia(dia):
-            if r.get('pagado'):
-                yield (f, r.get('seudonimo') or '', _safe_int(r.get('vendidos', 0)), _safe_int(r.get('devueltos', 0)))
-
-@app.get("/api/contabilidad/ventas-vendedores")
-def api_ventas_vendedores():
-    desde = (request.args.get("desde") or date.today().isoformat()).strip()
-    hasta = (request.args.get("hasta") or date.today().isoformat()).strip()
-    agg = {}
-    for _, seud, vend, _ in _caja_iter_cobros_rango(desde, hasta):
-        agg[seud] = agg.get(seud, 0) + vend
-    items = [{"vendedor": k or "(sin seudónimo)", "vendidos": v} for k, v in agg.items()]
-    return jsonify(ok=True, items=sorted(items, key=lambda x: -x["vendidos"]))
-
-@app.get("/api/contabilidad/devueltos-vendedores")
-def api_devueltos_vendedores():
-    desde = (request.args.get("desde") or date.today().isoformat()).strip()
-    hasta = (request.args.get("hasta") or date.today().isoformat()).strip()
-    agg = {}
-    for _, seud, _, dev in _caja_iter_cobros_rango(desde, hasta):
-        agg[seud] = agg.get(seud, 0) + dev
-    items = [{"vendedor": k or "(sin seudónimo)", "devueltos": v} for k, v in agg.items()]
-    return jsonify(ok=True, items=sorted(items, key=lambda x: -x["devueltos"]))
-
-@app.get("/api/contabilidad/vendedores_ranking")
-def api_vendedores_ranking():
-    desde = (request.args.get("desde") or date.today().isoformat()).strip()
-    hasta = (request.args.get("hasta") or date.today().isoformat()).strip()
-    agg = {}
-    for _, seud, vend, dev in _caja_iter_cobros_rango(desde, hasta):
-        ref = agg.setdefault(seud or "(sin seudónimo)", {"vendedor": seud or "(sin seudónimo)", "vendidos": 0, "devueltos": 0})
-        ref["vendidos"]  += vend
-        ref["devueltos"] += dev
-    return jsonify(ok=True, items=sorted(agg.values(), key=lambda x: (-x["vendidos"], x["devueltos"])))
-
-
-
-
-
-#JUEGO #
-
-# ===========================
-#  JUEGO + SPINNERS + FIGURAS
-#  (Blueprint: /juego/*)
-# ===========================
-# -*- coding: utf-8 -*-
-# -*- coding: utf-8 -*-
-# -*- coding: utf-8 -*-
-import os, json, re, xml.etree.ElementTree as ET
-from datetime import datetime, date
-from flask import Blueprint, jsonify, render_template, request, redirect, url_for, session, send_file, make_response
-
-# ============================================================
-#  CONFIG & RUTAS (respeta tu DATA_DIR si ya existe)
-# ============================================================
-_BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DATA_DIR = globals().get("DATA_DIR", os.path.join(_BASE_DIR, "DATA"))
-DB_DIR = os.path.join(DATA_DIR, "static", "db")
-os.makedirs(DB_DIR, exist_ok=True)
-
-# Archivos core
-BINGO_XML     = os.path.join(DB_DIR, "datos_bingo.xml")
-HIST_JSON     = os.path.join(DB_DIR, "historial.json")
-
-# Spinners (VMIX overlay + fallback XML)
-VMIX_SPINNERS_XML = globals().get("VMIX_SPINNERS_XML", os.path.join(DB_DIR, "vmix_spinners.xml"))
-SPINNERS_XML      = globals().get("SPINNERS_XML",      os.path.join(DB_DIR, "spinners.xml"))
-SPINNERS_STATE_JSON = os.path.join(DB_DIR, "spinners_state.json")
-
-# Sorteos / Figuras
-SORTEOS_XML = globals().get("SORTEOS_XML", os.path.join(DB_DIR, "sorteos.xml"))
-SORTEO_JSON_CANDIDATES = [
-    os.path.join(DB_DIR, "sorteo.json"),
-    os.path.join(DB_DIR, "config_sorteo.json"),
-]
-FIGURAS_DIR         = os.path.join(DB_DIR, "figuras")
-FIGURAS_DEL_DIA_XML = os.path.join(DB_DIR, "figuras_del_dia.xml")
-DATOS_FIGURAS_XML   = os.path.join(DB_DIR, "datos_figuras.xml")
-os.makedirs(FIGURAS_DIR, exist_ok=True)
-FIG_ESTADOS_JSON = os.path.join(DB_DIR, "figuras_estado.json")
-
-# vMix API (HTTP) — opcional
-VMIX_HOST = os.getenv("VMIX_HOST", "127.0.0.1")
-VMIX_PORT = os.getenv("VMIX_PORT", "8088")
-VMIX_OVERLAY_INDEX = int(os.getenv("VMIX_OVERLAY_INDEX", "3"))
-VMIX_SPINNER_INPUT = os.getenv("VMIX_SPINNER_INPUT", "SpinnerOverlay")
-
-require_session = globals().get("require_session", None)
-
-# ============================================================
-#  BLUEPRINT
-# ============================================================
-juego_bp = Blueprint("juego", __name__, url_prefix="/juego")
-
-# ============================================================
-#  HELPERS JSON/XML
-# ============================================================
-def _json_read(path):
-    try:
-        with open(path, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except Exception:
-        return None
-
-def _json_write(path, data):
-    try:
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
-        return True
-    except Exception:
-        return False
-
-def _ensure_hist():
-    if not os.path.exists(HIST_JSON):
-        _json_write(HIST_JSON, {"stack": [], "ts": datetime.utcnow().isoformat()})
-
-def _read_stack():
-    _ensure_hist()
-    try:
-        data = _json_read(HIST_JSON) or {}
-        return [int(x) for x in data.get("stack", []) if 1 <= int(x) <= 75]
-    except Exception:
-        return []
-
-def _write_stack(stack):
-    _json_write(HIST_JSON, {"stack": [int(x) for x in stack], "ts": datetime.utcnow().isoformat()})
-
-def _ensure_bingo_xml():
-    if os.path.exists(BINGO_XML):
-        return
-    root = ET.Element("bingo")
-    balotas = ET.SubElement(root, "balotas")
-    for n in range(1, 76):
-        # 'estado' y 'ultimo'
-        ET.SubElement(balotas, "balota", numero=str(n), estado="", ultimo="")
-    ET.SubElement(root, "ultimos5").text = ""
-    ET.SubElement(root, "totalMarcadas").text = "0"
-    ET.SubElement(root, "ultimoMarcado").text = ""
-    ET.SubElement(root, "stinger").text = ""
-    ET.ElementTree(root).write(BINGO_XML, encoding="utf-8", xml_declaration=True)
-
-def _sync_bingo_xml_from_stack(stack):
-    """
-    Reglas pedidas (como tu captura):
-      - estado="n" para marcadas, "" para no marcadas
-      - ultimo="X" SOLO en <balota numero="1">, X = último marcado; todas las demás "", incluida la balota X
-      - ultimos5: más reciente → más antiguo
-      - ultimoMarcado: último marcado
-    """
-    _ensure_bingo_xml()
-    tree = ET.parse(BINGO_XML); root = tree.getroot()
-    balotas_el = root.find("balotas")
-
-    marked = set(int(x) for x in stack)
-    last = stack[-1] if stack else None
-
-    # Limpia 'estado' y 'ultimo'
-    for b in balotas_el.findall("balota"):
-        b.set("estado", "")
-        b.set("ultimo", "")
-
-    # Marca presentes
-    for b in balotas_el.findall("balota"):
-        n = int(b.get("numero"))
-        if n in marked:
-            b.set("estado", str(n))
-
-    # 👉 "ultimo" solo en la balota numero="1"
-    first = balotas_el.find(".//balota[@numero='1']")
-    if first is not None:
-        first.set("ultimo", str(last) if last is not None else "")
-
-    # ultimos5 (más reciente primero)
-    ult5 = list(reversed(stack[-5:])) if stack else []
-    root.find("ultimos5").text = ",".join(str(x) for x in ult5)
-
-    root.find("totalMarcadas").text = str(len(marked))
-    root.find("ultimoMarcado").text = (str(last) if last is not None else "")
-
-    tree.write(BINGO_XML, encoding="utf-8", xml_declaration=True)
-
-def _to_iso_date(s: str) -> str:
-    s = (s or "").strip()
-    if not s: return ""
-    if "/" in s:
-        try:
-            d, m, y = s.split("/")
-            return f"{y}-{int(m):02d}-{int(d):02d}"
-        except Exception:
-            pass
-    try:
-        return str(date.fromisoformat(s))
-    except Exception:
-        return ""
-
-def _get_sorteo_fecha() -> str:
-    for path in SORTEO_JSON_CANDIDATES:
-        js = _json_read(path)
-        if isinstance(js, dict):
-            for k in ("fecha", "fecha_sorteo", "date"):
-                if js.get(k):
-                    iso = _to_iso_date(str(js[k]))
-                    if iso: return iso
-    try:
-        if os.path.exists(SORTEOS_XML):
-            root = ET.parse(SORTEOS_XML).getroot()
-            act = root.find(".//dia[@activo='1']") or root.find(".//dia[@active='1']")
-            if act is not None and (act.get("fecha") or "").strip():
-                return _to_iso_date(act.get("fecha"))
-    except Exception:
-        pass
-    return date.today().isoformat()
-
-# ============================================================
-#  SPINNERS: estado persistente + XML fallback + vMix API
-# ============================================================
-def _ensure_vmix_xml():
-    if os.path.exists(VMIX_SPINNERS_XML):
-        return
-    root = ET.Element("vmix")
-    ET.SubElement(root, "overlay", index=str(VMIX_OVERLAY_INDEX), state="off")
-    ET.SubElement(root, "spinner", state="idle", locked="0")
-    nums = ET.SubElement(root, "nums")
-    for _ in range(20):
-        ET.SubElement(nums, "n", v="")
-    ET.ElementTree(root).write(VMIX_SPINNERS_XML, encoding="utf-8", xml_declaration=True)
-
-def _read_spinners_list():
-    for path in (VMIX_SPINNERS_XML, SPINNERS_XML):
-        try:
-            if not os.path.exists(path): continue
-            root = ET.parse(path).getroot()
-            out = []
-            for n in root.findall(".//n"):
-                val = (n.attrib.get("v") if hasattr(n, "attrib") else None) or (n.text or "")
-                val = re.sub(r"\D", "", val)[:4]
-                out.append(val.zfill(4) if val else "")
-            out = (out + [""] * 20)[:20]
-            return out
-        except Exception:
-            pass
-    return [""] * 20
-
-def _write_spinners_list(values):
-    _ensure_vmix_xml()
-    tree = ET.parse(VMIX_SPINNERS_XML); root = tree.getroot()
-    nums = root.find("nums")
-    if nums is None:
-        nums = ET.SubElement(root, "nums")
-    for el in list(nums):
-        nums.remove(el)
-    for i in range(20):
-        v = ""
-        if i < len(values):
-            raw = str(values[i]).strip()
-            v = re.sub(r"\D", "", raw)[:4]
-            if v: v = v.zfill(4)
-        ET.SubElement(nums, "n", v=v)
-    tree.write(VMIX_SPINNERS_XML, encoding="utf-8", xml_declaration=True)
-
-def _read_spinner_state():
-    st = _json_read(SPINNERS_STATE_JSON) or {}
-    return {
-        "running": bool(st.get("running", False)),
-        "locked":  bool(st.get("locked", False)),
-        "overlay_on": bool(st.get("overlay_on", False)),
-        "ts": st.get("ts") or datetime.utcnow().isoformat(),
-    }
-
-def _write_spinner_state(running=None, locked=None, overlay_on=None):
-    cur = _read_spinner_state()
-    if running is not None:   cur["running"] = bool(running)
-    if locked is not None:    cur["locked"] = bool(locked)
-    if overlay_on is not None:cur["overlay_on"] = bool(overlay_on)
-    cur["ts"] = datetime.utcnow().isoformat()
-    _json_write(SPINNERS_STATE_JSON, cur)
-
-    # Espejo en XML
-    _ensure_vmix_xml()
-    tree = ET.parse(VMIX_SPINNERS_XML); root = tree.getroot()
-    spn = root.find("spinner") or ET.SubElement(root, "spinner")
-    spn.set("state", "running" if cur["running"] else "idle")
-    spn.set("locked", "1" if cur["locked"] else "0")
-    ov = root.find("overlay") or ET.SubElement(root, "overlay", index=str(VMIX_OVERLAY_INDEX))
-    ov.set("index", str(VMIX_OVERLAY_INDEX))
-    ov.set("state", "on" if cur["overlay_on"] else "off")
-    tree.write(VMIX_SPINNERS_XML, encoding="utf-8", xml_declaration=True)
-    return cur
-
-def _vmix_call(function, **params):
-    import socket
-    try:
-        import requests
-    except Exception:
-        return False, "requests-not-available"
-    base = f"http://{VMIX_HOST}:{VMIX_PORT}/api/"
-    q = {"Function": function}
-    q.update({k: str(v) for k, v in params.items() if v is not None})
-    try:
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.settimeout(0.5)
-        sock.connect((VMIX_HOST, int(VMIX_PORT)))
-        sock.close()
-    except Exception:
-        return False, "vmix-offline"
-    try:
-        r = requests.get(base, params=q, timeout=1.5)
-        if r.status_code == 200:
-            return True, "ok"
-        return False, f"http-{r.status_code}"
-    except Exception as e:
-        return False, f"err:{e}"
-
-def _overlay_on():
-    ok, msg = _vmix_call(f"OverlayInput{VMIX_OVERLAY_INDEX}On", Input=VMIX_SPINNER_INPUT)
-    st = _write_spinner_state(overlay_on=True)
-    return ok, msg, st
-
-def _overlay_off():
-    ok, msg = _vmix_call(f"OverlayInput{VMIX_OVERLAY_INDEX}Off", Input=VMIX_SPINNER_INPUT)
-    st = _write_spinner_state(overlay_on=False)
-    return ok, msg, st
-
-# ============================================================
-#  FIGURAS HELPERS
-# ============================================================
-def _pick_figuras_xml_for_fecha(fecha: str) -> str:
-    candidates = [
-        os.path.join(FIGURAS_DIR, f"{fecha}.xml"),
-        FIGURAS_DEL_DIA_XML,
-        DATOS_FIGURAS_XML,
-    ]
-    for c in candidates:
-        if os.path.exists(c): return c
-    root = ET.Element("figuras")
-    ET.ElementTree(root).write(FIGURAS_DEL_DIA_XML, encoding="utf-8", xml_declaration=True)
-    return FIGURAS_DEL_DIA_XML
-
-def _parse_valor_int(v):
-    try:
-        return int(float(str(v).replace(",", ".").strip()))
-    except Exception:
-        return 0
-
-def _parse_fig_item_from_text(txt: str):
-    s = (txt or "").strip()
-    if not s: return None
-    s = s.replace("—", "-").replace("–", "-")
-    m = re.match(r"^(.*?)[\s:\-]+(\d+(\.\d+)?)\s*$", s)
-    if m:
-        nombre = m.group(1).strip()
-        valor  = _parse_valor_int(m.group(2))
-        if nombre:
-            return {"nombre": nombre, "valor": valor}
-    return {"nombre": s, "valor": 0}
-
-def _read_figuras_from_xml(path_xml: str):
-    out = []
-    try:
-        root = ET.parse(path_xml).getroot()
-        for f in root.findall(".//figura"):
-            nombre = (f.get("nombre") or f.findtext("figuraNOMBRE") or "").strip()
-            valor  = _parse_valor_int(f.get("valor") or f.findtext("figuraVALOR") or 0)
-            estado = (f.get("estado") or "").strip().upper() or "INACTIVO"
-            if nombre:
-                out.append({"nombre": nombre, "valor": valor, "estado": estado})
-    except Exception:
-        pass
-    return out
-
-def _merge_estado_desde_xml(path_xml: str, base_list: list):
-    try:
-        current = _read_figuras_from_xml(path_xml)
-        m = {c["nombre"].strip().lower(): c for c in current}
-        out = []
-        for f in base_list:
-            key = f["nombre"].strip().lower()
-            estado = (m.get(key, {}).get("estado") or f.get("estado") or "INACTIVO").upper()
-            out.append({"nombre": f["nombre"], "valor": _parse_valor_int(f["valor"]), "estado": estado})
-        return out
-    except Exception:
-        return base_list
-
-def _load_figuras_desde_json_o_xml(fecha: str):
-    for path in SORTEO_JSON_CANDIDATES:
-        js = _json_read(path)
-        if isinstance(js, dict):
-            for k in ("figuras_del_dia", "figs_del_dia", "figuras"):
-                raw = js.get(k)
-                if isinstance(raw, list) and raw:
-                    out = []
-                    for item in raw:
-                        if isinstance(item, dict):
-                            nombre = (item.get("nombre") or item.get("name") or "").strip()
-                            valor  = _parse_valor_int(item.get("valor") or item.get("value") or 0)
-                            if nombre:
-                                out.append({"nombre": nombre, "valor": valor, "estado": "INACTIVO"})
-                        else:
-                            p = _parse_fig_item_from_text(str(item))
-                            if p:
-                                out.append({"nombre": p["nombre"], "valor": p["valor"], "estado": "INACTIVO"})
-                    path_xml = _pick_figuras_xml_for_fecha(fecha)
-                    out = _merge_estado_desde_xml(path_xml, out)
-                    return (out, path_xml)
-    path_xml = _pick_figuras_xml_for_fecha(fecha)
-    figs = _read_figuras_from_xml(path_xml)
-    return (figs, path_xml)
-
-def _write_figure_state_to_xml(path_xml: str, nombre: str, estado: str, valor: int | None = None):
-    estado = (estado or "").strip().upper()
-    if estado not in ("INACTIVO", "SE FUE", "SE QUEDO"):
-        estado = "INACTIVO"
-    if not os.path.exists(path_xml):
-        root = ET.Element("figuras")
-        ET.ElementTree(root).write(path_xml, encoding="utf-8", xml_declaration=True)
-    tree = ET.parse(path_xml); root = tree.getroot()
-    target = None
-    for f in root.findall(".//figura"):
-        n = (f.get("nombre") or f.findtext("figuraNOMBRE") or "").strip()
-        if n.lower() == nombre.strip().lower():
-            target = f; break
-    if target is None:
-        target = ET.SubElement(root, "figura", nombre=nombre)
-    target.set("nombre", nombre)
-    target.set("estado", estado)
-    if valor is not None:
-        target.set("valor", str(_parse_valor_int(valor)))
-    else:
-        if target.get("valor") is None:
-            target.set("valor", "0")
-    tree.write(path_xml, encoding="utf-8", xml_declaration=True)
-    return True
-
-# ============================================================
-#  RUTAS UI
-# ============================================================
-@juego_bp.route("/")
-def juego_ui():
-    try:
-        if require_session and not session.get("usuario"):
-            return redirect(url_for("login"))
-    except Exception:
-        pass
-    return render_template("juego.html")
-
-@juego_bp.get("/spinner_overlay")
-def spinner_overlay_ui():
-    return render_template("spinner_overlay.html")
-
-# ============================================================
-#  RUTAS: XML públicos (no cache)
-# ============================================================
-def _no_cache_file(path, mime="application/xml"):
-    resp = make_response(send_file(path, mimetype=mime))
-    resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
-    resp.headers["Pragma"] = "no-cache"
-    resp.headers["Expires"] = "0"
-    return resp
-
-@juego_bp.get("/xml/bingo")
-def juego_xml_bingo():
-    _ensure_bingo_xml()
-    return _no_cache_file(BINGO_XML)
-
-@juego_bp.get("/xml/spinners")
-def juego_xml_spinners():
-    _ensure_vmix_xml()
-    return _no_cache_file(VMIX_SPINNERS_XML)
-
-# ============================================================
-#  RUTAS ESTADO JUEGO / SPINNERS
-# ============================================================
-@juego_bp.get("/estado.json")
-def juego_estado_json():
-    stack = _read_stack()
-    last = (stack[-1] if stack else None)
-    spinners = _read_spinners_list()
-    spn_state = _read_spinner_state()
-    return jsonify(
-        ok=True,
-        stack=stack,
-        last=last,
-        total=len(stack),
-        ultimos5=list(reversed(stack[-5:])),
-        spinners=spinners,
-        spinner_state=spn_state
-    )
-
-@juego_bp.get("/spinners")
-def juego_spinners():
-    return jsonify(ok=True, spinners=_read_spinners_list(), state=_read_spinner_state())
-
-@juego_bp.post("/spinners/update_list")
-def juego_spinners_update_list():
-    data = request.get_json(silent=True) or {}
-    values = data.get("values") or data.get("spinners") or []
-    if not isinstance(values, list):
-        return jsonify(ok=False, error="values debe ser lista"), 400
-    _write_spinners_list(values)
-    return jsonify(ok=True, spinners=_read_spinners_list())
-
-@juego_bp.post("/spinners/launch")
-def juego_spinners_launch():
-    st = _read_spinner_state()
-    if st["locked"]:
-        return jsonify(ok=False, error="Spinners bloqueados. Desbloquea para lanzar."), 409
-    ok, msg, _ = _overlay_on()
-    st = _write_spinner_state(running=True, locked=False, overlay_on=True)
-    return jsonify(ok=True, vmix_ok=ok, vmix_msg=msg, state=st)
-
-@juego_bp.post("/spinners/lock")
-def juego_spinners_lock():
-    ok, msg, _ = _overlay_off()
-    st = _write_spinner_state(running=False, locked=True, overlay_on=False)
-    return jsonify(ok=True, vmix_ok=ok, vmix_msg=msg, state=st)
-
-@juego_bp.post("/spinners/unlock")
-def juego_spinners_unlock():
-    st = _write_spinner_state(locked=False)
-    return jsonify(ok=True, state=st)
-
-@juego_bp.post("/spinners/overlay")
-def juego_spinners_overlay():
-    data = request.get_json(silent=True) or {}
-    action = (data.get("action") or "").lower()
-    if action not in ("on", "off"):
-        return jsonify(ok=False, error="action debe ser 'on' o 'off'"), 400
-    if action == "on":
-        ok, msg, st = _overlay_on()
-    else:
-        ok, msg, st = _overlay_off()
-    return jsonify(ok=True, vmix_ok=ok, vmix_msg=msg, state=st)
-
-# ============================================================
-#  RUTAS JUEGO
-# ============================================================
-@juego_bp.post("/marcar")
-def juego_marcar():
-    data = request.get_json(silent=True) or {}
-    numero = str(data.get("numero", "")).strip()
-    if not numero.isdigit(): return jsonify(success=False, error="Número inválido"), 400
-    n = int(numero)
-    if n < 1 or n > 75: return jsonify(success=False, error="Rango 1–75"), 400
-    stack = _read_stack()
-    if n not in stack:
-        stack.append(n)
-        _write_stack(stack)
-        _sync_bingo_xml_from_stack(stack)
-    try:
-        tree = ET.parse(BINGO_XML); root = tree.getroot()
-        st = root.find("stinger") or ET.SubElement(root, "stinger")
-        st.text = str(n)
-        tree.write(BINGO_XML, encoding="utf-8", xml_declaration=True)
-    except Exception:
-        pass
-    return jsonify(success=True, stack=stack, last=n, total=len(stack), ultimos5=list(reversed(stack[-5:])))
-
-@juego_bp.post("/reversa")
-def juego_reversa():
-    data = request.get_json(silent=True) or {}
-    stack = _read_stack()
-    if str(data.get("all", "")).lower() in ("1", "true", "si", "sí", "yes"):
-        stack = []
-    else:
-        if stack: stack.pop()
-    _write_stack(stack)
-    _sync_bingo_xml_from_stack(stack)
-    try:
-        tree = ET.parse(BINGO_XML); root = tree.getroot()
-        st = root.find("stinger") or ET.SubElement(root, "stinger")
-        st.text = (str(stack[-1]) if stack else "")
-        tree.write(BINGO_XML, encoding="utf-8", xml_declaration=True)
-    except Exception:
-        pass
-    return jsonify(success=True, stack=stack, last=(stack[-1] if stack else None), total=len(stack), ultimos5=list(reversed(stack[-5:])))
-
-@juego_bp.post("/reset")
-def juego_reset():
-    _write_stack([])
-    _sync_bingo_xml_from_stack([])
-    try:
-        tree = ET.parse(BINGO_XML); root = tree.getroot()
-        st = root.find("stinger") or ET.SubElement(root, "stinger"); st.text = ""
-        tree.write(BINGO_XML, encoding="utf-8", xml_declaration=True)
-    except Exception:
-        pass
-    _overlay_off()
-    _write_spinner_state(running=False, locked=False, overlay_on=False)
-    return jsonify(success=True)
-
-@juego_bp.post("/activar_stinger")
-def juego_activar_stinger():
-    data = request.get_json(silent=True) or {}
-    numero = str(data.get("numero", "")).strip()
-    if not numero:
-        return jsonify(success=False, error="numero requerido"), 400
-    _ensure_bingo_xml()
-    tree = ET.parse(BINGO_XML); root = tree.getroot()
-    st = root.find("stinger") or ET.SubElement(root, "stinger")
-    st.text = numero
-    tree.write(BINGO_XML, encoding="utf-8", xml_declaration=True)
-    return jsonify(success=True)
-
-# ============================================================
-#  SORTEO / FIGURAS
-# ============================================================
-@juego_bp.get("/sorteo_fecha")
-def juego_sorteo_fecha():
-    return jsonify(ok=True, fecha=_get_sorteo_fecha())
-
-@juego_bp.get("/figuras")
-def juego_figuras_list():
-    fecha = _get_sorteo_fecha()
-    figuras, path_xml = _load_figuras_desde_json_o_xml(fecha)
-    return jsonify(ok=True, fecha=fecha, origen_xml=path_xml, figuras=figuras)
-
-@juego_bp.post("/figuras/estado")
-def juego_figuras_estado():
-    data = request.get_json(silent=True) or {}
-    nombre = (data.get("nombre") or "").strip()
-    estado = (data.get("estado") or "").strip().upper()
-    valor  = data.get("valor", None)
-    if not nombre:
-        return jsonify(ok=False, error="nombre requerido"), 400
-    if estado not in ("INACTIVO", "SE FUE", "SE QUEDO"):
-        return jsonify(ok=False, error="estado inválido"), 400
-    fecha = _get_sorteo_fecha()
-    path_xml = _pick_figuras_xml_for_fecha(fecha)
-    ok = _write_figure_state_to_xml(path_xml, nombre, estado, valor)
-    if not ok:
-        return jsonify(ok=False, error="no se pudo escribir XML"), 500
-    cache = _json_read(FIG_ESTADOS_JSON) or {}
-    cache.setdefault(fecha, {})
-    cache[fecha][nombre] = estado
-    _json_write(FIG_ESTADOS_JSON, cache)
-    figs = _read_figuras_from_xml(path_xml)
-    return jsonify(ok=True, fecha=fecha, origen_xml=path_xml, figuras=figs)
-
-@juego_bp.post("/figuras/sync-xml")
-def juego_figuras_sync_xml():
-    fecha = _get_sorteo_fecha()
-    cache = _json_read(FIG_ESTADOS_JSON) or {}
-    estados = cache.get(fecha, {})
-    path_xml = _pick_figuras_xml_for_fecha(fecha)
-    actual = {f["nombre"].strip().lower(): f for f in _read_figuras_from_xml(path_xml)}
-    for nombre, estado in estados.items():
-        low = nombre.strip().lower()
-        valor = actual.get(low, {}).get("valor", 0)
-        _write_figure_state_to_xml(path_xml, nombre, estado, valor)
-    figs = _read_figuras_from_xml(path_xml)
-    return jsonify(ok=True, fecha=fecha, origen_xml=path_xml, figuras=figs)
-
-# ============================================================
-#  REGISTRO BP + INICIALIZACIÓN
-# ============================================================
-def register_juego(app):
-    app.register_blueprint(juego_bp)
-    _ensure_bingo_xml()
-    _ensure_hist()
-    _ensure_vmix_xml()
-    _write_spinner_state(running=False, locked=False, overlay_on=False)
-
-try:
-    app  # noqa
-    if "juego" not in [bp.name for bp in app.blueprints.values()]:
-        register_juego(app)
-except Exception:
-    pass
-
-
-
-# ================== FIN JUEGO ==================
-
-# inicio spinners #
-
-
-
-# ===================== SPINNERS API + OVERLAY =====================
-
-# ===========================
-# ==== [ SPINNERS + VMIX OVERLAY ] ============================================
-import os, xml.etree.ElementTree as ET
-from datetime import datetime
-from flask import request, jsonify, render_template
-
-# ---------- Config ----------
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DATA_DIR = globals().get("DATA_DIR", os.path.join(BASE_DIR, "DATA"))
-DB_DIR = os.path.join(DATA_DIR, "static", "db")
-os.makedirs(DB_DIR, exist_ok=True)
-
-VMIX_SPINNERS_XML = os.path.join(DB_DIR, "vmix_spinners.xml")
-SPINNERS_XML      = os.path.join(DB_DIR, "spinners.xml")
-
-# Cambia esto si tu vMix API está en otra IP/puerto:
-# Ej: "http://127.0.0.1:8088/api"
-VMIX_API_URL = os.getenv("VMIX_API_URL", "").strip()  # vacío = desactivado
-VMIX_OVERLAY_INDEX = int(os.getenv("VMIX_OVERLAY_INDEX", "1"))  # Overlay 1 por defecto
-
-# ---------- Utilidades XML ----------
-def _ensure_xml_files():
-    """Crea plantillas XML si no existen."""
-    if not os.path.exists(SPINNERS_XML):
-        root = ET.Element("spinners")
-        # 20 slots inicialmente vacíos (0000) y unlocked
-        for i in range(1, 21):
-            ET.SubElement(root, "spinner", index=str(i), value="0000", locked="0", used="0")
-        ET.indent(root, space="  ")
-        ET.ElementTree(root).write(SPINNERS_XML, encoding="utf-8", xml_declaration=True)
-
-    if not os.path.exists(VMIX_SPINNERS_XML):
-        root = ET.Element("vmix")
-        overlay = ET.SubElement(root, "overlay", index=str(VMIX_OVERLAY_INDEX), state="off")
-        # espejo de los 20
-        group = ET.SubElement(root, "spinners")
-        for i in range(1, 21):
-            ET.SubElement(group, "spinner", index=str(i), value="0000", locked="0", used="0")
-        ET.indent(root, space="  ")
-        ET.ElementTree(root).write(VMIX_SPINNERS_XML, encoding="utf-8", xml_declaration=True)
-
-def _read_spinners():
-    _ensure_xml_files()
-    tree = ET.parse(SPINNERS_XML); root = tree.getroot()
-    data = []
-    for node in root.findall("spinner"):
-        data.append({
-            "index": int(node.get("index", "0")),
-            "value": node.get("value", "0000"),
-            "locked": node.get("locked", "0") == "1",
-            "used": node.get("used", "0") == "1",
-        })
-    return data
-
-def _write_spinners(spinners):
-    root = ET.Element("spinners")
-    for s in spinners:
-        ET.SubElement(root, "spinner",
-                      index=str(s["index"]),
-                      value=str(s["value"]).zfill(4)[:4],
-                      locked="1" if s.get("locked") else "0",
-                      used="1" if s.get("used") else "0")
-    ET.indent(root, space="  ")
-    ET.ElementTree(root).write(SPINNERS_XML, encoding="utf-8", xml_declaration=True)
-
-def _read_vmix():
-    _ensure_xml_files()
-    t = ET.parse(VMIX_SPINNERS_XML); r = t.getroot()
-    return t, r
-
-def _mirror_to_vmix(spinners, overlay_state=None):
-    """Espeja lista de spinners a vmix_spinners.xml y opcionalmente cambia overlay on/off."""
-    t, r = _read_vmix()
-    # overlay
-    overlay = r.find("overlay")
-    if overlay is None:
-        overlay = ET.SubElement(r, "overlay", index=str(VMIX_OVERLAY_INDEX), state="off")
-    if overlay_state in ("on", "off"):
-        overlay.set("state", overlay_state)
-
-    # grupo
-    group = r.find("spinners")
-    if group is None:
-        group = ET.SubElement(r, "spinners")
-    # limpia
-    for child in list(group):
-        group.remove(child)
-    # reescribe
-    for s in spinners:
-        ET.SubElement(group, "spinner",
-                      index=str(s["index"]),
-                      value=str(s["value"]).zfill(4)[:4],
-                      locked="1" if s.get("locked") else "0",
-                      used="1" if s.get("used") else "0")
-    ET.indent(r, space="  ")
-    t.write(VMIX_SPINNERS_XML, encoding="utf-8", xml_declaration=True)
-
-# ---------- vMix API (opcional) ----------
-def _vmix_call(function_name, **params):
-    """
-    Llama al API HTTP de vMix si VMIX_API_URL está definido.
-    Ej: _vmix_call("OverlayInput1On")
-    """
-    if not VMIX_API_URL:
-        return {"ok": False, "msg": "VMIX_API_URL no configurado"}
-    try:
-        import requests
-        # Construye query tipo: ?Function=OverlayInput1On
-        q = {"Function": function_name}
-        # anexa params si aplica
-        for k, v in params.items():
-            q[k] = v
-        resp = requests.get(VMIX_API_URL, params=q, timeout=3)
-        return {"ok": resp.ok, "status": resp.status_code}
-    except Exception as e:
-        return {"ok": False, "msg": str(e)}
-
-# ---------- Rutas JSON ----------
-@app.get("/juego/spinners")
-def get_spinners():
-    """
-    Devuelve los 20 spinners: index, value (0000-9999), locked, used
-    """
-    data = sorted(_read_spinners(), key=lambda x: x["index"])
-    return jsonify(data)
-
-@app.post("/juego/spinners/generar")
-def post_spinner_generar():
-    """
-    Pone el visor del spinner (index) en 0000, no toca 'value' si ya existía
-    pero deja 'used=0' y 'locked=0' si quieres relanzar.
-    Body: {index:int}
-    """
-    payload = request.get_json(force=True, silent=True) or {}
-    index = int(payload.get("index", 1))
-    sp = _read_spinners()
-    found = None
-    for s in sp:
-        if s["index"] == index:
-            found = s; break
-    if not found:
-        return jsonify({"ok": False, "msg": "index inválido"}), 400
-
-    # GENERAR → reset visual, desbloqueado y sin usado
-    found["value"] = "0000"
-    found["used"] = False
-    found["locked"] = False
-    _write_spinners(sp)
-    _mirror_to_vmix(sp)   # espejo
-
-    return jsonify({"ok": True, "index": index, "value": found["value"]})
-
-@app.post("/juego/spinners/lanzar")
-def post_spinner_lanzar():
-    """
-    Lanza el spinner al valor objetivo, marca used=1, locked=1 y enciende Overlay 1 (opcional).
-    Body: {index:int, target:str|int, overlay_on:bool}
-    """
-    payload = request.get_json(force=True, silent=True) or {}
-    index = int(payload.get("index", 1))
-    target = str(payload.get("target", "0000")).zfill(4)[:4]
-    overlay_on = bool(payload.get("overlay_on", True))
-
-    sp = _read_spinners()
-    found = None
-    for s in sp:
-        if s["index"] == index:
-            found = s; break
-    if not found:
-        return jsonify({"ok": False, "msg": "index inválido"}), 400
-    if found.get("locked"):
-        return jsonify({"ok": False, "msg": "Este spinner está bloqueado"}), 403
-
-    # asigna valor, usa y bloquea
-    found["value"] = target
-    found["used"] = True
-    found["locked"] = True
-    _write_spinners(sp)
-
-    # overlay ON (XML) y (opcional) API vMix
-    _mirror_to_vmix(sp, overlay_state="on" if overlay_on else None)
-    vmix_api = None
-    if overlay_on:
-        # Ej.: OverlayInput1On, OverlayInput1Off  (vMix es 1-indexed)
-        vmix_api = _vmix_call(f"OverlayInput{VMIX_OVERLAY_INDEX}On")
-
-    return jsonify({"ok": True, "index": index, "value": target, "vmix_api": vmix_api})
-
-@app.post("/juego/spinners/unlock")
-def post_spinner_unlock():
-    """
-    Desbloquea un spinner (o todos). Body: {index:int} o {all:true}
-    """
-    payload = request.get_json(force=True, silent=True) or {}
-    all_flag = bool(payload.get("all"))
-    sp = _read_spinners()
-
-    if all_flag:
-        for s in sp:
-            s["locked"] = False
-        _write_spinners(sp); _mirror_to_vmix(sp)
-        return jsonify({"ok": True, "msg": "Todos desbloqueados"})
-
-    index = int(payload.get("index", 1))
-    for s in sp:
-        if s["index"] == index:
-            s["locked"] = False
-            _write_spinners(sp); _mirror_to_vmix(sp)
-            return jsonify({"ok": True, "index": index, "locked": False})
-    return jsonify({"ok": False, "msg": "index inválido"}), 400
-
-@app.post("/juego/spinners/lock")
-def post_spinner_lock():
-    """
-    Bloquea un spinner (o todos). Body: {index:int} o {all:true}
-    """
-    payload = request.get_json(force=True, silent=True) or {}
-    all_flag = bool(payload.get("all"))
-    sp = _read_spinners()
-
-    if all_flag:
-        for s in sp:
-            s["locked"] = True
-        _write_spinners(sp); _mirror_to_vmix(sp)
-        return jsonify({"ok": True, "msg": "Todos bloqueados"})
-
-    index = int(payload.get("index", 1))
-    for s in sp:
-        if s["index"] == index:
-            s["locked"] = True
-            _write_spinners(sp); _mirror_to_vmix(sp)
-            return jsonify({"ok": True, "index": index, "locked": True})
-    return jsonify({"ok": False, "msg": "index inválido"}), 400
-
-@app.post("/juego/spinners/reset_used")
-def post_spinner_reset_used():
-    """
-    Resetea 'used' de todos a 0 (útil al preparar un nuevo sorteo).
-    """
-    sp = _read_spinners()
-    for s in sp:
-        s["used"] = False
-        s["locked"] = False
-        s["value"] = "0000"
-    _write_spinners(sp)
-    _mirror_to_vmix(sp, overlay_state="off")
-    return jsonify({"ok": True})
-
-# ---------- Rutas Overlay (HTML) ----------
-@app.get("/juego/spinner_overlay")
-def spinner_overlay_page():
-    """
-    Overlay transparente para vMix (usa tu spinner_overlay.html)
-    """
-    # Si usas render_template con archivo físico:
-    return render_template("spinner_overlay.html")
-
-# (Opcional) API rápida para apagar overlay vía backend + vMix API
-@app.post("/vmix/overlay/off")
-def vmix_overlay_off():
-    sp = _read_spinners()
-    _mirror_to_vmix(sp, overlay_state="off")
-    vmix_api = _vmix_call(f"OverlayInput{VMIX_OVERLAY_INDEX}Off")
-    return jsonify({"ok": True, "vmix_api": vmix_api})
-# ==== [ FIN SPINNERS ] ========================================================
-
-
-
-
-
-
-#--------FIN DE SPINNERS------------##
-
-
-
-
+# ====== RUTAS DE DEPURACIÓN ======
+@app.route('/_debug_routes')
+def _debug_routes():
+    routes = sorted(rule.rule for rule in app.url_map.iter_rules())
+    return '<br>'.join(routes)
+
+@app.route('/_login_demo')
+def _login_demo():
+    session['usuario'] = 'Administrador'
+    session['avatar'] = 'avatar-male.png'
+    return redirect(url_for('dashboard'))
+
+# ====== INICIALIZACIÓN ======
+def initialize_system():
+    """Inicializa todos los componentes del sistema."""
+    print("Inicializando sistema GL Bingo con detección de ganadores...")
+    
+    # Asegurar archivos XML críticos
+    if not os.path.exists(BINGO_XML):
+        _actualizar_xml_bingo()
+    
+    # Crear directorios necesarios
+    for dir_path in [REINTEGROS_DIR, BANK_FILES, GASTO_FILES, RECIBOS_DIR]:
+        os.makedirs(dir_path, exist_ok=True)
+    
+    # Inicializar juego para hoy
+    fecha_hoy = date.today().isoformat()
+    _inicializar_juego(fecha_hoy)
+    
+    print(f"Sistema inicializado para {fecha_hoy}")
+    print(f"- Boletos cargados: {len(_JUEGO_ESTADO['boletos'])}")
+    print(f"- Figuras cargadas: {len(_JUEGO_ESTADO['figuras'])}")
+    print(f"- Ganadores existentes: {len(_JUEGO_ESTADO['ganadores'])}")
+
+# ====== EJECUCIÓN ======
 if __name__ == "__main__":
-    import os
+    initialize_system()
     port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port)
-
+    app.run(host="0.0.0.0", port=port, debug=True)
 
 
 
