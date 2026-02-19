@@ -1,0 +1,218 @@
+{
+  "2026-02-15": [],
+  "2026-02-16": [
+    {
+      "fecha": "2026-02-16",
+      "figura": "5TA LINEA",
+      "fig_code": "5TAL",
+      "valor": 0.0,
+      "serie": "Srs_Manila.xlsx",
+      "vendedor": "",
+      "planilla": "",
+      "rango": "",
+      "sector": "",
+      "tabla": "265",
+      "ultima_bola": 11,
+      "numero_ganador": 11,
+      "numeros_figura": [
+        11,
+        22,
+        39,
+        54,
+        68
+      ],
+      "grid": [
+        [
+          "7",
+          "28",
+          "37",
+          "48",
+          "65"
+        ],
+        [
+          "10",
+          "18",
+          "33",
+          "53",
+          "61"
+        ],
+        [
+          "5",
+          "27",
+          "0",
+          "57",
+          "75"
+        ],
+        [
+          "14",
+          "26",
+          "34",
+          "58",
+          "72"
+        ],
+        [
+          "11",
+          "22",
+          "39",
+          "54",
+          "68"
+        ]
+      ],
+      "required_pos": [
+        "B5",
+        "I5",
+        "N5",
+        "G5",
+        "O5"
+      ],
+      "color_map_pos": {
+        "B1": "#FFFFFF",
+        "I1": "#FFFFFF",
+        "N1": "#FFFFFF",
+        "G1": "#FFFFFF",
+        "O1": "#FFFFFF",
+        "B2": "#FFFFFF",
+        "I2": "#FFFFFF",
+        "N2": "#FFFFFF",
+        "G2": "#FFFFFF",
+        "O2": "#FFFFFF",
+        "B3": "#FFFFFF",
+        "I3": "#FFFFFF",
+        "N3": "#FFFFFF",
+        "G3": "#FFFFFF",
+        "O3": "#FFFFFF",
+        "B4": "#FFFFFF",
+        "I4": "#FFFFFF",
+        "N4": "#FFFFFF",
+        "G4": "#FFFFFF",
+        "O4": "#FFFFFF",
+        "B5": "#FF0000",
+        "I5": "#FF0000",
+        "N5": "#FF0000",
+        "G5": "#FF0000",
+        "O5": "#FF0000"
+      },
+      "marcados_nums": [
+        7,
+        11,
+        22,
+        26,
+        35,
+        39,
+        40,
+        41,
+        53,
+        54,
+        68
+      ]
+    }
+  ],
+  "2026-02-19": [
+    {
+      "fecha": "2026-02-19",
+      "figura": "PIRAMIDE 5",
+      "fig_code": "PIRA",
+      "valor": 25.0,
+      "serie": "Srs_ib1.xlsx",
+      "vendedor": "",
+      "planilla": "",
+      "rango": "",
+      "sector": "",
+      "tabla": "427",
+      "ultima_bola": 52,
+      "numero_ganador": 52,
+      "numeros_figura": [
+        40,
+        18,
+        52,
+        4,
+        64
+      ],
+      "grid": [
+        [
+          "1",
+          "28",
+          "40",
+          "49",
+          "74"
+        ],
+        [
+          "10",
+          "26",
+          "43",
+          "59",
+          "73"
+        ],
+        [
+          "3",
+          "18",
+          "0",
+          "52",
+          "72"
+        ],
+        [
+          "2",
+          "23",
+          "37",
+          "53",
+          "66"
+        ],
+        [
+          "4",
+          "17",
+          "39",
+          "46",
+          "64"
+        ]
+      ],
+      "required_pos": [
+        "N1",
+        "I3",
+        "G3",
+        "B5",
+        "O5"
+      ],
+      "color_map_pos": {
+        "B1": "#FFFFFF",
+        "I1": "#FFFFFF",
+        "N1": "#FF0000",
+        "G1": "#FFFFFF",
+        "O1": "#FFFFFF",
+        "B2": "#FFFFFF",
+        "I2": "#FFFFFF",
+        "N2": "#FFFFFF",
+        "G2": "#FFFFFF",
+        "O2": "#FFFFFF",
+        "B3": "#FFFFFF",
+        "I3": "#FF0000",
+        "N3": "#FFFFFF",
+        "G3": "#FF0000",
+        "O3": "#FFFFFF",
+        "B4": "#FFFFFF",
+        "I4": "#FFFFFF",
+        "N4": "#FFFFFF",
+        "G4": "#FFFFFF",
+        "O4": "#FFFFFF",
+        "B5": "#FF0000",
+        "I5": "#FFFFFF",
+        "N5": "#FFFFFF",
+        "G5": "#FFFFFF",
+        "O5": "#FF0000"
+      },
+      "marcados_nums": [
+        4,
+        18,
+        23,
+        26,
+        40,
+        42,
+        43,
+        52,
+        55,
+        64,
+        65,
+        71
+      ]
+    }
+  ]
+}

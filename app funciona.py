@@ -941,14 +941,14 @@ SERIE_MAP = {
 
 # ── OFFSETS EN CÓDIGO (boleto 0…7) ──
 per_cell_offsets = {
-    0: {"grid_x": -80, "grid_y": 20,  "info_x": 5,   "info_y": 20,  "rein_x": 215, "rein_y": 30},
-    1: {"grid_x": -160, "grid_y":20,  "info_x": -70, "info_y": 20,  "rein_x": 140, "rein_y": 30},
-    2: {"grid_x": -80, "grid_y": 80,  "info_x": 5,   "info_y": 82,  "rein_x": 215, "rein_y": -25},
-    3: {"grid_x": -160, "grid_y":80,  "info_x": -70, "info_y": 82,  "rein_x": 140, "rein_y": -25},
-    4: {"grid_x": -80, "grid_y": 140, "info_x": 5,   "info_y": 140, "rein_x": 215, "rein_y": -85},
-    5: {"grid_x": -160, "grid_y":140, "info_x": -70, "info_y": 140, "rein_x": 140, "rein_y": -85},
-    6: {"grid_x": -80, "grid_y": 200, "info_x": 5,   "info_y": 200, "rein_x": 215, "rein_y": -145},
-    7: {"grid_x": -160, "grid_y":200, "info_x": -70, "info_y": 200, "rein_x": 140, "rein_y": -145},
+    0: {"grid_x": -85, "grid_y": 20,  "info_x": 5,   "info_y": 20,  "rein_x": 215, "rein_y": 30},
+    1: {"grid_x": -162, "grid_y":20,  "info_x": -70, "info_y": 20,  "rein_x": 140, "rein_y": 30},
+    2: {"grid_x": -85, "grid_y": 85,  "info_x": 5,   "info_y": 82,  "rein_x": 215, "rein_y": -25},
+    3: {"grid_x": -162, "grid_y":85,  "info_x": -70, "info_y": 82,  "rein_x": 140, "rein_y": -25},
+    4: {"grid_x": -85, "grid_y": 143, "info_x": 5,   "info_y": 132, "rein_x": 215, "rein_y": -85},
+    5: {"grid_x": -162, "grid_y":143, "info_x": -70, "info_y": 132, "rein_x": 140, "rein_y": -85},
+    6: {"grid_x": -85, "grid_y": 205, "info_x": 5,   "info_y": 192, "rein_x": 215, "rein_y": -145},
+    7: {"grid_x": -162, "grid_y":205, "info_x": -70, "info_y": 192, "rein_x": 140, "rein_y": -145},
 }
 
 # ================== LOGS XML ==================
@@ -3996,245 +3996,88 @@ def api_figuras_por_fecha():
 import os, re, json, math, unicodedata, xml.etree.ElementTree as ET
 from datetime import date, datetime, timedelta
 from io import BytesIO
-# ====== PARCHE DE ARRANQUE (PÉGALO AL INICIO DE app.py) ======
-# Evita NameError en 'mm' incluso si el import real aparece más abajo
-try:
-    from reportlab.lib.units import mm  # import real si está disponible
-except Exception:
-    # Fallback: 1 mm en puntos (ReportLab trabaja en puntos)
-    mm = 2.834645669291339
 
-# Evita NameError en @login_required si Flask-Login no está instalado
-try:
-    from flask_login import login_required as _login_required
-    def login_required(f):
-        return _login_required(f)
-except Exception:
-    # Fallback 'no-op': deja pasar la vista sin exigir login
-    def login_required(f):
-        return f
-# ====== FIN PARCHE DE ARRANQUE ======
+from flask import Flask, render_template, request, jsonify, send_file, redirect, url_for
 
-import os
-import random
-import pandas as pd
-import qrcode
-import xml.etree.ElementTree as ET
-from datetime import date, datetime, timedelta
-from io import BytesIO, StringIO
-from flask import Flask, request, render_template, send_file, redirect, url_for, flash, session, jsonify, Response, render_template_string, current_app
-import shutil
-import csv
-import math
-import unicodedata
-import json
-import re
-from threading import RLock
-from functools import wraps
-from werkzeug.routing import BuildError
-from werkzeug.utils import secure_filename
-from zipfile import ZipFile
-from PyPDF2 import PdfMerger
-
-# ReportLab imports
+# ReportLab
+from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
-from reportlab.lib.pagesizes import A4, landscape
-from reportlab.lib.utils import ImageReader
-from reportlab.platypus import Table, TableStyle
 from reportlab.lib import colors
-from reportlab.lib.units import mm, cm, inch
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
+from reportlab.lib.utils import ImageReader  # tamaño real del logo
 
-# ---- Safe login URL helper (avoids BuildError for missing 'login' endpoint) ----
-def _login_url(**values):
+# ------------------ App ------------------
+try:
+    app  # noqa: F821
+except NameError:
+
+    app.secret_key = "dev"
+
+# ------------------ Ajustes visuales ------------------
+FIG_BLOCK_SCALE       = 0.99  # escala global de las figuras
+FIG_FIXED_COLS        = 8     # columnas por fila para figuras (auto si None)
+LOGO_SCALE_DEFAULT    = 1.30  # escala del logo (1.0 = normal)
+
+# ------------------ Paths ------------------
+BASE_DIR   = os.path.dirname(os.path.abspath(__file__))
+STATIC_DIR = os.path.join(BASE_DIR, "static")
+DB_DIR     = os.path.join(STATIC_DIR, "db")
+IMG_DIR    = os.path.join(STATIC_DIR, "img")
+FONTS_DIR  = os.path.join(STATIC_DIR, "fonts")
+LOGS_DIR   = os.path.join(STATIC_DIR, "LOGS")
+
+for p in (DB_DIR, IMG_DIR, FONTS_DIR):
+    os.makedirs(p, exist_ok=True)
+
+# XMLs base
+FIGURAS_FECHA_XML  = os.path.join(DB_DIR, "figuras_por_fecha.xml")
+DATOS_FIGURAS_XML  = os.path.join(DB_DIR, "datos_figuras.xml")
+RESULTADOS_XML     = os.path.join(DB_DIR, "resultados_sorteo.xml")
+
+# Layout JSON (diseñador)
+LAYOUT_JSON = os.path.join(DB_DIR, "boletin_layout.json")
+
+# ------------------ Helpers ------------------
+def _is_fecha_iso(s: str) -> bool:
+    return bool(re.fullmatch(r"\d{4}-\d{2}-\d{2}", (s or "").strip()))
+
+def _money(v):
     try:
-        return url_for('login', **values)
+        return f"${float(v):,.2f}"
     except Exception:
-        try:
-            return url_for('_login_demo', **values)
-        except Exception:
-            return '/_login_demo'
-# -------------------------------------------------------------------------------
+        return "$0.00"
 
-# ====== CONFIGURACIÓN GLOBAL ======
-app = Flask(__name__)
-app.secret_key = 'super_secreto_bingo_2025'
-app.config["JSON_AS_ASCII"] = False
-
-# ====== CONSTANTES Y PATHS (DEFINIDAS UNA SOLA VEZ) ======
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-STATIC_DIR = os.path.join(BASE_DIR, 'static')
-DATA_DIR = os.environ.get("DATA_DIR", os.path.join(BASE_DIR, "DATA"))
-PERSIST_ROOT = os.environ.get("DATA_DIR", "/data" if os.path.isdir("/data") else os.path.join(BASE_DIR, "DATA"))
-
-# Asegurar directorios principales
-os.makedirs(DATA_DIR, exist_ok=True)
-os.makedirs(PERSIST_ROOT, exist_ok=True)
-
-# ====== PATHS DE ARCHIVOS XML (SISTEMA CENTRALIZADO) ======
-def _persist_path(*rel_parts):
-    """Ruta dentro de DATA_DIR (crea la carpeta si no existe)."""
-    path = os.path.join(DATA_DIR, *rel_parts)
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    return path
-
-def _seed_file(src_rel, dst_abs):
-    """
-    Copia archivo inicial del repo → persistente, solo si NO existe.
-    """
-    src_abs = os.path.join(BASE_DIR, src_rel)
-    if not os.path.exists(dst_abs) and os.path.exists(src_abs):
-        shutil.copy2(src_abs, dst_abs)
-
-# Definir TODOS los paths XML en un solo lugar
-USUARIOS_XML            = _persist_path('usuarios', 'usuarios.xml')
-VENDEDORES_XML          = _persist_path('static', 'db', 'vendedores.xml')
-CAJA_XML                = _persist_path('static', 'db', 'caja.xml')
-ASIGNACIONES_XML        = _persist_path('static', 'db', 'asignaciones.xml')
-PAGOS_PREMIOS_XML       = _persist_path('static', 'db', 'pagos_premios.xml')
-RESULTADOS_SORTEO_XML   = _persist_path('static', 'db', 'resultados_sorteo.xml')
-SORTEOS_XML             = _persist_path('static', 'db', 'sorteos.xml')
-SPINNERS_XML            = _persist_path('static', 'db', 'spinners.xml')
-VMIX_REINTEGRO_XML      = _persist_path('static', 'db', 'vmix_reintegro.xml')
-VMIX_SPINNERS_XML       = _persist_path('static', 'db', 'vmix_spinners.xml')
-VMIX_VENDEDORES_XML     = _persist_path('static', 'db', 'vmix_vendedores.xml')
-VMIX_VENTAS_XML         = _persist_path('static', 'db', 'vmix_ventas.xml')
-LOGS_CAJA_XML           = _persist_path('static', 'LOGS', 'caja.xml')
-LOGS_IMPRESIONES_XML    = _persist_path('static', 'LOGS', 'impresiones.xml')
-CONTAB_BANCOS_XML       = _persist_path('static', 'CONTABILIDAD', 'bancos.xml')
-CONTAB_GASTOS_XML       = _persist_path('static', 'CONTABILIDAD', 'gastos.xml')
-CONTAB_SUELDOS_XML      = _persist_path('static', 'CONTABILIDAD', 'sueldos.xml')
-CONTAB_VENTAS_XML       = _persist_path('static', 'CONTABILIDAD', 'ventas.xml')
-IMPRESIONES_XML         = _persist_path('static', 'LOGS', 'impresiones.xml')  # Principal para logs
-FIGURAS_FECHA_XML       = _persist_path('static', 'db', 'figuras_por_fecha.xml')
-DATOS_FIGURAS_XML       = _persist_path('static', 'db', 'datos_figuras.xml')
-BINGO_XML               = _persist_path('static', 'db', 'datos_bingo.xml')
-BOLETOS_XML             = _persist_path('static', 'db', 'boletos.xml')  # Nuevo: para estructura de boletos
-GANADORES_XML           = _persist_path('static', 'db', 'ganadores.xml')  # Nuevo: para registrar ganadores
-
-# Directorios especiales
-REINTEGROS_DIR = os.path.join(DATA_DIR, "REINTEGROS")
-COMPROB_DIR = os.path.join(STATIC_DIR, "CONTABILIDAD", "comprobantes")
-BANK_FILES = os.path.join(COMPROB_DIR, "banco")
-GASTO_FILES = os.path.join(COMPROB_DIR, "gastos")
-RECIBOS_DIR = os.path.join(STATIC_DIR, "tmp", "recibos")
-
-# Crear todos los directorios necesarios
-for directory in [REINTEGROS_DIR, COMPROB_DIR, BANK_FILES, GASTO_FILES, RECIBOS_DIR]:
-    os.makedirs(directory, exist_ok=True)
-
-# Constantes del sistema
-BOLETOS_POR_PLANILLA = 20
-SERIE_MAP = {
-    "Srs_ib1.xlsx": "V",
-    "Srs_ib2.xlsx": "+",
-    "Srs_ib3.xlsx": "&",
-    "Srs_Manila.xlsx": "M"
-}
-
-ROLES = [
-    ('superadmin', 'Super Administrador'),
-    ('admin', 'Administrador'),
-    ('socio', 'Socio'),
-    ('cobrador', 'Cobrador'),
-    ('jugador', 'Jugador'),
-    ('impresion', 'Impresión'),
-]
-
-# ====== SISTEMA DE PERSISTENCIA UNIFICADO ======
-def _bind_persistent_dirs():
-    """Enlaza carpetas del repositorio con almacenamiento persistente."""
-    dirs_to_bind = [
-        "usuarios",
-        os.path.join("static", "db"),
-        os.path.join("static", "LOGS"),
-        os.path.join("static", "CONTABILIDAD"),
-    ]
-    
-    for repo_rel in dirs_to_bind:
-        repo_abs = os.path.join(BASE_DIR, repo_rel)
-        persist_abs = os.path.join(PERSIST_ROOT, repo_rel)
-        os.makedirs(persist_abs, exist_ok=True)
-        
-        # Copiar archivos iniciales si el directorio persistente está vacío
-        try:
-            if os.path.isdir(repo_abs) and not os.listdir(persist_abs):
-                for name in os.listdir(repo_abs):
-                    src = os.path.join(repo_abs, name)
-                    dst = os.path.join(persist_abs, name)
-                    if os.path.isdir(src):
-                        shutil.copytree(src, dst, dirs_exist_ok=True)
-                    elif os.path.isfile(src) and not os.path.exists(dst):
-                        shutil.copy2(src, dst)
-        except Exception as e:
-            print(f"Warning seeding {repo_rel}: {e}")
-        
-        # Crear enlace simbólico
-        try:
-            if not os.path.islink(repo_abs):
-                if os.path.isdir(repo_abs):
-                    shutil.rmtree(repo_abs)
-                elif os.path.exists(repo_abs):
-                    os.remove(repo_abs)
-                os.symlink(persist_abs, repo_abs, target_is_directory=True)
-        except Exception as e:
-            print(f"Warning binding {repo_rel}: {e}")
-
-# Ejecutar enlace de directorios
-_bind_persistent_dirs()
-
-# Sembrar archivos XML iniciales
-seed_pairs = [
-    ('usuarios/usuarios.xml', USUARIOS_XML),
-    ('static/db/vendedores.xml', VENDEDORES_XML),
-    ('static/db/caja.xml', CAJA_XML),
-    ('static/db/asignaciones.xml', ASIGNACIONES_XML),
-    ('static/db/pagos_premios.xml', PAGOS_PREMIOS_XML),
-    ('static/db/resultados_sorteo.xml', RESULTADOS_SORTEO_XML),
-    ('static/db/sorteos.xml', SORTEOS_XML),
-    ('static/db/spinners.xml', SPINNERS_XML),
-    ('static/db/vmix_reintegro.xml', VMIX_REINTEGRO_XML),
-    ('static/db/vmix_spinners.xml', VMIX_SPINNERS_XML),
-    ('static/db/vmix_vendedores.xml', VMIX_VENDEDORES_XML),
-    ('static/db/vmix_ventas.xml', VMIX_VENTAS_XML),
-    ('static/LOGS/caja.xml', LOGS_CAJA_XML),
-    ('static/LOGS/impresiones.xml', LOGS_IMPRESIONES_XML),
-    ('static/CONTABILIDAD/bancos.xml', CONTAB_BANCOS_XML),
-    ('static/CONTABILIDAD/gastos.xml', CONTAB_GASTOS_XML),
-    ('static/CONTABILIDAD/sueldos.xml', CONTAB_SUELDOS_XML),
-    ('static/CONTABILIDAD/ventas.xml', CONTAB_VENTAS_XML),
-    ('static/db/boletos.xml', BOLETOS_XML),  # Nuevo
-    ('static/db/ganadores.xml', GANADORES_XML),  # Nuevo
-]
-
-for src_rel, dst_path in seed_pairs:
-    _seed_file(src_rel, dst_path)
-
-# ====== HELPERS GENERALES ======
-def _to_int(v, default=0):
+def _money_header(v):
     try:
-        return int(str(v).strip())
+        return f"${int(round(float(v))):,}".replace(",", ",")
     except Exception:
-        return default
+        return "$0"
 
-def _safe_float(x, default=0.0):
-    try:
-        return float(str(x).strip())
-    except Exception:
-        return default
-
-def _safe_text(s, font_name=""):
+def _safe_text(s, font_name):
     s = "" if s is None else str(s)
     if font_name != "Helvetica":
         return s
     return unicodedata.normalize("NFKD", s).encode("ascii", "ignore").decode("ascii")
 
-def format_money(valor):
+def _es_largo(fecha_iso: str) -> str:
+    meses = ["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"]
+    dias  = ["lunes","martes","miércoles","jueves","viernes","sábado","domingo"]
+    d = datetime.fromisoformat(fecha_iso).date()
+    return f"{dias[d.weekday()].upper()}, {d.day} DE {meses[d.month-1].upper()} DE {d.year}"
+
+def _es_corta(fecha_iso: str) -> str:
+    meses = ["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"]
+    dias  = ["lunes","martes","miércoles","jueves","viernes","sábado","domingo"]
+    d = datetime.fromisoformat(fecha_iso).date()
+    return f"{dias[d.weekday()]}, {d.day} de {meses[d.month-1]} de {d.year}"
+
+def _ensure_xml(path, root_name):
+    if not os.path.exists(path):
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        ET.ElementTree(ET.Element(root_name)).write(path, encoding="utf-8", xml_declaration=True)
+        return
     try:
-<<<<<<< HEAD
-        v = float(str(valor).replace(",", "."))
-=======
         ET.parse(path)
     except ET.ParseError:
         ET.ElementTree(ET.Element(root_name)).write(path, encoding="utf-8", xml_declaration=True)
@@ -4623,276 +4466,312 @@ def _read_json(path, default_obj):
     try:
         with open(path, "r", encoding="utf-8") as f:
             return json.load(f)
->>>>>>> c5cc6c9 (Update 2026-02-19_16-48-30)
     except Exception:
-        return f"${valor}"
-    if abs(v - 1.0) < 1e-9:
-        return "$1"
-    if v < 1.0:
-        s = f"{v:.2f}".replace(".", ",")
-        return f"{s} ctvs"
-    if abs(v - int(v)) < 1e-9:
-        return f"${int(v)}"
-    s = f"{v:.2f}".rstrip("0").rstrip(".")
-    return f"${s}"
+        return default_obj
 
-def fecha_ddmmyyyy(fecha_iso):
+def _write_json(path, obj):
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(obj, f, ensure_ascii=False, indent=2)
+
+# --- Auto-fit para que entren todas las figuras en A4 ---
+def _default_layout(figs, scale=1.0, fixed_cols=None):
+    W, H = A4
+    n = max(1, len(figs))
+
+    header_h = 120
+    top_y = header_h + 1
+    bottom_reserved = 1
+    avail_h = max(120.0, H - top_y - bottom_reserved)
+
+    margin_x = 10
+    gap_x = 5
+    gap_row = 5
+    extra_v = 22 + 8 + 18
+
+    best = None
+    if fixed_cols:
+        cols = max(1, min(int(fixed_cols), n))
+        rows = math.ceil(n / cols)
+        size_w = (W - 2*margin_x - (cols-1)*gap_x) / cols
+        size_h = (avail_h - (rows-1)*gap_row - rows*extra_v) / rows
+        size = min(size_w, size_h)
+        best = (size, cols, rows)
+    else:
+        for cols in range(14, 3, -1):
+            rows = math.ceil(n / cols)
+            size_w = (W - 2 * margin_x - (cols - 1) * gap_x) / cols
+            size_h = (avail_h - (rows - 1) * gap_row - rows * extra_v) / rows
+            size = min(size_w, size_h)
+            if size <= 28:
+                continue
+            if best is None or size > best[0]:
+                best = (size, cols, rows)
+
+    if best is None:
+        size, cols, rows = 72, min(n, 8), math.ceil(n / min(n, 8))
+    else:
+        size, cols, rows = best
+
+    size *= float(scale)
+
+    positions = {}
+    x0 = margin_x
+    y0 = top_y
+    for i, f in enumerate(figs):
+        col = i % cols
+        row = i // cols
+        x = x0 + col * (size + gap_x)
+        y = y0 + row * (size + gap_row + extra_v)
+        positions[f["nombre"]] = {"x": float(x), "y": float(y), "size": float(size)}
+
+    return {
+        "logo":  {"x": 12, "y": 8, "w": 420, "h": 110},
+        "title": {"x": 220, "y": 32, "size": 18, "align": "left"},
+        "total": {"x": W - 22, "y": 24, "size": 56, "align": "right"},
+        "figs": positions
+    }
+
+def _layout_for(fecha_base, figs, scale=1.0, force_autofit=False, fixed_cols=None):
+    data = _read_json(LAYOUT_JSON, {"default": {}})
+    if fecha_base in data and not force_autofit:
+        return data[fecha_base]
+    return _default_layout(figs, scale=scale, fixed_cols=fixed_cols)
+
+# ------------------ PDF helpers (dibujo) ------------------
+def _register_font():
     try:
-        return datetime.strptime(fecha_iso, "%Y-%m-%d").strftime("%d-%m-%Y")
+        for p in [
+            os.path.join(FONTS_DIR, "DejaVuSans.ttf"),
+            "C:\\Windows\\Fonts\\arial.ttf",
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        ]:
+            if os.path.exists(p):
+                pdfmetrics.registerFont(TTFont("GLTTF", p))
+                return "GLTTF"
     except Exception:
-        return fecha_iso
+        pass
+    return "Helvetica"
 
-def require_session(f):
-    @wraps(f)
-    def wrapper(*args, **kwargs):
-        if 'usuario' not in session:
-            return redirect(_login_url())
-        return f(*args, **kwargs)
-    return wrapper
+def _chip(c, x, y_top, w, txt, font, bg="#1F58FF", fs=10):
+    h = 18
+    y = y_top - h
+    c.setFillColor(colors.HexColor(bg)); c.roundRect(x, y, w, h, 6, 0, 1)
+    c.setFillColor(colors.white); c.setFont(font, fs); c.drawCentredString(x + w/2, y + 4, txt)
 
-def _is_superadmin():
-    rol_raw = session.get('rol') or ''
-    rol_n = rol_raw.lower().replace('-', ' ').replace('_', ' ').strip()
-    if rol_n in {'superadmin', 'super administrador', 'superadministrador'}:
-        return True
-    usuario = (session.get('usuario') or '').strip().upper()
-    if usuario == 'GLSTUDIOS':
-        return True
-    return False
+def _bar(c, x, y_base, w, txt, font, bg="#173A9E", fs=10):
+    h = 18
+    y = y_base - h
+    c.setFillColor(colors.HexColor(bg)); c.roundRect(x, y, w, h, 6, 0, 1)
+    c.setFillColor(colors.white); c.setFont(font, fs); c.drawCentredString(x + w/2, y + 4, txt)
 
-# ====== NUEVO: SISTEMA DE DETECCIÓN DE GANADORES ======
-def _cargar_figuras_del_dia(fecha_iso):
-    """Carga las figuras programadas para el día."""
-    figuras = []
-    if os.path.exists(FIGURAS_FECHA_XML):
+def _draw_star(c, cx, cy, r_outer, r_inner, color_hex="#FF0000"):
+    pts = []
+    for i in range(10):
+        ang = math.radians(-90 + i * 36)
+        r = r_outer if i % 2 == 0 else r_inner
+        pts.append((cx + r * math.cos(ang), cy + r * math.sin(ang)))
+    p = c.beginPath()
+    p.moveTo(pts[0][0], pts[0][1])
+    for (px, py) in pts[1:]:
+        p.lineTo(px, py)
+    p.close()
+    c.setFillColor(colors.HexColor(color_hex))
+    c.drawPath(p, fill=1, stroke=0)
+
+def _grid5(c, x, y_top, size, mask):
+    cell = (size - 4) / 5.0
+    for r in range(5):
+        for col in range(5):
+            idx = r*5 + col
+            on  = bool(mask[idx]) if mask else False
+            px  = x + col*(cell+1)
+            py  = y_top - (r+1)*(cell+1)
+            c.setFillColor(colors.HexColor("#1F58FF") if on else colors.HexColor("#E8EEFF"))
+            c.rect(px, py, cell, cell, stroke=0, fill=1)
+    c.setStrokeColor(colors.HexColor("#27418B"))
+    c.rect(x-1, y_top-(5*(cell+1))-1, 5*(cell+1)-1, 5*(cell+1)-1, stroke=1, fill=0)
+    cx = x + 2*(cell+1) + cell/2.0
+    cy = y_top - (3*(cell+1)) + cell/2.0
+    _draw_star(c, cx, cy, r_outer=cell*0.42, r_inner=cell*0.20, color_hex="#FF0000")
+
+def _draw_ultrablack(c, text, x, y, size, font):
+    c.setFont(font, size)
+    c.setFillColor(colors.black)
+    for dx, dy in [(0,0),(0.25,0),(0,-0.25),(0.25,-0.25),(0.15,-0.15),(-0.15,-0.15)]:
+        c.drawRightString(x+dx, y+dy, text)
+
+# --------- Helpers de SPINNERS (Extras) ----------
+def _parse_spinners(extras: dict):
+    """
+    Lee extras y extrae lista de spinners (hasta 20) y el valor por spinner.
+    Busca en:
+      - extras['spinners'] -> {'numeros': '...', 'valor'/'texto': '...'}
+      - fallback: extras['comodin'] -> usa 'boletos' como numeros y 'texto' como valor
+    """
+    extras = extras or {}
+    block = extras.get("spinners") or {}
+    if not block:
+        block = extras.get("comodin") or {}
+
+    raw_nums = (block.get("numeros") or (block.get("boletos") or "")).strip()
+    raw_val  = (block.get("valor") or (block.get("texto") or "")).strip()
+
+    tokens = re.findall(r"\d{1,4}", raw_nums)
+    nums = [t.zfill(4) for t in tokens][:20]
+
+    m = re.search(r"(\d+(?:[.,]\d{1,2})?)", raw_val)
+    valor = None
+    if m:
         try:
-            tree = ET.parse(FIGURAS_FECHA_XML)
-            root = tree.getroot()
-            for dia in root.findall('dia'):
-                if dia.get('fecha') == fecha_iso:
-                    for fig in dia.findall('fig'):
-                        figuras.append({
-                            'nombre': fig.get('nombre', ''),
-                            'valor': _safe_float(fig.get('valor', 0)),
-                            'patron': _cargar_patron_figura(fig.get('nombre', ''))
-                        })
-                    break
-        except Exception as e:
-            print(f"Error cargando figuras: {e}")
-    return figuras
+            valor = float(m.group(1).replace(",", "."))
+        except Exception:
+            valor = None
 
-def _cargar_patron_figura(nombre_figura):
-    """Carga el patrón (matriz 5x5) de una figura desde datos_figuras.xml."""
-    patron = [[False for _ in range(5)] for _ in range(5)]  # 5x5
-    
-    if os.path.exists(DATOS_FIGURAS_XML):
+    return {"nums": nums, "valor": valor}
+
+def _draw_spinners_card(c, x, y, w, h, nums, valor, font):
+    """
+    Tarjeta SPINNERS con 'pastillas' de 4 cuadritos.
+    - Las filas se **CENTRAN** horizontalmente.
+    - Se ajusta tamaño para encajar sin recortar.
+    """
+    # Tarjeta
+    c.setFillColor(colors.HexColor("#F8FAFF"))
+    c.setStrokeColor(colors.HexColor("#CBD5F1"))
+    c.roundRect(x, y, w, h, 10, stroke=1, fill=1)
+
+    pad = 10
+    inner_x = x + pad
+    inner_y = y + pad
+    inner_w = w - 2*pad
+    inner_h = h - 2*pad
+
+    # Título + valor
+    c.setFillColor(colors.HexColor("#0F172A")); c.setFont(font, 10)
+    c.drawString(inner_x, y + h - pad - 6, "SPINNERS")
+    if valor is not None:
+        c.setFillColor(colors.HexColor("#334155")); c.setFont(font, 9)
+        c.drawRightString(x + w - pad, y + h - pad - 6, f"Valor c/u: {_money(valor)}")
+
+    # Parámetros visuales
+    title_h     = 18          # espacio reservado para el título
+    spinner_gap = 12          # separación entre spinners
+    row_gap     = 8           # separación entre filas
+    box_gap     = 3           # separación entre dígitos
+    pill_pad    = 6           # padding interno de la pastilla
+    grid_h      = max(10, inner_h - title_h)
+
+    n = len(nums)
+    if n == 0:
+        return
+
+    # Elegimos per_row y tamaño de box maximizando el encaje
+    best = None  # (box_size, per_row, rows)
+    max_per_row = min(n, 8)
+    for per_row in range(max_per_row, 0, -1):
+        rows = math.ceil(n / per_row)
+
+        # Ancho disponible -> box por ancho
+        max_box_w = ((inner_w - (per_row - 1) * spinner_gap) / per_row - 2 * pill_pad - 3 * box_gap) / 4.0
+        # Alto disponible -> box por alto
+        max_box_h = ((grid_h - (rows - 1) * row_gap) / rows - 2 * pill_pad)
+
+        box = min(max_box_w, max_box_h, 18)  # límite superior estético
+        if box >= 10:  # mínimo legible
+            if best is None or box > best[0]:
+                best = (box, per_row, rows)
+
+    if best is None:
+        best = (8.0, min(n, 6), math.ceil(n / min(n, 6)))
+
+    box, per_row, rows = best
+    fs = max(9, min(14, box * 0.70))
+
+    pill_h = 2 * pill_pad + box
+    pill_w = 2 * pill_pad + 4 * box + 3 * box_gap
+
+    # Dibujo centrado por fila
+    c.setFont(font, fs)
+    idx = 0
+    for r in range(rows):
+        remaining = n - idx
+        count = min(per_row, remaining)
+        row_w = count * pill_w + (count - 1) * spinner_gap
+        start_x = inner_x + max(0, (inner_w - row_w) / 2.0)  # <-- centrado
+        y_row = inner_y + grid_h - pill_h - r * (pill_h + row_gap)
+
+        for j in range(count):
+            cur_x = start_x + j * (pill_w + spinner_gap)
+
+            # Pastilla
+            c.setFillColor(colors.HexColor("#EEF2FF"))
+            c.setStrokeColor(colors.HexColor("#C7D2FE"))
+            c.roundRect(cur_x, y_row, pill_w, pill_h, 7, stroke=1, fill=1)
+
+            # 4 cuadritos
+            s = re.sub(r"\D", "", str(nums[idx]))[:4].rjust(4, "0")
+            xx = cur_x + pill_pad
+            yy = y_row + pill_pad
+            for ch in s:
+                c.setFillColor(colors.white)
+                c.setStrokeColor(colors.HexColor("#94A3B8"))
+                c.roundRect(xx, yy, box, box, 3, stroke=1, fill=1)
+
+                c.setFillColor(colors.HexColor("#111827"))
+                tx = xx + (box - pdfmetrics.stringWidth(ch, font, fs)) / 2.0
+                ty = yy + (box - fs) / 2.0 - 0.5
+                c.drawString(tx, ty, ch)
+
+                xx += box + box_gap
+
+            idx += 1
+            if idx >= n:
+                break
+
+# ------------------ Rutas Flask ------------------
+
+@app.get("/api/figuras-manana")
+def api_figuras_manana():
+    base = (request.args.get("fecha") or date.today().isoformat()).strip()
+    if not _is_fecha_iso(base):
+        base = date.today().isoformat()
+    manana = (datetime.fromisoformat(base) + timedelta(days=1)).date().isoformat()
+    figs = _figuras_de_fecha(manana)
+    total = sum((f.get("valor") or 0.0) for f in figs)
+    return jsonify({"ok": True, "fecha": manana, "figuras": figs, "total": total})
+
+@app.get("/api/resultados")
+def api_resultados():
+    fecha = (request.args.get("fecha") or date.today().isoformat()).strip()
+    if not _is_fecha_iso(fecha):
+        fecha = date.today().isoformat()
+    return jsonify({"ok": True, **_cargar_resultados(fecha)})
+
+@app.post("/boletin/guardar")
+def boletin_guardar():
+    fecha = (request.form.get("fecha") or "").strip()
+    raw = (request.form.get("resultados") or "").strip()
+    raw_extras = (request.form.get("extras") or "").strip()
+    resultados = []
+    extras = None
+    if raw:
         try:
-            tree = ET.parse(DATOS_FIGURAS_XML)
-            root = tree.getroot()
-            
-            for figura in root.findall('figura'):
-                if figura.get('nombre', '').lower() == nombre_figura.lower():
-                    # Cargar celdas
-                    for celda in figura.findall('celda'):
-                        idx = int(celda.get('idx', 0)) - 1  # 0-24
-                        if 0 <= idx <= 24:
-                            fila = idx // 5
-                            col = idx % 5
-                            color = celda.get('color', '#FFFFFF').upper()
-                            # Rojo (#FF0000) significa que esa celda debe marcarse
-                            patron[fila][col] = (color == '#FF0000')
-                    break
-        except Exception as e:
-            print(f"Error cargando patrón de figura {nombre_figura}: {e}")
-    
-    # Centro (N3) siempre es gratis (True)
-    patron[2][2] = True
-    
-    return patron
-
-def _cargar_estructura_boletos(fecha_iso):
-    """
-    Carga la estructura de todos los boletos vendidos para el día.
-    Retorna dict: {numero_boleto: {vendedor: '', numeros: matriz_5x5}}
-    """
-    boletos = {}
-    
-    # 1. Buscar en asignaciones.xml los rangos de boletos por vendedor
-    vendedores_rangos = {}
-    if os.path.exists(ASIGNACIONES_XML):
-        try:
-            tree = ET.parse(ASIGNACIONES_XML)
-            root = tree.getroot()
-            for dia in root.findall('dia'):
-                if dia.get('fecha') == fecha_iso:
-                    for vendedor in dia.findall('vendedor'):
-                        seudonimo = vendedor.get('seudonimo', '')
-                        for planilla in vendedor.findall('planilla'):
-                            rango = planilla.get('rango', '')
-                            if '-' in rango:
-                                inicio, fin = map(int, rango.split('-'))
-                                for boleto_num in range(inicio, fin + 1):
-                                    vendedores_rangos[boleto_num] = seudonimo
-                    break
-        except Exception as e:
-            print(f"Error cargando asignaciones: {e}")
-    
-    # 2. Buscar en impresiones.xml los números de los boletos
-    if os.path.exists(IMPRESIONES_XML):
-        try:
-            tree = ET.parse(IMPRESIONES_XML)
-            root = tree.getroot()
-            
-            for impresion in root.findall('impresion'):
-                if impresion.get('tipo') == 'boletos':
-                    imp_fecha = impresion.find('fecha_sorteo')
-                    if imp_fecha is not None and imp_fecha.text == fecha_iso:
-                        desde = _to_int(impresion.get('desde', 0))
-                        hasta = _to_int(impresion.get('hasta', 0))
-                        
-                        # Generar números de serie para estos boletos
-                        for i in range(desde, hasta + 1):
-                            boleto_num = i
-                            vendedor = vendedores_rangos.get(boleto_num, 'DESCONOCIDO')
-                            
-                            # Generar matriz 5x5 aleatoria (simulando el boleto real)
-                            # En un sistema real, esto vendría de tu base de datos de boletos
-                            numeros_boleto = _generar_numeros_boleto(boleto_num)
-                            
-                            boletos[boleto_num] = {
-                                'numero': boleto_num,
-                                'vendedor': vendedor,
-                                'numeros': numeros_boleto,
-                                'marcados': [[False for _ in range(5)] for _ in range(5)]
-                            }
-        except Exception as e:
-            print(f"Error cargando impresiones: {e}")
-    
-    return boletos
-
-def _generar_numeros_boleto(boleto_num):
-    """Genera números aleatorios para un boleto según reglas Bingo."""
-    import random
-    random.seed(boleto_num)  # Para consistencia
-    
-    numeros = []
-    # Columna B: 1-15
-    numeros.append(sorted(random.sample(range(1, 16), 5)))
-    # Columna I: 16-30
-    numeros.append(sorted(random.sample(range(16, 31), 5)))
-    # Columna N: 31-45 (con centro libre)
-    nums_n = sorted(random.sample(range(31, 46), 4))
-    nums_n.insert(2, 0)  # Centro libre
-    numeros.append(nums_n)
-    # Columna G: 46-60
-    numeros.append(sorted(random.sample(range(46, 61), 5)))
-    # Columna O: 61-75
-    numeros.append(sorted(random.sample(range(61, 76), 5)))
-    
-    # Transponer para tener matriz 5x5
-    matriz = [[numeros[col][fila] for col in range(5)] for fila in range(5)]
-    return matriz
-
-def _actualizar_marcados_en_boletos(boletos, numero_marcado):
-    """
-    Actualiza qué números están marcados en todos los boletos.
-    Retorna lista de boletos actualizados.
-    """
-    boletos_actualizados = []
-    
-    for boleto_num, datos in boletos.items():
-        actualizado = False
-        for fila in range(5):
-            for col in range(5):
-                if datos['numeros'][fila][col] == numero_marcado:
-                    datos['marcados'][fila][col] = True
-                    actualizado = True
-        
-        if actualizado:
-            boletos_actualizados.append({
-                'numero': boleto_num,
-                'vendedor': datos['vendedor'],
-                'marcados': datos['marcados']
-            })
-    
-    return boletos_actualizados
-
-def _detectar_ganadores(boletos, figuras, numeros_marcados):
-    """
-    Detecta qué boletos han completado alguna figura.
-    Retorna lista de ganadores.
-    """
-    ganadores = []
-    
-    for boleto_num, datos_boleto in boletos.items():
-        marcados = datos_boleto['marcados']
-        
-        for figura in figuras:
-            nombre_fig = figura['nombre']
-            patron = figura['patron']
-            
-            # Verificar si el patrón coincide
-            coincide = True
-            for fila in range(5):
-                for col in range(5):
-                    # Si el patrón requiere marcado (True) y el boleto no lo tiene marcado
-                    if patron[fila][col] and not marcados[fila][col]:
-                        coincide = False
-                        break
-                if not coincide:
-                    break
-            
-            if coincide:
-                # ¡Tenemos un ganador!
-                ganadores.append({
-                    'fecha': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                    'boleto': boleto_num,
-                    'figura': nombre_fig,
-                    'vendedor': datos_boleto['vendedor'],
-                    'premio': figura['valor'],
-                    'numeros_marcados': numeros_marcados[:]  # Copia de los números marcados
-                })
-    
-    return ganadores
-
-def _registrar_ganador(ganador):
-    """Registra un ganador en el XML de ganadores."""
-    try:
-        if not os.path.exists(GANADORES_XML):
-            root = ET.Element('ganadores')
-            tree = ET.ElementTree(root)
-            tree.write(GANADORES_XML, encoding='utf-8', xml_declaration=True)
-        
-        tree = ET.parse(GANADORES_XML)
-        root = tree.getroot()
-        
-        # Crear elemento ganador
-        elem = ET.Element('ganador', {
-            'fecha': ganador['fecha'],
-            'boleto': str(ganador['boleto']),
-            'figura': ganador['figura'],
-            'vendedor': ganador['vendedor'],
-            'premio': str(ganador['premio'])
-        })
-        
-        # Agregar números marcados
-        numeros_elem = ET.SubElement(elem, 'numeros_marcados')
-        numeros_elem.text = ','.join(map(str, ganador['numeros_marcados']))
-        
-        root.append(elem)
-        
-        # Guardar
-        try:
-            ET.indent(tree, space="  ", level=0)
-        except:
+            tmp = json.loads(raw)
+            if isinstance(tmp, list):
+                resultados = tmp
+        except Exception:
             pass
-        tree.write(GANADORES_XML, encoding='utf-8', xml_declaration=True)
-        
-        return True
+    if raw_extras:
+        try:
+            tmp = json.loads(raw_extras)
+            if isinstance(tmp, dict):
+                extras = tmp
+        except Exception:
+            pass
+    try:
+        _guardar_resultados(fecha, resultados, extras)
+        return jsonify({"ok": True})
     except Exception as e:
-<<<<<<< HEAD
-        print(f"Error registrando ganador: {e}")
-=======
         return jsonify({"ok": False, "error": str(e)}), 400
 
 @app.get("/api/boletin-layout/get")
@@ -5278,266 +5157,59 @@ def _pp_is_fecha_iso(s):
     try:
         datetime.fromisoformat((s or "").strip()); return True
     except Exception:
->>>>>>> c5cc6c9 (Update 2026-02-19_16-48-30)
         return False
 
-# ====== GESTIÓN DE USUARIOS ======
-def leer_usuarios():
-    if not os.path.exists(USUARIOS_XML):
-        return []
-    tree = ET.parse(USUARIOS_XML)
-    root = tree.getroot()
-    usuarios = []
-    for elem in root.findall('usuario'):
-        usuarios.append({
-            'nombre': elem.find('nombre').text,
-            'clave': elem.find('clave').text,
-            'rol': elem.find('rol').text,
-            'email': elem.find('email').text if elem.find('email') is not None else '',
-            'estado': elem.find('estado').text,
-            'avatar': elem.find('avatar').text if elem.find('avatar') is not None else 'avatar-male.png'
-        })
-    return usuarios
-
-def guardar_usuarios(usuarios):
-    root = ET.Element('usuarios')
-    for u in usuarios:
-        user_elem = ET.SubElement(root, 'usuario')
-        ET.SubElement(user_elem, 'nombre').text = u['nombre']
-        ET.SubElement(user_elem, 'clave').text = u['clave']
-        ET.SubElement(user_elem, 'rol').text = u['rol']
-        ET.SubElement(user_elem, 'email').text = u.get('email', '')
-        ET.SubElement(user_elem, 'estado').text = u['estado']
-        ET.SubElement(user_elem, 'avatar').text = u.get('avatar', 'avatar-male.png')
-    tree = ET.ElementTree(root)
-    tree.write(USUARIOS_XML, encoding='utf-8', xml_declaration=True)
-
-def obtener_usuario(nombre):
-    usuarios = leer_usuarios()
-    for u in usuarios:
-        if u['nombre'] == nombre:
-            return u
-    return None
-
-def eliminar_usuario(nombre):
-    usuarios = leer_usuarios()
-    usuarios = [u for u in usuarios if u['nombre'] != nombre]
-    guardar_usuarios(usuarios)
-
-# ====== RUTAS PRINCIPALES ======
-@app.route('/', methods=['GET', 'POST'])
-def login():
-    if request.method == 'POST':
-        usuario = request.form['usuario']
-        clave = request.form['clave']
-        usuarios = leer_usuarios()
-        user = next((u for u in usuarios if u['nombre'] == usuario and u['clave'] == clave and u['estado'] == 'activo'), None)
-        if user:
-            session['usuario'] = user['nombre']
-            session['rol'] = user['rol']
-            session['avatar'] = user.get('avatar', 'avatar-male.png')
-            return redirect(url_for('dashboard'))
-        else:
-            flash('Usuario o clave incorrectos o usuario inactivo', 'error')
-    return render_template('login.html')
-
-@app.route('/dashboard')
-@require_session
-def dashboard():
-    return render_template(
-        'dashboard.html',
-        usuario=session.get('usuario',''),
-        rol=session.get('rol',''),
-        avatar=session.get('avatar','avatar-male.png')
-    )
-
-@app.get('/api/dashboard/hoy')
-def api_dashboard_hoy():
-    fecha = (request.args.get('fecha') or date.today().isoformat()).strip()
+def _safe_float(x, default=0.0):
     try:
-        datetime.fromisoformat(fecha)
+        return float(x)
     except Exception:
-        fecha = date.today().isoformat()
-    
-    # Datos básicos del dashboard
-    data = {
-        "fecha": fecha,
-        "boletos_impresos": 0,
-        "vendidos_total": 0,
-        "devueltos_total": 0,
-        "ingresos_brutos": 0.0,
-        "ganancia_vendedores": 0.0,
-        "ganancia_empresa": 0.0,
-        "efectivo": 0.0,
-        "transferencia": 0.0,
-        "planillas_impresas": 0,
-        "planillas_asignadas": 0,
-        "planillas_blanco": 0,
-        "vendedores": [],
-        "config": {
-            "valor_boleto": 0.0,
-            "comision_vendedor": 0.0,
-            "comision_extra_meta": 0.0,
-            "meta_boletos": 0
-        }
-    }
-    
-    return jsonify({"ok": True, **data})
+        return default
 
-@app.route('/logout')
-def logout():
-    session.clear()
-    return redirect(_login_url())
-
-# ====== SECCIÓN DE USUARIOS ======
-@app.route('/usuarios')
-@require_session
-def usuarios():
-    lista_usuarios = leer_usuarios()
-    roles = [r[1] for r in ROLES]
-    return render_template(
-        'usuarios.html',
-        usuarios=lista_usuarios,
-        roles=roles,
-        usuario=session['usuario'],
-        rol=session['rol'],
-        avatar=session.get('avatar', 'avatar-male.png')
-    )
-
-@app.route('/usuarios/guardar', methods=['POST'])
-@require_session
-def guardar_usuario():
-    nombre = request.form['username']
-    clave = request.form['password']
-    rol = request.form['rol']
-    email = request.form.get('email', '')
-    avatar_filename = request.form.get('avatar_select', 'avatar-male.png')
-    estado = 'activo'
-
-    usuarios = leer_usuarios()
-    existe = False
-    for u in usuarios:
-        if u['nombre'] == nombre:
-            u['clave'] = clave
-            u['rol'] = rol
-            u['email'] = email
-            u['avatar'] = avatar_filename
-            u['estado'] = estado
-            existe = True
-    if not existe:
-        usuarios.append({
-            'nombre': nombre,
-            'clave': clave,
-            'rol': rol,
-            'email': email,
-            'avatar': avatar_filename,
-            'estado': estado
-        })
-    guardar_usuarios(usuarios)
-    flash('Usuario guardado correctamente', 'success')
-    return redirect(url_for('usuarios'))
-
-@app.route('/usuarios/editar/<nombre>', methods=['GET', 'POST'])
-@require_session
-def editar_usuario(nombre):
-    user = obtener_usuario(nombre)
-    if not user:
-        flash(f'Usuario "{nombre}" no encontrado', 'error')
-        return redirect(url_for('usuarios'))
-    
-    if request.method == 'POST':
-        user['clave'] = request.form['password']
-        user['rol'] = request.form['rol']
-        user['email'] = request.form.get('email', '')
-        user['avatar'] = request.form.get('avatar_select', user['avatar'])
-        usuarios = leer_usuarios()
-        for u in usuarios:
-            if u['nombre'] == nombre:
-                u.update(user)
-        guardar_usuarios(usuarios)
-        flash('Usuario editado correctamente', 'success')
-        return redirect(url_for('usuarios'))
-    
-    return render_template(
-        'usuarios_editar.html',
-        user=user,
-        roles=[r[1] for r in ROLES],
-        usuario=session['usuario'],
-        rol=session['rol'],
-        avatar=session.get('avatar', 'avatar-male.png')
-    )
-
-@app.route('/usuarios/eliminar/<nombre>', methods=['POST'])
-@require_session
-def eliminar_usuario_route(nombre):
-    eliminar_usuario(nombre)
-    flash('Usuario eliminado correctamente', 'success')
-    return redirect(url_for('usuarios'))
-
-# ====== IMPRESIÓN DE BOLETOS ======
-def _read_df_for_series(archivo: str) -> pd.DataFrame:
-    """Lee XLSX o CSV como texto."""
-    path = os.path.join(DATA_DIR, archivo)
+def _ensure_xml(path, root_name):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
     if not os.path.exists(path):
-        raise FileNotFoundError(f"No existe el archivo de serie: {archivo}")
-    if archivo.lower().endswith(".csv"):
-        return pd.read_csv(path, dtype=str, keep_default_na=False).fillna("")
-    return pd.read_excel(path, dtype=str).fillna("")
-
-def _send_bytesio(buf: BytesIO, filename: str, mimetype: str = None):
-    """Envía BytesIO como archivo."""
+        ET.ElementTree(ET.Element(root_name)).write(path, encoding="utf-8", xml_declaration=True)
+        return
     try:
-        return send_file(buf, download_name=filename, as_attachment=True, mimetype=mimetype)
-    except TypeError:
-        return send_file(buf, attachment_filename=filename, as_attachment=True, mimetype=mimetype)
+        ET.parse(path)
+    except ET.ParseError:
+        ET.ElementTree(ET.Element(root_name)).write(path, encoding="utf-8", xml_declaration=True)
 
-# Configuración PDF
-BLEED = 5 * mm
-w, h = A4
-OFFSET_X = -20
-OFFSET_Y = 5
-MARGEN_IZQ = 20
-MARGEN_SUP = 60
-ESPACIO_X = 140
-ESPACIO_Y = 115
-COLUMNAS = 2
-FILAS = 4
-SIZE_NUM = 23
-SIZE_INFO = 12
-SIZE_ID_BIG = 18
-REINTEGRO_W = 41
-REINTEGRO_H = 41
-DELTA_Y_FILA_3 = 2
-DELTA_Y_FILA_4 = 5
+# Intenta usar una TTF del sistema; si no, Helvetica
+def _pp_register_font():
+    try:
+        from reportlab.pdfbase import pdfmetrics
+        from reportlab.pdfbase.ttfonts import TTFont
+        for p in [
+            os.path.join(STATIC_DIR, "fonts", "DejaVuSans.ttf"),
+            "C:\\Windows\\Fonts\\arial.ttf",
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        ]:
+            if os.path.exists(p):
+                pdfmetrics.registerFont(TTFont("GLTTF", p))
+                return "GLTTF"
+    except Exception:
+        pass
+    return "Helvetica"
 
-# Offsets por celda
-per_cell_offsets = {
-    0: {"grid_x": -80, "grid_y": 20,  "info_x": 5,   "info_y": 20,  "rein_x": 215, "rein_y": 30},
-    1: {"grid_x": -160, "grid_y":20,  "info_x": -70, "info_y": 20,  "rein_x": 140, "rein_y": 30},
-    2: {"grid_x": -80, "grid_y": 80,  "info_x": 5,   "info_y": 82,  "rein_x": 215, "rein_y": -25},
-    3: {"grid_x": -160, "grid_y":80,  "info_x": -70, "info_y": 82,  "rein_x": 140, "rein_y": -25},
-    4: {"grid_x": -80, "grid_y": 140, "info_x": 5,   "info_y": 140, "rein_x": 215, "rein_y": -85},
-    5: {"grid_x": -160, "grid_y":140, "info_x": -70, "info_y": 140, "rein_x": 140, "rein_y": -85},
-    6: {"grid_x": -80, "grid_y": 200, "info_x": 5,   "info_y": 200, "rein_x": 215, "rein_y": -145},
-    7: {"grid_x": -160, "grid_y":200, "info_x": -70, "info_y": 200, "rein_x": 140, "rein_y": -145},
+_PPFONT     = _pp_register_font()
+_PPBOLDFONT = "Helvetica-Bold"
+_ppT        = lambda s: "" if s is None else str(s)
+
+# ---- Archivos del módulo ----
+PAGOS_XML   = os.path.join(DB_DIR, "pagos_premios.xml")
+RECIBOS_DIR = os.path.join(STATIC_DIR, "tmp", "recibos")
+CFG_JSON    = os.path.join(DB_DIR, "pagos_config.json")
+
+os.makedirs(RECIBOS_DIR, exist_ok=True)
+_ensure_xml(PAGOS_XML, "pagos")
+
+CFG_DEFAULT = {
+    "company_name": "Gran Sorteo Ventanas",
+    "city_default": "Vinces",
+    "letterhead": "HOJA-MEMBRETADA.png"  # en static/img/
 }
 
-<<<<<<< HEAD
-# Logs de impresión
-_LOG_LOCK = RLock()
-
-def _ensure_logs_file():
-    if not os.path.exists(IMPRESIONES_XML):
-        root = ET.Element('impresiones')
-        tree = ET.ElementTree(root)
-        tmp_path = IMPRESIONES_XML + ".tmp"
-        tree.write(tmp_path, encoding='utf-8', xml_declaration=True)
-        os.replace(tmp_path, IMPRESIONES_XML)
-
-def _read_logs_root():
-    _ensure_logs_file()
-    tree = ET.parse(IMPRESIONES_XML)
-=======
 def _cfg_read():
     if not os.path.exists(CFG_JSON):
         with open(CFG_JSON, "w", encoding="utf-8") as f:
@@ -6672,49 +6344,13 @@ def _reset_xml(path: str, root_tag: str):
 
 def _xml_read(path):
     tree = ET.parse(path)
->>>>>>> c5cc6c9 (Update 2026-02-19_16-48-30)
     return tree, tree.getroot()
 
-def _write_logs_tree(tree):
+def _xml_write(tree, path):
     try:
         ET.indent(tree, space="  ", level=0)
     except Exception:
         pass
-<<<<<<< HEAD
-    tmp_path = IMPRESIONES_XML + ".tmp"
-    tree.write(tmp_path, encoding='utf-8', xml_declaration=True)
-    os.replace(tmp_path, IMPRESIONES_XML)
-
-def _iter_impresiones():
-    _, root = _read_logs_root()
-    for n in root.findall('impresion'):
-        yield n
-
-def _append_log_impresion_boletos(*, usuario, serie_archivo, desde, hasta, fecha_sorteo, total_boletos,
-                                 valor, telefono, reintegro_especial, cant_reintegro_especial,
-                                 incluir_aleatorio, excedente=0, lote=''):
-    with _LOG_LOCK:
-        tree, root = _read_logs_root()
-        elem = ET.Element('impresion', attrib={
-            'fecha_hora': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-            'usuario': str(usuario or ''),
-            'tipo': 'boletos',
-            'serie_archivo': str(serie_archivo or ''),
-            'desde': str(desde or ''),
-            'hasta': str(hasta or '')
-        })
-        def add(tag, val):
-            c = ET.SubElement(elem, tag)
-            c.text = '' if val is None else str(val)
-        
-        add('valor', valor)
-        add('telefono', telefono)
-        add('fecha_sorteo', fecha_sorteo)
-        add('reintegro_especial', reintegro_especial)
-        add('cant_reintegro_especial', cant_reintegro_especial)
-        add('incluir_aleatorio', '1' if incluir_aleatorio else '0')
-        add('total_boletos', total_boletos)
-=======
     tree.write(path, encoding='utf-8', xml_declaration=True)
     _mirror_persist_static_to_public(path)
 
@@ -6963,568 +6599,31 @@ def _premios_pagados_detalle(desde_iso, hasta_iso):
         f = (p.get("fecha_sorteo") or "").strip()
         if not f or f < desde_iso or f > hasta_iso:
             continue
->>>>>>> c5cc6c9 (Update 2026-02-19_16-48-30)
         try:
-            tp = int(math.ceil(int(total_boletos) / 20.0))
-        except Exception:
-            tp = ''
-        add('total_planillas', tp)
-        add('excedente', '1' if excedente else '0')
-        add('lote', lote)
-        
-        root.append(elem)
-        _write_logs_tree(tree)
-
-# Generador de PDF para boletos
-def generar_pdf_boletos_excel(ids, registros, valor, telefono, nombre, reintegro_especial,
-                             cant_especial, reintegros, incluir_aleatorio, fecha_sorteo):
-    buf = BytesIO()
-    c = canvas.Canvas(buf, pagesize=A4)
-    c.translate(OFFSET_X, OFFSET_Y)
-
-    fecha_num = fecha_ddmmyyyy(fecha_sorteo)
-    precio_str = format_money(valor)
-
-    N = len(registros)
-    esp_idx = random.sample(range(N), min(N, cant_especial)) if reintegro_especial else []
-    ale_idx = [i for i in range(N) if i not in esp_idx] if incluir_aleatorio else []
-
-    for start in range(0, N, FILAS * COLUMNAS):
-        page = registros[start:start + FILAS * COLUMNAS]
-
-        for i, row in enumerate(page):
-            pos = start + i
-            col = i % COLUMNAS
-            fil = i // COLUMNAS
-
-            ancho_b = (w + 2 * MARGEN_IZQ - ESPACIO_X * (COLUMNAS - 1)) / COLUMNAS
-            alto_b = (h + 2 * MARGEN_SUP - ESPACIO_Y * (FILAS - 1)) / FILAS
-            x0 = MARGEN_IZQ + col * (ancho_b + ESPACIO_X)
-            y0 = h - MARGEN_SUP - fil * (alto_b + ESPACIO_Y)
-            if fil == 2: y0 -= DELTA_Y_FILA_3
-            if fil == 3: y0 -= DELTA_Y_FILA_4
-
-            size = min(ancho_b, alto_b) / 5
-            offs = per_cell_offsets[i]
-
-            # Rejilla 5×5
-            bx0 = x0 + ancho_b - size * 5 + offs['grid_x']
-            by0 = y0 + offs['grid_y']
-            c.setFont('Helvetica-Bold', SIZE_NUM)
-            
-            for r in range(5):
-                for j, letra in enumerate('bingo'):
-                    cx = bx0 + j * size
-                    cy = by0 - r * size
-                    if letra == 'n' and r == 2:
-                        # QR
-                        try:
-                            buf_qr = BytesIO()
-                            qrcode.make(f"{ids[pos]}|{fecha_sorteo}").save(buf_qr, format="PNG")
-                            buf_qr.seek(0)
-                            c.drawImage(ImageReader(buf_qr), cx + 2, cy + 2, size - 4, size - 4, mask="auto")
-                        except Exception:
-                            c.setFillGray(0.95)
-                            c.rect(cx, cy, size, size, stroke=0, fill=1)
-                            c.setFillGray(0.0)
-                            c.setFont("Helvetica", 6)
-                            c.drawCentredString(cx + size/2, cy + size/2 - 3, "QR")
-                    else:
-                        v = str(row.get(f"{letra}{r+1}", "-"))
-                        c.drawCentredString(cx + size / 2, cy + size * 0.28, v)
-
-            # Texto inferior
-            boleto_text = f"{ids[pos]}{SERIE_MAP.get(nombre, nombre)}"
-            x_info = x0 + offs['info_x']
-            y_info = y0 - size * 5 + offs['info_y']
-
-            c.setFont('Helvetica-Bold', SIZE_ID_BIG)
-            c.drawString(x_info, y_info, boleto_text)
-
-            # Reintegro
-            img = None
-            if pos in esp_idx and reintegro_especial:
-                img = reintegro_especial
-            elif pos in ale_idx and reintegros:
-                others = [r for r in reintegros if r != reintegro_especial]
-                img = random.choice(others) if others else None
-
-            if img:
-                path_img = os.path.join(REINTEGROS_DIR, img)
-                if os.path.exists(path_img):
-                    c.drawImage(ImageReader(path_img), x0 + offs['rein_x'], y0 - offs['rein_y'], 
-                               REINTEGRO_W, REINTEGRO_H, mask="auto")
-
-        c.showPage()
-        c.translate(OFFSET_X, OFFSET_Y)
-
-    c.save()
-    buf.seek(0)
-    return buf
-
-@app.route('/impresion', methods=['GET', 'POST'])
-@require_session
-def impresion():
-    files = sorted(f for f in os.listdir(DATA_DIR)
-                   if f.lower().endswith(('.xlsx', '.csv')))
-    series = [(f, SERIE_MAP.get(f, f)) for f in files]
-    reintegros = sorted(f for f in os.listdir(REINTEGROS_DIR)
-                        if f.lower().endswith('.png')) if os.path.exists(REINTEGROS_DIR) else []
-    fecha_hoy = date.today().strftime('%Y-%m-%d')
-
-    if request.method != 'POST':
-        return render_template(
-            'impresion_boletos_excel.html',
-            series=series, reintegros=reintegros, fecha_hoy=fecha_hoy,
-            username=session.get('usuario',''),
-            usuario=session.get('usuario',''),
-            rol=session.get('rol',''),
-            avatar=session.get('avatar','avatar-male.png'),
-            permisos=session.get('permisos', [])
-        )
-
-    form_type = (request.form.get('form_type') or '').strip().lower()
-
-    # ---- BOLETOS ----
-    if form_type == 'boletos':
-        serie_archivo = (request.form.get('serie_archivo') or '').strip()
-        start = (request.form.get('serie_inicio') or '').strip()
-        end = (request.form.get('serie_fin') or '').strip()
-        valor = (request.form.get('valor') or '1.00').strip()
-        telefono = (request.form.get('telefono') or '').strip()
-        fecha_str = (request.form.get('fecha_sorteo') or fecha_hoy).strip()
-        rein_esp = (request.form.get('reintegro_especial') or '').strip()
-        cntesp = _to_int(request.form.get('cant_reintegro_especial'), 0)
-        incA_raw = (request.form.get('incluir_aleatorio') or '1').strip().lower()
-        incA = incA_raw in ('1', 'true', 'on', 'si', 'sí')
-
-        if not serie_archivo:
-            flash('Selecciona una serie para imprimir boletos.', 'warning')
-            return redirect(url_for('impresion'))
-
-        try:
-            df = _read_df_for_series(serie_archivo)
-        except Exception as e:
-            flash(str(e), 'danger')
-            return redirect(url_for('impresion'))
-
-        id_col = df.columns[0]
-        all_ids = df[id_col].astype(str).tolist()
-        if not all_ids:
-            flash('La serie seleccionada no contiene datos.', 'danger')
-            return redirect(url_for('impresion'))
-
-        if not start:
-            start = all_ids[0]
-        if not end:
-            end = start
-
-        if start not in all_ids:
-            flash(f'Boleto inicial "{start}" no existe en la serie.', 'danger')
-            return redirect(url_for('impresion'))
-        if end not in all_ids:
-            flash(f'Boleto final "{end}" no existe en la serie.', 'danger')
-            return redirect(url_for('impresion'))
-
-        s_idx = all_ids.index(start)
-        e_idx = all_ids.index(end) + 1
-        if e_idx <= s_idx:
-            e_idx = s_idx + 1
-
-        ids = all_ids[s_idx:e_idx]
-        registros = df.iloc[s_idx:e_idx].to_dict('records')
-
-        # Log
-        _append_log_impresion_boletos(
-            usuario=session.get('usuario', ''),
-            serie_archivo=serie_archivo,
-            desde=start, hasta=end,
-            fecha_sorteo=fecha_str,
-            total_boletos=len(ids),
-            valor=valor, telefono=telefono,
-            reintegro_especial=rein_esp,
-            cant_reintegro_especial=cntesp,
-            incluir_aleatorio=incA,
-        )
-
-        rein_list = sorted(f for f in os.listdir(REINTEGROS_DIR) 
-                          if f.lower().endswith('.png')) if os.path.exists(REINTEGROS_DIR) else []
-        buf_b = generar_pdf_boletos_excel(
-            ids, registros, valor, telefono,
-            serie_archivo, rein_esp, cntesp,
-            rein_list, incA, fecha_str
-        )
-        return _send_bytesio(buf_b, 'boletos_bingo.pdf', 'application/pdf')
-
-    flash('Formulario no reconocido.', 'warning')
-    return redirect(url_for('impresion'))
-
-# ====== VENDEDORES ======
-def cargar_vendedores_xml():
-    vendedores = []
-    if not os.path.exists(VENDEDORES_XML):
-        return vendedores
-    
-    tree = ET.parse(VENDEDORES_XML)
-    root = tree.getroot()
-    
-    for idx, v in enumerate(root.findall('vendedor')):
-        vendedores.append({
-            'id': idx,
-            'nombre': (v.findtext('nombre') or '').strip(),
-            'apellido': (v.findtext('apellido') or '').strip(),
-            'seudonimo': (v.findtext('seudonimo') or '').strip(),
-        })
-    return vendedores
-
-def guardar_vendedor(nombre, apellido, seudonimo):
-    nombre = (nombre or '').strip()
-    apellido = (apellido or '').strip()
-    seudonimo = (seudonimo or '').strip()
-
-    if not os.path.exists(VENDEDORES_XML):
-        root = ET.Element('vendedores')
-        tree = ET.ElementTree(root)
-    else:
-        tree = ET.parse(VENDEDORES_XML)
-        root = tree.getroot()
-
-    v = ET.SubElement(root, 'vendedor')
-    ET.SubElement(v, 'nombre').text = nombre
-    ET.SubElement(v, 'apellido').text = apellido
-    ET.SubElement(v, 'seudonimo').text = seudonimo
-
-    tree.write(VENDEDORES_XML, encoding='utf-8', xml_declaration=True)
-
-@app.route('/vendedores', methods=['GET', 'POST'])
-@require_session
-def vendedores():
-    if request.method == 'POST':
-        if 'editar' in request.form:
-            idx = int(request.form['id'])
-            nombre = request.form['nombre'].strip()
-            apellido = request.form['apellido'].strip()
-            seudonimo = request.form['seudonimo'].strip()
-            # Implementar editar_vendedor si es necesario
-            flash("Función de edición pendiente", "info")
-        elif 'eliminar' in request.form:
-            idx = int(request.form['id'])
-            # Implementar eliminar_vendedor si es necesario
-            flash("Función de eliminación pendiente", "info")
-        else:
-            nombre = request.form['nombre'].strip()
-            apellido = request.form['apellido'].strip()
-            seudonimo = request.form['seudonimo'].strip()
-            if nombre and apellido and seudonimo:
-                guardar_vendedor(nombre, apellido, seudonimo)
-                flash("¡Vendedor agregado!", "success")
-            else:
-                flash("Todos los campos son obligatorios.", "danger")
-        
-        return redirect(url_for('vendedores'))
-
-    vendedores_list = cargar_vendedores_xml()
-    return render_template('vendedores.html', vendedores=vendedores_list)
-
-# ====== SORTEO ======
-@app.route('/sorteo')
-def sorteo():
-    fecha = request.args.get('fecha') or date.today().isoformat()
-    return render_template('sorteo.html', fecha=fecha)
-
-# ====== NUEVO: SISTEMA DE BINGO CON DETECCIÓN DE GANADORES ======
-# Variables globales para el juego en curso
-_JUEGO_ESTADO = {
-    'numeros_marcados': [],
-    'boletos': {},
-    'figuras': [],
-    'ganadores': [],
-    'fecha_juego': date.today().isoformat(),
-    'lock': RLock()
-}
-
-def _inicializar_juego(fecha_iso):
-    """Inicializa el estado del juego para una fecha específica."""
-    with _JUEGO_ESTADO['lock']:
-        _JUEGO_ESTADO['fecha_juego'] = fecha_iso
-        _JUEGO_ESTADO['numeros_marcados'] = []
-        _JUEGO_ESTADO['ganadores'] = []
-        
-        # Cargar figuras del día
-        _JUEGO_ESTADO['figuras'] = _cargar_figuras_del_dia(fecha_iso)
-        
-        # Cargar estructura de boletos
-        _JUEGO_ESTADO['boletos'] = _cargar_estructura_boletos(fecha_iso)
-        
-        # Cargar ganadores previos
-        _JUEGO_ESTADO['ganadores'] = _cargar_ganadores_dia(fecha_iso)
-        
-        print(f"Juego inicializado para {fecha_iso}: {len(_JUEGO_ESTADO['boletos'])} boletos, {len(_JUEGO_ESTADO['figuras'])} figuras")
-
-def _cargar_ganadores_dia(fecha_iso):
-    """Carga ganadores ya registrados para el día."""
-    ganadores = []
-    if os.path.exists(GANADORES_XML):
-        try:
-            tree = ET.parse(GANADORES_XML)
-            root = tree.getroot()
-            for ganador in root.findall('ganador'):
-                # Solo cargar ganadores del día actual
-                ganadores.append({
-                    'boleto': ganador.get('boleto', ''),
-                    'figura': ganador.get('figura', ''),
-                    'vendedor': ganador.get('vendedor', ''),
-                    'premio': _safe_float(ganador.get('premio', 0)),
-                    'fecha': ganador.get('fecha', '')
-                })
-        except Exception as e:
-            print(f"Error cargando ganadores: {e}")
-    return ganadores
-
-def _marcar_numero_y_detectar(numero):
-    """
-    Marca un número y detecta si hay ganadores.
-    Retorna: (exito, mensaje, ganadores_nuevos)
-    """
-    with _JUEGO_ESTADO['lock']:
-        # Verificar que el juego esté inicializado
-        if not _JUEGO_ESTADO['figuras']:
-            return False, "Juego no inicializado. Configura las figuras primero.", []
-        
-        if not _JUEGO_ESTADO['boletos']:
-            return False, "No hay boletos cargados para el día.", []
-        
-        # Verificar que el número sea válido
-        if numero < 1 or numero > 75:
-            return False, f"Número {numero} fuera de rango (1-75).", []
-        
-        # Verificar que no esté ya marcado
-        if numero in _JUEGO_ESTADO['numeros_marcados']:
-            return False, f"El número {numero} ya está marcado.", []
-        
-        # Marcar el número
-        _JUEGO_ESTADO['numeros_marcados'].append(numero)
-        
-        # Actualizar boletos con el número marcado
-        boletos_actualizados = _actualizar_marcados_en_boletos(
-            _JUEGO_ESTADO['boletos'], 
-            numero
-        )
-        
-        # Detectar nuevos ganadores
-        nuevos_ganadores = _detectar_ganadores(
-            _JUEGO_ESTADO['boletos'],
-            _JUEGO_ESTADO['figuras'],
-            _JUEGO_ESTADO['numeros_marcados']
-        )
-        
-        # Filtrar solo ganadores nuevos (no registrados previamente)
-        ganadores_nuevos = []
-        for ganador in nuevos_ganadores:
-            # Verificar si ya está en la lista de ganadores
-            ya_ganador = any(
-                g['boleto'] == ganador['boleto'] and 
-                g['figura'] == ganador['figura']
-                for g in _JUEGO_ESTADO['ganadores']
-            )
-            
-            if not ya_ganador:
-                # Registrar el ganador
-                if _registrar_ganador(ganador):
-                    _JUEGO_ESTADO['ganadores'].append(ganador)
-                    ganadores_nuevos.append(ganador)
-        
-        # Actualizar XML del bingo
-        _actualizar_xml_bingo()
-        
-        mensaje = f"Número {numero} marcado correctamente."
-        if ganadores_nuevos:
-            mensaje += f" ¡{len(ganadores_nuevos)} nuevo(s) ganador(es)!"
-        
-        return True, mensaje, ganadores_nuevos
-
-def _actualizar_xml_bingo():
-    """Actualiza el XML del bingo con el estado actual."""
-    try:
-        root = ET.Element("bingo")
-        balotas = ET.SubElement(root, "balotas")
-        
-        # Balotas 1-75
-        for n in range(1, 76):
-            estado = "n" if n in _JUEGO_ESTADO['numeros_marcados'] else ""
-            ultimo = "X" if n == _JUEGO_ESTADO['numeros_marcados'][-1] if _JUEGO_ESTADO['numeros_marcados'] else "" else ""
-            ET.SubElement(balotas, "balota", numero=str(n), estado=estado, ultimo=ultimo)
-        
-        # Últimos 5 números marcados
-        ultimos5 = _JUEGO_ESTADO['numeros_marcados'][-5:] if len(_JUEGO_ESTADO['numeros_marcados']) >= 5 else _JUEGO_ESTADO['numeros_marcados']
-        root.find("ultimos5").text = ",".join(map(str, ultimos5))
-        
-        # Total marcadas
-        root.find("totalMarcadas").text = str(len(_JUEGO_ESTADO['numeros_marcados']))
-        
-        # Último marcado
-        ultimo = _JUEGO_ESTADO['numeros_marcados'][-1] if _JUEGO_ESTADO['numeros_marcados'] else ""
-        root.find("ultimoMarcado").text = str(ultimo)
-        
-        # Stinger (para efectos de sonido)
-        root.find("stinger").text = str(ultimo)
-        
-        # Guardar
-        tree = ET.ElementTree(root)
-        tree.write(BINGO_XML, encoding='utf-8', xml_declaration=True)
-        
-    except Exception as e:
-        print(f"Error actualizando XML bingo: {e}")
-
-# ====== RUTAS DEL JUEGO ======
-@app.route('/juego')
-def juego():
-    fecha = request.args.get('fecha') or date.today().isoformat()
-    
-    # Inicializar juego para esta fecha
-    _inicializar_juego(fecha)
-    
-    return render_template('juego.html', fecha=fecha)
-
-@app.get('/xml/bingo')
-def juego_xml_bingo():
-    # Asegurar que el XML existe
-    if not os.path.exists(BINGO_XML):
-        _actualizar_xml_bingo()
-    
-    resp = make_response(send_file(BINGO_XML, mimetype="application/xml"))
-    resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
-    resp.headers["Pragma"] = "no-cache"
-    return resp
-
-@app.post('/juego/marcar')
-def juego_marcar():
-    data = request.get_json(silent=True) or {}
-    numero = _to_int(data.get("numero", 0))
-    
-    if not numero:
-        return jsonify(success=False, error="Número inválido"), 400
-    
-    # Marcar número y detectar ganadores
-    exito, mensaje, ganadores_nuevos = _marcar_numero_y_detectar(numero)
-    
-    if not exito:
-        return jsonify(success=False, error=mensaje), 400
-    
-    respuesta = {
-        'success': True,
-        'numero': numero,
-        'total_marcados': len(_JUEGO_ESTADO['numeros_marcados']),
-        'ultimos5': _JUEGO_ESTADO['numeros_marcados'][-5:] if len(_JUEGO_ESTADO['numeros_marcados']) >= 5 else _JUEGO_ESTADO['numeros_marcados'],
-        'mensaje': mensaje
-    }
-    
-    # Si hay ganadores nuevos, incluirlos en la respuesta
-    if ganadores_nuevos:
-        respuesta['ganadores_nuevos'] = ganadores_nuevos
-        respuesta['total_ganadores'] = len(_JUEGO_ESTADO['ganadores'])
-    
-    return jsonify(respuesta)
-
-@app.post('/juego/reversa')
-def juego_reversa():
-    with _JUEGO_ESTADO['lock']:
-        if _JUEGO_ESTADO['numeros_marcados']:
-            # Eliminar el último número marcado
-            ultimo = _JUEGO_ESTADO['numeros_marcados'].pop()
-            
-            # Actualizar XML
-            _actualizar_xml_bingo()
-            
-            return jsonify({
-                'success': True,
-                'numero_eliminado': ultimo,
-                'total_marcados': len(_JUEGO_ESTADO['numeros_marcados']),
-                'mensaje': f'Número {ultimo} eliminado (reversa)'
+            items.append({
+                "fecha_sorteo": f,
+                "figura": p.get("figura", ""),
+                "boleto": p.get("boleto", ""),
+                "ganador": p.get("ganador_nombre", ""),
+                "premio": _safe_float(p.get("premio", 0), 0),
+                "fecha_pago": p.get("fecha_pago", ""),
+                "recibo_id": p.get("recibo_id", ""),
+                "pagado_por": p.get("pagado_por", "")
             })
-        else:
-            return jsonify({
-                'success': False,
-                'error': 'No hay números para eliminar'
-            }), 400
+        except Exception:
+            pass
+    items.sort(key=lambda x: (x["fecha_sorteo"], x["figura"], x["boleto"]))
+    return items
 
-@app.post('/juego/reset')
-def juego_reset():
-    with _JUEGO_ESTADO['lock']:
-        _JUEGO_ESTADO['numeros_marcados'] = []
-        _actualizar_xml_bingo()
-        
-        return jsonify({
-            'success': True,
-            'mensaje': 'Juego reiniciado',
-            'total_marcados': 0
-        })
-
-@app.get('/juego/estado')
-def juego_estado():
-    """Obtiene el estado completo del juego."""
-    with _JUEGO_ESTADO['lock']:
-        return jsonify({
-            'success': True,
-            'fecha': _JUEGO_ESTADO['fecha_juego'],
-            'numeros_marcados': _JUEGO_ESTADO['numeros_marcados'],
-            'total_marcados': len(_JUEGO_ESTADO['numeros_marcados']),
-            'total_boletos': len(_JUEGO_ESTADO['boletos']),
-            'total_figuras': len(_JUEGO_ESTADO['figuras']),
-            'total_ganadores': len(_JUEGO_ESTADO['ganadores']),
-            'ganadores': _JUEGO_ESTADO['ganadores'],
-            'ultimos5': _JUEGO_ESTADO['numeros_marcados'][-5:] if len(_JUEGO_ESTADO['numeros_marcados']) >= 5 else _JUEGO_ESTADO['numeros_marcados']
-        })
-
-@app.get('/juego/ganadores')
-def juego_ganadores():
-    """Obtiene la lista de ganadores."""
-    with _JUEGO_ESTADO['lock']:
-        return jsonify({
-            'success': True,
-            'ganadores': _JUEGO_ESTADO['ganadores']
-        })
-
-@app.get('/juego/inicializar/<fecha>')
-def juego_inicializar_fecha(fecha):
-    """Inicializa el juego para una fecha específica."""
-    try:
-        datetime.fromisoformat(fecha)  # Validar formato
-        _inicializar_juego(fecha)
-        
-        return jsonify({
-            'success': True,
-            'fecha': fecha,
-            'boletos_cargados': len(_JUEGO_ESTADO['boletos']),
-            'figuras_cargadas': len(_JUEGO_ESTADO['figuras']),
-            'ganadores_existentes': len(_JUEGO_ESTADO['ganadores'])
-        })
-    except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': f'Fecha inválida o error: {str(e)}'
-        }), 400
-
-# ====== BOLETÍN ======
-@app.route('/boletin')
-def boletin():
-    fecha = request.args.get('fecha') or date.today().isoformat()
-    return render_template('boletin.html', fecha_inicial=fecha)
-
-# ====== PAGO DE PREMIOS ======
-@app.route('/pago-premios')
-def pagos_premios_view():
-    return render_template('pago_premios.html')
-
-# ====== CONTABILIDAD ======
+# ---- Ruta HTML protegida ----
 @app.route("/contabilidad")
-@require_session
 def contabilidad():
+    if 'usuario' not in session:
+        return redirect(_login_url())
     rol = session.get('rol', '')
     if rol not in ('Super Administrador', 'Administrador'):
         flash('Acceso restringido a Contabilidad', 'error')
         return redirect(url_for('dashboard'))
-    
     return render_template(
         "contabilidad.html",
         usuario=session.get('usuario', ''),
@@ -7532,43 +6631,6 @@ def contabilidad():
         avatar=session.get('avatar', 'avatar-male.png')
     )
 
-<<<<<<< HEAD
-# ====== RUTAS DE DEPURACIÓN ======
-@app.route('/_debug_routes')
-def _debug_routes():
-    routes = sorted(rule.rule for rule in app.url_map.iter_rules())
-    return '<br>'.join(routes)
-
-@app.route('/_login_demo')
-def _login_demo():
-    session['usuario'] = 'Administrador'
-    session['avatar'] = 'avatar-male.png'
-    return redirect(url_for('dashboard'))
-
-# ====== INICIALIZACIÓN ======
-def initialize_system():
-    """Inicializa todos los componentes del sistema."""
-    print("Inicializando sistema GL Bingo con detección de ganadores...")
-    
-    # Asegurar archivos XML críticos
-    if not os.path.exists(BINGO_XML):
-        _actualizar_xml_bingo()
-    
-    # Crear directorios necesarios
-    for dir_path in [REINTEGROS_DIR, BANK_FILES, GASTO_FILES, RECIBOS_DIR]:
-        os.makedirs(dir_path, exist_ok=True)
-    
-    # Inicializar juego para hoy
-    fecha_hoy = date.today().isoformat()
-    _inicializar_juego(fecha_hoy)
-    
-    print(f"Sistema inicializado para {fecha_hoy}")
-    print(f"- Boletos cargados: {len(_JUEGO_ESTADO['boletos'])}")
-    print(f"- Figuras cargadas: {len(_JUEGO_ESTADO['figuras'])}")
-    print(f"- Ganadores existentes: {len(_JUEGO_ESTADO['ganadores'])}")
-
-# ====== EJECUCIÓN ======
-=======
 # ---- Gastos con foto (pantalla simple, sin depender del template contabilidad.html) ----
 @app.get("/contabilidad/gastos-fotos")
 def contabilidad_gastos_fotos():
@@ -8715,142 +7777,6 @@ DB_DIR_PERSIST = os.path.join(DATA_DIR, "static", "db")
 DB_DIR = DB_DIR_PUBLIC if os.path.exists(DB_DIR_PUBLIC) else DB_DIR_PERSIST
 os.makedirs(DB_DIR_PUBLIC, exist_ok=True)
 os.makedirs(DB_DIR_PERSIST, exist_ok=True)
-
-
-# ============================================================
-#  SUPERADMIN · Corrección de boletos (clave + persistencia)
-#  - Clave se guarda como HASH en DATA/static/db/superadmin_correccion.json
-#  - Correcciones se guardan en DATA/static/db/correcciones_boletos.json (por fecha)
-# ============================================================
-import hashlib, json, time
-from datetime import datetime
-
-CORRECCION_KEY_FILE = os.path.join(DB_DIR_PERSIST, "superadmin_correccion.json")
-CORRECCIONES_FILE   = os.path.join(DB_DIR_PERSIST, "correcciones_boletos.json")
-
-_CORR_KEY_CACHE = {"mtime": None, "hash": None}
-_CORR_DATA_CACHE = {"mtime": None, "data": None}
-
-def _sha256_txt(s: str) -> str:
-    return hashlib.sha256((s or "").encode("utf-8")).hexdigest()
-
-def _atomic_write_json(path: str, data: dict):
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    tmp = path + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
-    os.replace(tmp, path)
-
-def _ensure_correccion_key():
-    """Crea clave por defecto si no existe (TLA1299)."""
-    try:
-        if os.path.exists(CORRECCION_KEY_FILE):
-            return
-        _atomic_write_json(CORRECCION_KEY_FILE, {
-            "hash": _sha256_txt("TLA1299"),
-            "updated_at": datetime.now().isoformat(timespec="seconds")
-        })
-    except Exception:
-        pass
-
-def _load_correccion_hash() -> str:
-    _ensure_correccion_key()
-    try:
-        mtime = os.path.getmtime(CORRECCION_KEY_FILE) if os.path.exists(CORRECCION_KEY_FILE) else 0.0
-    except Exception:
-        mtime = 0.0
-
-    if _CORR_KEY_CACHE.get("mtime") == mtime and _CORR_KEY_CACHE.get("hash"):
-        return _CORR_KEY_CACHE["hash"]
-
-    h = None
-    try:
-        with open(CORRECCION_KEY_FILE, "r", encoding="utf-8") as f:
-            js = json.load(f) or {}
-            h = (js.get("hash") or "").strip() or None
-    except Exception:
-        h = None
-
-    _CORR_KEY_CACHE["mtime"] = mtime
-    _CORR_KEY_CACHE["hash"] = h
-    return h
-
-def _check_correccion_key(key: str) -> bool:
-    key = (key or "").strip()
-    if not key:
-        return False
-    h = _load_correccion_hash()
-    if not h:
-        return False
-    return _sha256_txt(key) == h
-
-def _read_correcciones() -> dict:
-    """Devuelve dict por fecha: {fecha: { 'serie|id': {...} } }"""
-    try:
-        mtime = os.path.getmtime(CORRECCIONES_FILE) if os.path.exists(CORRECCIONES_FILE) else 0.0
-    except Exception:
-        mtime = 0.0
-
-    if _CORR_DATA_CACHE.get("mtime") == mtime and isinstance(_CORR_DATA_CACHE.get("data"), dict):
-        return _CORR_DATA_CACHE["data"]
-
-    data = {}
-    try:
-        if os.path.exists(CORRECCIONES_FILE):
-            with open(CORRECCIONES_FILE, "r", encoding="utf-8") as f:
-                data = json.load(f) or {}
-    except Exception:
-        data = {}
-
-    if not isinstance(data, dict):
-        data = {}
-
-    _CORR_DATA_CACHE["mtime"] = mtime
-    _CORR_DATA_CACHE["data"] = data
-    return data
-
-def _write_correcciones(data: dict):
-    if not isinstance(data, dict):
-        data = {}
-    _atomic_write_json(CORRECCIONES_FILE, data)
-    try:
-        _CORR_DATA_CACHE["mtime"] = os.path.getmtime(CORRECCIONES_FILE)
-        _CORR_DATA_CACHE["data"] = data
-    except Exception:
-        _CORR_DATA_CACHE["mtime"] = None
-        _CORR_DATA_CACHE["data"] = data
-
-def _pos_map_from_grid(grid):
-    pos_order = globals().get("POS_25_ROW") or []
-    pos_map = {}
-    flat = []
-    try:
-        for r in range(5):
-            for c in range(5):
-                flat.append(str((grid[r][c] if grid and len(grid)>r and len(grid[r])>c else "")).strip())
-    except Exception:
-        flat = []
-    for i, pos in enumerate(pos_order):
-        if i < len(flat):
-            pos_map[pos] = flat[i]
-    return pos_map
-
-def _get_boleto_correction(fecha_iso: str, serie_archivo: str, carton_id: str):
-    data = _read_correcciones()
-    key = f"{serie_archivo}|{carton_id}"
-    by_fecha = data.get(str(fecha_iso), {}) if isinstance(data.get(str(fecha_iso), {}), dict) else {}
-    return by_fecha.get(key)
-
-def _apply_boleto_correction(fecha_iso: str, serie_archivo: str, carton_id: str, grid):
-    corr = _get_boleto_correction(str(fecha_iso), str(serie_archivo), str(carton_id))
-    if corr and isinstance(corr, dict) and isinstance(corr.get("grid"), list):
-        cgrid = corr.get("grid")
-        return cgrid, _pos_map_from_grid(cgrid)
-    return grid, _pos_map_from_grid(grid)
-
-
-
-
 # Archivos core
 BINGO_XML     = os.path.join(DB_DIR, "datos_bingo.xml")
 HIST_JSON     = os.path.join(DB_DIR, "historial.json")
@@ -8974,9 +7900,7 @@ def _catalogo_paths():
     return [p for p in paths if p]
 
 def _load_catalogo_figuras_any():
-    """Intenta usar load_catalogo_figuras() si existe; si no, carga datos_figuras.xml directamente.
-    Retorna dict indexado por code_for(nombre) con sus 25 celdas.
-    """
+    """Intenta usar load_catalogo_figuras() si existe; si no, carga datos_figuras.xml directamente."""
     fn = globals().get("load_catalogo_figuras")
     if callable(fn):
         try:
@@ -8985,8 +7909,6 @@ def _load_catalogo_figuras_any():
                 return cat
         except Exception:
             pass
-
-    pos_order = globals().get("POS_25_ROW") or []
 
     for path in _catalogo_paths():
         if not os.path.exists(path):
@@ -8997,36 +7919,33 @@ def _load_catalogo_figuras_any():
             continue
 
         catalogo = {}
+        # soporta <figuras><figura ...> o cualquier raíz con .//figura
         for f in root.findall(".//figura"):
-            nombre = (f.attrib.get("nombre", "") or "").strip()
+            nombre = (f.attrib.get("nombre","") or "").strip()
             if not nombre:
                 continue
-
             code = globals().get("code_for")(nombre) if callable(globals().get("code_for")) else re.sub(r"[^A-Z0-9]", "", nombre.upper())[:4] or "FIG"
-            cbloq = f.attrib.get("centro_bloqueado", "0")
-
+            cbloq  = f.attrib.get("centro_bloqueado","0")
             celdas = []
             for c in f.findall("celda"):
                 try:
-                    idx = int(c.attrib.get("idx", "0") or 0)
+                    idx = int(c.attrib.get("idx","0") or 0)
                 except Exception:
                     idx = 0
-                color = (c.attrib.get("color", "#FFFFFF") or "#FFFFFF").upper()
-                pos = (c.attrib.get("pos") or (pos_order[idx-1] if (1 <= idx <= len(pos_order)) else "")).upper()
+                color = (c.attrib.get("color","#FFFFFF") or "#FFFFFF").upper()
+                pos   = (c.attrib.get("pos") or "").upper()
                 celdas.append({"idx": idx, "color": color, "pos": pos})
-
             # completa 25 si falta
             if len(celdas) < 25:
+                pos_order = globals().get("POS_25_ROW") or []
                 ya = {x.get("idx") for x in celdas}
-                for i in range(1, 26):
+                for i in range(1,26):
                     if i in ya:
                         continue
-                    pos = pos_order[i-1] if (i-1 < len(pos_order)) else ""
+                    pos = pos_order[i-1] if i-1 < len(pos_order) else ""
                     celdas.append({"idx": i, "color": "#FFFFFF", "pos": pos})
-
             celdas.sort(key=lambda x: (x.get("idx") or 0))
             catalogo[code] = {"nombre": nombre, "centro_bloqueado": cbloq, "celdas": celdas}
-
         if catalogo:
             return catalogo
 
@@ -9213,61 +8132,6 @@ def _recalcular_ganadores(fecha_iso: str, stack: list, ultimo_marcado: int = 0):
     _write_ganadores_xml(fecha_iso, ultimo_marcado, ganadores)
     return ganadores, nuevos
 
-
-def _update_figuras_estado_auto(fecha_iso: str, ganadores_total: list):
-    """Marca automáticamente como INACTIVO_AUTO las figuras que ya tuvieron ganador.
-    Si por Reversa el ganador desaparece, se quita el INACTIVO_AUTO para que vuelva a jugar.
-    (No toca INACTIVO manual).
-    """
-    if "FIG_ESTADOS_JSON" not in globals():
-        return
-
-    try:
-        figs = _load_figuras_por_fecha(str(fecha_iso)) or []
-    except Exception:
-        figs = []
-
-    # set de códigos de figuras con al menos 1 ganador actual
-    ganadas = set()
-    try:
-        for w in (ganadores_total or []):
-            fc = str(w.get("fig_code") or "").strip().upper()
-            if not fc:
-                nm = str(w.get("figura") or "").strip()
-                if nm:
-                    fc = globals().get("code_for")(nm) if callable(globals().get("code_for")) else re.sub(r"[^A-Z0-9]", "", nm.upper())[:4]
-            if fc:
-                ganadas.add(fc)
-    except Exception:
-        pass
-
-    try:
-        cache = _safe_json_read(FIG_ESTADOS_JSON) or {}
-        cache.setdefault(str(fecha_iso), {})
-        estados = cache.get(str(fecha_iso), {}) or {}
-
-        for f in figs:
-            nombre = str(f.get("nombre", "") or "").strip()
-            if not nombre:
-                continue
-            code = globals().get("code_for")(nombre) if callable(globals().get("code_for")) else re.sub(r"[^A-Z0-9]", "", nombre.upper())[:4] or "FIG"
-            cur = str(estados.get(nombre, "") or "").strip().upper()
-
-            if code in ganadas:
-                # no sobreescribir INACTIVO manual
-                if cur == "INACTIVO":
-                    continue
-                estados[nombre] = "INACTIVO_AUTO"
-            else:
-                # si era auto, lo liberamos
-                if cur == "INACTIVO_AUTO":
-                    estados.pop(nombre, None)
-
-        cache[str(fecha_iso)] = estados
-        _safe_json_write(FIG_ESTADOS_JSON, cache)
-    except Exception:
-        pass
-
 # ============================================================
 #  PERFORMANCE: caches para acelerar lectura/detección de tablas
 # ============================================================
@@ -9418,21 +8282,6 @@ def _detectar_ganadores(fecha_iso: str, stack: list, ultimo_marcado: int, recalc
     ganadores = allj.get(str(fecha_iso), []) if not recalc else []
     nuevos = []
 
-    # figuras ya ganadas (si una figura ya tuvo al menos 1 ganador, NO vuelve a jugar)
-    figuras_ya_ganadas = set()
-    if not recalc:
-        try:
-            for w in ganadores:
-                fc = str(w.get("fig_code") or "").strip().upper()
-                if not fc:
-                    nm = str(w.get("figura") or "").strip()
-                    if nm:
-                        fc = globals().get("code_for")(nm) if callable(globals().get("code_for")) else re.sub(r"[^A-Z0-9]", "", nm.upper())[:4]
-                if fc:
-                    figuras_ya_ganadas.add(fc)
-        except Exception:
-            pass
-
     # figuras del día
     figuras = _load_figuras_por_fecha(fecha_iso)
     if not figuras:
@@ -9456,17 +8305,11 @@ def _detectar_ganadores(fecha_iso: str, stack: list, ultimo_marcado: int, recalc
         if not nombre:
             continue
         estado = str(fig_states.get(nombre, "") or "").strip().upper()
-        # En recalc=True ignoramos INACTIVO_AUTO para que la reversa pueda recomputar
-        if recalc:
-            if estado == "INACTIVO":
-                continue
-        else:
-            if estado.startswith("INACTIVO"):
-                continue
+        if estado == "INACTIVO":
+            continue
 
         code = globals().get("code_for")(nombre) if callable(globals().get("code_for")) else re.sub(r"[^A-Z0-9]", "", nombre.upper())[:4] or "FIG"
         required_pos, cmap = _required_positions_for_fig(code, catalogo)
-        sig = tuple(sorted([p for p in (required_pos or []) if p]))
 
         if not required_pos and not (code in ("TL1", "TL2", "TL3", "TL4")):
             any_on = any(v not in ("#FFFFFF", (globals().get("COLOR_OFF") or "#E8E8E8").upper(), "#E8E8E8") for v in (cmap.values() or []))
@@ -9478,27 +8321,11 @@ def _detectar_ganadores(fecha_iso: str, stack: list, ultimo_marcado: int, recalc
             "code": code,
             "valor": float(it.get("valor", 0) or 0),
             "required_pos": required_pos,
-            "sig": sig,
             "color_map_pos": cmap
         })
 
     if not patrones:
         return ganadores, nuevos, sorted(known)
-
-    # --- IMPORTANTE: figuras repetidas (misma formación) deben jugarse en SECUENCIA ---
-    # Ejemplo: LLENA, RELLENA, YAPA SUPER YAPA pueden compartir el MISMO patrón (mismas posiciones rojas).
-    # Regla: una MISMA tabla NO puede ganar 2 veces el mismo patrón. Así, si una tabla ganó LLENA,
-    # esa misma tabla no podrá ganar RELLENA (porque sigue completa). Debe ganar otra tabla.
-    used_by_sig = defaultdict(set)
-    try:
-        for w in (ganadores or []):
-            sig0 = tuple(sorted([p for p in (w.get("required_pos") or []) if p]))
-            if not sig0:
-                continue
-            tkey0 = (str(w.get("serie", "") or ""), str(w.get("tabla", "") or ""))
-            used_by_sig[sig0].add(tkey0)
-    except Exception:
-        pass
 
     # rangos impresos (tablas en juego)
     rangos = _get_rangos_en_juego(fecha_iso)
@@ -9569,12 +8396,6 @@ def _detectar_ganadores(fecha_iso: str, stack: list, ultimo_marcado: int, recalc
                 if key in known:
                     continue
 
-                # Si este cartón ya ganó este MISMO patrón (misma formación), no puede volver a ganar otro "llena" igual.
-                sig = pat.get("sig") or ()
-                tkey = (str(serie_archivo), str(carton_id))
-                if sig and (tkey in used_by_sig[sig]):
-                    continue
-
                 needed = []
                 has_ultimo = False
 
@@ -9604,8 +8425,6 @@ def _detectar_ganadores(fecha_iso: str, stack: list, ultimo_marcado: int, recalc
 
                 if ok:
                     known.add(key)
-                    if sig:
-                        used_by_sig[sig].add(tkey)
                     numero_ganador = ultimo if ultimo else (needed[-1] if needed else "")
 
                     info_b = buscar_info_por_boleto(str(fecha_iso), carton_id, serie_archivo)
@@ -10131,7 +8950,6 @@ def juego_marcar():
         if ganadores_nuevos:
             _write_ganadores_json(str(fecha), ganadores_total, keys)
             _write_ganadores_xml(str(fecha), n, ganadores_total)
-            _update_figuras_estado_auto(str(fecha), ganadores_total)
     except Exception:
         pass
 
@@ -10174,7 +8992,6 @@ def juego_reversa():
     try:
         fecha = _get_sorteo_fecha()
         ganadores_total, _ = _recalcular_ganadores(str(fecha), stack, int(last) if last else 0)
-        _update_figuras_estado_auto(str(fecha), ganadores_total)
         gcount = len(ganadores_total)
     except Exception:
         gcount = 0
@@ -10213,7 +9030,6 @@ def juego_reset():
         _safe_json_write(GANADORES_JSON, data)
         _safe_json_write(GANADORES_STATE_JSON, {"keys": []})
         _write_ganadores_xml(str(fecha), 0, [])
-        _update_figuras_estado_auto(str(fecha), [])
     except Exception:
         pass
 
@@ -10337,43 +9153,8 @@ def juego_figuras_list():
             "estado": (estados.get(nombre) or "ACTIVO")
         })
 
-    
-    # --- Adjunta el patrón 5x5 (shape) para cada figura (si existe en datos_figuras.xml) ---
-    # Esto permite que el visor "Consultar boleto" pinte SOLO la figura sin depender de otro fetch.
-    try:
-        import unicodedata as _ud
-        import re as _re
-        shapes_all = _load_shapes() or {}
-        def _norm_key(s: str) -> str:
-            s = (s or "").strip().upper()
-            s = _ud.normalize("NFD", s)
-            s = "".join(ch for ch in s if _ud.category(ch) != "Mn")  # quita tildes
-            s = _re.sub(r"[^A-Z0-9]+", " ", s).strip()
-            s = _re.sub(r"\s+", " ", s)
-            return s
-        shapes_norm = {_norm_key(k): v for k, v in (shapes_all or {}).items()}
-        for it in out:
-            nk = _norm_key(it.get("nombre", ""))
-            shp = shapes_norm.get(nk)
-            if isinstance(shp, list) and len(shp) >= 25:
-                it["shape"] = shp[:25]
-    except Exception:
-        pass
-
     origen = next((p for p in _agenda_paths() if os.path.exists(p)), "")
     return jsonify(ok=True, fecha=fecha, origen_xml=origen, figuras=out, figuras_del_dia=out, total=len(out))
-
-@juego_bp.get("/figuras/shapes")
-def juego_figuras_shapes():
-    """Patrones 5x5 (25 celdas) para el visor 👁️ y el editor ⚙️.
-    - keys: nombre en minúscula
-    - value: arreglo [25] con True/False (rojo/blanco)
-    """
-    try:
-        shapes = _load_shapes()
-    except Exception:
-        shapes = {}
-    return jsonify(ok=True, shapes=shapes, total=len(shapes))
 
 
 @juego_bp.post("/figuras/estado")
@@ -10415,351 +9196,11 @@ def juego_figuras_sync_xml():
 # ============================================================
 #  REGISTRO BP + INICIALIZACIÓN
 # ============================================================
-
-# ============================================================
-#  ENDPOINTS · Admin Corrección de Boletos (SuperAdmin)
-# ============================================================
-def _json_err(msg, code=400):
-    return jsonify(ok=False, error=msg), code
-
-def _require_login_json():
-    try:
-        if require_session and not session.get("usuario"):
-            return _json_err("No autorizado. Inicia sesión.", 401)
-    except Exception:
-        pass
-    return None
-
-
-# ============================================================
-# CONSULTA DE BOLETOS (VISOR) — NO requiere clave SuperAdmin
-# ============================================================
-@juego_bp.get("/boletos/series")
-def boletos_series_en_juego():
-    """
-    Devuelve las series (archivos) cargadas en el sorteo/juego actual.
-    Se usa para el visor "Consultar boleto" (solo lectura).
-    """
-    denied = _require_login_json()
-    if denied: 
-        return denied
-
-    fecha = _get_sorteo_fecha()
-    rangos = _get_rangos_en_juego(str(fecha)) or []
-    try:
-        series = sorted({str(r.get("serie_archivo","")).strip() for r in rangos if str(r.get("serie_archivo","")).strip()})
-    except Exception:
-        series = []
-    return jsonify(ok=True, fecha=str(fecha), series=series)
-
-
-@juego_bp.post("/boletos/consultar")
-def boletos_consultar():
-    """
-    Consulta un boleto/cartón por serie + número y devuelve su grilla 5x5.
-    Aplica corrección si existe para la fecha en juego (solo lectura).
-    """
-    denied = _require_login_json()
-    if denied:
-        return denied
-
-    data = request.get_json(silent=True) or {}
-    serie_archivo = str(data.get("serie_archivo","")).strip()
-    carton_id = str(data.get("carton_id") or data.get("boleto") or data.get("tabla") or "").strip()
-
-    if not carton_id:
-        return _json_err("Falta carton_id / boleto.", 400)
-
-    # fecha en juego
-    fecha = _get_sorteo_fecha()
-
-    # series permitidas (solo las cargadas en el sorteo actual)
-    rangos = _get_rangos_en_juego(str(fecha)) or []
-    try:
-        series_allowed = sorted({str(r.get("serie_archivo","")).strip() for r in rangos if str(r.get("serie_archivo","")).strip()})
-    except Exception:
-        series_allowed = []
-
-    # si no envían serie y solo hay 1, la asumimos
-    if not serie_archivo:
-        if len(series_allowed) == 1:
-            serie_archivo = series_allowed[0]
-        else:
-            return _json_err("Falta serie_archivo.", 400)
-
-    if series_allowed and (serie_archivo not in series_allowed):
-        return _json_err("Esa serie no está cargada en el sorteo en juego.", 403)
-
-    # lee serie y busca el cartón
-    try:
-        df, id_col, ids, id_to_idx, mtime = _get_series_meta_cached(serie_archivo)
-    except FileNotFoundError:
-        return _json_err(f"No existe la serie: {serie_archivo}", 404)
-    except Exception:
-        return _json_err(f"No se pudo leer la serie: {serie_archivo}", 500)
-
-    idx = id_to_idx.get(carton_id)
-    if idx is None:
-        # intenta numérico / sin ceros a la izquierda
-        try:
-            cid_int = int(carton_id)
-            idx = id_to_idx.get(str(cid_int))
-            if idx is None:
-                idx = id_to_idx.get(str(cid_int).zfill(len(carton_id)))
-        except Exception:
-            idx = None
-
-    if idx is None:
-        return _json_err("No se encontró ese boleto/cartón en la serie.", 404)
-
-    row = df.iloc[int(idx)].to_dict()
-    row_lower = {str(k).lower(): str(v).strip() for k, v in (row or {}).items()}
-
-    original_grid, _ = _build_grid_from_row(row_lower)
-
-    corr = _get_boleto_correction(str(fecha), serie_archivo, carton_id)
-    has_correction = bool(corr and isinstance(corr, dict) and isinstance(corr.get("grid"), list))
-    grid = corr.get("grid") if has_correction else original_grid
-
-    def _pick(keys):
-        for k in keys:
-            v = row_lower.get(k, "")
-            if v and v.lower() not in ("nan", "none", "null"):
-                return v
-        return ""
-
-    vendedor = _pick(["vendedor", "vend", "seller", "nombre_vendedor", "alias_vendedor", "alias"])
-    planilla = _pick(["planilla", "rango", "sector", "zona", "ruta"])
-
-    return jsonify(
-        ok=True,
-        fecha=str(fecha),
-        serie_archivo=serie_archivo,
-        carton_id=str(carton_id),
-        vendedor=vendedor,
-        planilla=planilla,
-        grid=grid,
-        original_grid=original_grid,
-        has_correction=has_correction
-    )
-
-
-@juego_bp.post("/admin/boletos/meta")
-def admin_boletos_meta():
-    denied = _require_login_json()
-    if denied: return denied
-    data = request.get_json(silent=True) or {}
-    key = str(data.get("key","")).strip()
-    if not _check_correccion_key(key):
-        return _json_err("Clave SuperAdmin incorrecta.", 403)
-
-    fecha = _get_sorteo_fecha()
-    rangos = _get_rangos_en_juego(str(fecha)) or []
-    series = []
-    try:
-        series = sorted({str(r.get("serie_archivo","")).strip() for r in rangos if str(r.get("serie_archivo","")).strip()})
-    except Exception:
-        series = []
-
-    return jsonify(ok=True, fecha=str(fecha), series=series)
-
-@juego_bp.post("/admin/boletos/get")
-def admin_boletos_get():
-    denied = _require_login_json()
-    if denied: return denied
-    data = request.get_json(silent=True) or {}
-    key = str(data.get("key","")).strip()
-    if not _check_correccion_key(key):
-        return _json_err("Clave SuperAdmin incorrecta.", 403)
-
-    serie_archivo = str(data.get("serie_archivo","")).strip()
-    carton_id = str(data.get("carton_id","")).strip()
-    if not serie_archivo or not carton_id:
-        return _json_err("Falta serie_archivo o carton_id.", 400)
-
-    # fecha en juego
-    fecha = _get_sorteo_fecha()
-
-    # lee serie y busca el cartón
-    try:
-        df, id_col, ids, id_to_idx, mtime = _get_series_meta_cached(serie_archivo)
-    except FileNotFoundError:
-        return _json_err(f"No existe la serie: {serie_archivo}", 404)
-    except Exception as e:
-        return _json_err(f"No se pudo leer la serie: {serie_archivo}", 500)
-
-    idx = id_to_idx.get(carton_id)
-    if idx is None:
-        # intenta sin ceros a la izquierda / numérico
-        try:
-            cid_int = int(carton_id)
-            idx = id_to_idx.get(str(cid_int))
-            if idx is None:
-                idx = id_to_idx.get(str(cid_int).zfill(len(carton_id)))
-        except Exception:
-            idx = None
-
-    if idx is None:
-        return _json_err("No se encontró ese boleto/cartón en la serie.", 404)
-
-    row = df.iloc[int(idx)].to_dict()
-    row_lower = {str(k).lower(): str(v).strip() for k, v in (row or {}).items()}
-    original_grid, _ = _build_grid_from_row(row_lower)
-
-    corr = _get_boleto_correction(str(fecha), serie_archivo, carton_id)
-    has_correction = bool(corr and isinstance(corr, dict) and isinstance(corr.get("grid"), list))
-    grid = corr.get("grid") if has_correction else original_grid
-
-    return jsonify(
-        ok=True,
-        fecha=str(fecha),
-        serie_archivo=serie_archivo,
-        carton_id=carton_id,
-        grid=grid,
-        original_grid=original_grid,
-        has_correction=has_correction,
-        motivo=(corr.get("motivo") if has_correction else ""),
-        updated_at=(corr.get("updated_at") if has_correction else "")
-    )
-
-@juego_bp.post("/admin/boletos/save")
-def admin_boletos_save():
-    denied = _require_login_json()
-    if denied: return denied
-    data = request.get_json(silent=True) or {}
-    key = str(data.get("key","")).strip()
-    if not _check_correccion_key(key):
-        return _json_err("Clave SuperAdmin incorrecta.", 403)
-
-    serie_archivo = str(data.get("serie_archivo","")).strip()
-    carton_id = str(data.get("carton_id","")).strip()
-    motivo = str(data.get("motivo","")).strip()
-    grid = data.get("grid")
-
-    if not serie_archivo or not carton_id:
-        return _json_err("Falta serie_archivo o carton_id.", 400)
-    if not isinstance(grid, list) or len(grid) != 5 or any((not isinstance(r, list) or len(r) != 5) for r in grid):
-        return _json_err("Grid inválido (debe ser 5x5).", 400)
-
-    # normaliza grid (solo números o F / vacío)
-    norm = []
-    for r in grid:
-        rr = []
-        for v in r:
-            s = str(v).strip()
-            if not s:
-                rr.append("")
-                continue
-            up = s.upper()
-            if up in ("F","FREE","LIBRE","X"):
-                rr.append("F")
-                continue
-            if s.isdigit():
-                rr.append(str(int(s)))
-                continue
-            return _json_err(f"Valor inválido en grid: {s}", 400)
-        norm.append(rr)
-
-    # fecha en juego
-    fecha = _get_sorteo_fecha()
-
-    # obtiene grid original para auditoría
-    try:
-        df, id_col, ids, id_to_idx, mtime = _get_series_meta_cached(serie_archivo)
-        idx = id_to_idx.get(carton_id)
-        if idx is None:
-            try:
-                cid_int = int(carton_id)
-                idx = id_to_idx.get(str(cid_int)) or idx
-            except Exception:
-                pass
-        if idx is None:
-            return _json_err("No se encontró ese boleto/cartón en la serie.", 404)
-        row = df.iloc[int(idx)].to_dict()
-        row_lower = {str(k).lower(): str(v).strip() for k, v in (row or {}).items()}
-        original_grid, _ = _build_grid_from_row(row_lower)
-    except Exception:
-        original_grid = None
-
-    # guarda corrección por fecha
-    allcorr = _read_correcciones()
-    fecha_k = str(fecha)
-    # si la fecha no existe aún, créala (evita KeyError)
-    if (not isinstance(allcorr, dict)) or (fecha_k not in allcorr) or (not isinstance(allcorr.get(fecha_k), dict)):
-        if not isinstance(allcorr, dict):
-            allcorr = {}
-        allcorr[fecha_k] = {}
-    keyk = f"{serie_archivo}|{carton_id}"
-    user = ""
-    try:
-        user = str(session.get("usuario") or "").strip()
-    except Exception:
-        user = ""
-    allcorr[str(fecha)][keyk] = {
-        "grid": norm,
-        "motivo": motivo,
-        "updated_at": datetime.now().isoformat(timespec="seconds"),
-        "usuario": user,
-        "before": original_grid,
-    }
-    _write_correcciones(allcorr)
-
-    # limpia cachés y recalcula ganadores (recalc=True)
-    try:
-        _clear_juego_caches()
-    except Exception:
-        pass
-
-    try:
-        stack = _read_stack()
-        ultimo = int(stack[-1]) if stack else 0
-        gan_total, gan_nuevos, keys = _detectar_ganadores(str(fecha), stack, ultimo, recalc=True)
-        _write_ganadores_json(str(fecha), gan_total, keys)
-        _write_ganadores_xml(str(fecha), ultimo, gan_total)
-        try:
-            _update_figuras_estado_auto(str(fecha), gan_total)
-        except Exception:
-            pass
-    except Exception:
-        pass
-
-    return jsonify(ok=True, fecha=str(fecha), serie_archivo=serie_archivo, carton_id=carton_id)
-
-@juego_bp.post("/admin/correccion/cambiar_clave")
-def admin_correccion_cambiar_clave():
-    denied = _require_login_json()
-    if denied: return denied
-    data = request.get_json(silent=True) or {}
-    old_key = str(data.get("old_key","")).strip()
-    new_key = str(data.get("new_key","")).strip()
-    if not old_key or not new_key:
-        return _json_err("Falta old_key o new_key.", 400)
-    if len(new_key) < 4:
-        return _json_err("La nueva clave es muy corta.", 400)
-    if not _check_correccion_key(old_key):
-        return _json_err("Clave actual incorrecta.", 403)
-
-    try:
-        _atomic_write_json(CORRECCION_KEY_FILE, {
-            "hash": _sha256_txt(new_key),
-            "updated_at": datetime.now().isoformat(timespec="seconds"),
-        })
-        # invalida caché
-        _CORR_KEY_CACHE["mtime"] = None
-        _CORR_KEY_CACHE["hash"] = None
-    except Exception:
-        return _json_err("No se pudo guardar la nueva clave.", 500)
-
-    return jsonify(ok=True)
-
-
-
 def register_juego(app):
     app.register_blueprint(juego_bp)
     _ensure_bingo_xml()
     _ensure_hist()
     _ensure_vmix_xml()
-    _ensure_correccion_key()
     _write_spinner_state(running=False, locked=False, overlay_on=False)
 
 try:
@@ -11368,11 +9809,11 @@ except Exception:
 # ============================================================
 
 
->>>>>>> c5cc6c9 (Update 2026-02-19_16-48-30)
 if __name__ == "__main__":
-    initialize_system()
+    import os
     port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port, debug=True)
+    app.run(host="0.0.0.0", port=port)
+
 
 
 

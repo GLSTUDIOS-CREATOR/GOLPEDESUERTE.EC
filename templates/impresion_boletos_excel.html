@@ -51,7 +51,7 @@
     label{font-size:.82rem;color:#6772a6;font-weight:800;margin-bottom:6px;display:block}
     input,select{width:100%;padding:10px;border:1px solid var(--ring);border-radius:12px;background:#fff;font-weight:700;color:#1b2240}
     input[readonly]{background:#f5f7ff;color:#6973a6}
-    .help{font-size:.82rem;color:var(--muted);margin-top:6px}
+    .help{font-size:.82rem;color:#muted;margin-top:6px}
 
     .btn{display:inline-flex;align-items:center;gap:8px;border:none;border-radius:12px;padding:12px 16px;font-weight:900;cursor:pointer}
     .btn-primary{background:var(--brand);color:#fff}
@@ -170,6 +170,8 @@
               <span id="pillLock" class="pill pill-lock" style="display:none"><i class="bi bi-lock-fill"></i> Comodín bloqueado por el día</span>
               <button class="btn btn-mini btn-ghost" type="button" id="btnVerComodin"><i class="bi bi-eye"></i> Ver comodín</button>
               <button class="btn btn-mini btn-ghost" type="button" id="btnUltimoImpreso"><i class="bi bi-clock-history"></i> Último impreso</button>
+              <!-- NUEVO: botón para ver BONUS del día -->
+              <button class="btn btn-mini btn-accent" type="button" id="btnVerBonusDia"><i class="bi bi-stars"></i> Ver BONUS del día</button>
             </div>
 
             <div class="grid cols-3" style="margin-top:8px">
@@ -194,6 +196,49 @@
                 </select>
               </div>
             </div>
+
+            <!-- ===== BONUS ===== -->
+            <div class="hd" style="margin-top:14px;border:0;padding:0">
+              <div class="step"><span class="dot">2.1</span> BONUS (números y ganadores)</div>
+            </div>
+            <div class="note" style="margin:10px 0">
+              <i class="bi bi-stars"></i>
+              <div>
+                Activa el <b>BONUS</b> para generar 5 números aleatorios (se imprimen bajo el comodín).
+                Puedes decidir cuántos <b>ganadores</b> quieres por cantidad de aciertos. <br>
+                Ejemplo: 5 aciertos = 0 ganadores, 4 aciertos = 2 ganadores, 3 aciertos = 3 ganadores, 2 aciertos = 5 ganadores, 1 acierto = 3 ganadores.
+              </div>
+            </div>
+            <div class="grid cols-3" style="align-items:end">
+              <div>
+                <label>Usar BONUS</label>
+                <select name="bonus_enabled" id="bonus_enabled">
+                  <option value="0" selected>No</option>
+                  <option value="1">Sí</option>
+                </select>
+              </div>
+              <div>
+                <label>Ganadores con 5 aciertos</label>
+                <input type="number" min="0" step="1" name="bonus_k5" id="bonus_k5" value="0">
+              </div>
+              <div>
+                <label>Ganadores con 4 aciertos</label>
+                <input type="number" min="0" step="1" name="bonus_k4" id="bonus_k4" value="0">
+              </div>
+              <div>
+                <label>Ganadores con 3 aciertos</label>
+                <input type="number" min="0" step="1" name="bonus_k3" id="bonus_k3" value="0">
+              </div>
+              <div>
+                <label>Ganadores con 2 aciertos</label>
+                <input type="number" min="0" step="1" name="bonus_k2" id="bonus_k2" value="0">
+              </div>
+              <div>
+                <label>Ganadores con 1 acierto</label>
+                <input type="number" min="0" step="1" name="bonus_k1" id="bonus_k1" value="0">
+              </div>
+            </div>
+            <!-- ===== /BONUS ===== -->
 
             <div class="note" style="margin:10px 0">
               <i class="bi bi-exclamation-triangle"></i>
@@ -333,7 +378,7 @@
           <table id="tbl_hist">
             <thead>
             <tr>
-              <th>Hora</th><th>Tipo</th><th>Serie</th><th>Usuario</th><th>Rango</th><th>Boletos</th><th>Planillas</th><th>Reint. esp.</th><th>Cant.</th><th>Aleatorios</th><th>Acciones</th>
+              <th>Hora</th><th>Tipo</th><th>Serie</th><th>Usuario</th><th>Rango</th><th>Boletos</th><th>Planillas</th><th>Reint. esp.</th><th>Cant.</th><th>Aleatorios</th><th>BONUS</th><th>Acciones</th>
             </tr>
             </thead>
             <tbody><!-- JS --></tbody>
@@ -392,7 +437,7 @@
         <thead>
         <tr>
           <th>Fecha/Hora</th><th>Tipo</th><th>Serie</th><th>Usuario</th><th>Fecha (sorteo/planilla)</th>
-          <th>Desde</th><th>Hasta</th><th>Boletos</th><th>Planillas</th><th>Reint. esp.</th><th>Cant.</th><th>Aleatorios</th><th>Acciones</th>
+          <th>Desde</th><th>Hasta</th><th>Boletos</th><th>Planillas</th><th>Reint. esp.</th><th>Cant.</th><th>Aleatorios</th><th>BONUS</th><th>Acciones</th>
         </tr>
         </thead>
         <tbody><!-- JS --></tbody>
@@ -412,6 +457,21 @@
     </div>
     <div class="bd" style="padding:14px 16px">
       <div id="msgBody">—</div>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: BONUS -->
+<div class="modal" id="modalBonus">
+  <div class="box" style="max-width:760px">
+    <div class="hd" style="display:flex;align-items:center;gap:10px;padding:12px 16px">
+      <i class="bi bi-stars"></i><h3 style="margin:0">BONUS de impresión</h3>
+      <div style="margin-left:auto">
+        <button class="btn btn-mini btn-danger" id="bonusClose"><i class="bi bi-x-lg"></i> Cerrar</button>
+      </div>
+    </div>
+    <div class="bd" style="padding:14px 16px">
+      <div id="bonusBody">—</div>
     </div>
   </div>
 </div>
@@ -443,6 +503,10 @@
   const hastaInp = $("#serie_fin");
   const totSpan  = $("#tot_boletos");
 
+  // BONUS refs
+  const bonusEnabled = $("#bonus_enabled");
+  const bk5 = $("#bonus_k5"), bk4=$("#bonus_k4"), bk3=$("#bonus_k3"), bk2=$("#bonus_k2"), bk1=$("#bonus_k1");
+
   const kvSerie=$("#kv-serie"), kvFecha=$("#kv-fecha"), kvValor=$("#kv-valor"),
         kvRango=$("#kv-rango"), kvTot=$("#kv-tot"), kvRei=$("#kv-rei"), kvPlan=$("#kv-planillas");
   const img1 = $("#imgPreview"), img2 = $("#imgPreview2");
@@ -463,10 +527,14 @@
   const barSerie=$("#barSerie"), barRango=$("#barRango"), barBoletos=$("#barBoletos"), barPlanillas=$("#barPlanillas");
 
   const modalCom = $("#modalComodin"), gal = $("#galeriaComodin");
-  const modalHist= $("#modalHist"), modalMsg=$("#modalMsg");
+  const modalHist= $("#modalHist"), modalMsg=$("#modalMsg"), modalBonus=$("#modalBonus");
   const msgTitle=$("#msgTitle"), msgBody=$("#msgBody");
+  const bonusBody=$("#bonusBody");
   const btnVerComodin = $("#btnVerComodin");
   const pillLock = $("#pillLock");
+
+  // NUEVO: botón para abrir el modal BONUS del día
+  const btnVerBonusDia = $("#btnVerBonusDia");
 
   function showModal(m){ m.style.display='flex'; }
   function hideModal(m){ m.style.display='none'; }
@@ -621,6 +689,15 @@
     return `<button class="btn btn-mini btn-danger only-super" onclick="window.__delLog('${id}')" title="Eliminar del historial"><i class="bi bi-trash"></i> Eliminar</button>`;
   }
 
+  function bonusCell(r){
+    if((r.bonus_enabled==='1') || (r.bonus_numbers && r.bonus_numbers.length)){
+      const nums = (r.bonus_numbers||'').toString().replace(/,/g,' ');
+      const btn = `<button class="btn btn-mini btn-ghost" onclick="window.__verBonus('${r.id||''}')"><i class="bi bi-stars"></i> Ver BONUS</button>`;
+      return `<span class="pill pill-green">ON</span> <span class="pill pill-blue">${nums||'—'}</span> ${btn}`;
+    }
+    return '<span class="pill pill-red">OFF</span>';
+  }
+
   function paintDayDetail(rows){
     const fecha = (histFecha.value||'').trim();
     const serieFiltro = (histSerie.value||'').trim();
@@ -648,6 +725,7 @@
         <td>${isB? rei:'—'}</td>
         <td>${isB? cant:'—'}</td>
         <td>${isB? ale:'—'}</td>
+        <td>${isB? bonusCell(r):'—'}</td>
         <td>${actionCell(r.id||'')}</td>
       `;
       tblHist.appendChild(tr);
@@ -687,6 +765,7 @@
           <td>${r.reintegro_especial||'—'}</td>
           <td>${r.cant_reintegro_especial||'—'}</td>
           <td>${ale}</td>
+          <td>${isB? bonusCell(r):'—'}</td>
           <td>${actionCell(r.id||'')}</td>
         `;
         tblHistModal.appendChild(tr);
@@ -730,6 +809,75 @@
       showMsg('Eliminar', 'No se pudo contactar el servidor.');
     }
   };
+
+  // BONUS viewer (abre modal con datos de un log específico)
+  window.__verBonus = async (logId)=>{
+    try{
+      const r = await fetch(`/impresion/bonus-informe/${logId}.json`);
+      if(!r.ok){
+        showMsg('BONUS', 'No se encontró el informe para esta impresión.');
+        return;
+      }
+      const js = await r.json();
+      if(!js.ok){ showMsg('BONUS', 'No se pudo cargar el informe.'); return; }
+      const inf = js.informe||{};
+      const nums = (inf.numbers||[]).join(' ');
+      const req = inf.requested||{};
+      const wins = inf.winners||{};
+      const k = (x)=> (wins[String(x)]||[]).join(', ');
+      bonusBody.innerHTML = `
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">
+          <span class="pill pill-blue"><b>Código:</b> ${inf.code||'—'}</span>
+          <span class="pill pill-green"><b>Números:</b> ${nums||'—'}</span>
+          <span class="pill ${inf.feasible?'pill-green':'pill-red'}"><b>Factible:</b> ${inf.feasible?'Sí':'No'}</span>
+        </div>
+        <table style="width:100%">
+          <thead><tr><th>Aciertos</th><th>Solicitados</th><th>Boletos ganadores</th></tr></thead>
+          <tbody>
+            <tr><td>5</td><td>${req['5']||0}</td><td>${k(5)||'—'}</td></tr>
+            <tr><td>4</td><td>${req['4']||0}</td><td>${k(4)||'—'}</td></tr>
+            <tr><td>3</td><td>${req['3']||0}</td><td>${k(3)||'—'}</td></tr>
+            <tr><td>2</td><td>${req['2']||0}</td><td>${k(2)||'—'}</td></tr>
+            <tr><td>1</td><td>${req['1']||0}</td><td>${k(1)||'—'}</td></tr>
+          </tbody>
+        </table>
+      `;
+      showModal(modalBonus);
+    }catch(e){
+      showMsg('BONUS', 'Error al cargar el informe.');
+    }
+  };
+
+  // NUEVO: Buscar y abrir el BONUS del día/serie actual
+  async function abrirBonusDelDia(){
+    const fecha = (fechaInp.value || '').trim();
+    const serie = (serieSel.value || '').trim();
+
+    try{
+      const js = await readLogs();
+      let recs = (js.rows || []).filter(r =>
+        (r.tipo || '').toLowerCase() === 'boletos' &&
+        r.fecha_sorteo === fecha &&
+        (!serie || (r.serie_archivo || '') === serie)
+      );
+
+      // Ordena por fecha/hora DESC
+      recs.sort((a,b) => {
+        const ta = new Date((a.fecha_hora||'').replace(' ','T')).getTime() || 0;
+        const tb = new Date((b.fecha_hora||'').replace(' ','T')).getTime() || 0;
+        return tb - ta;
+      });
+
+      const rec = recs.find(r => r.bonus_enabled === '1' || (r.bonus_numbers && r.bonus_numbers.length));
+      if(rec && rec.id){
+        await window.__verBonus(rec.id);
+      }else{
+        showMsg('BONUS', 'No hay BONUS registrado para esta fecha/serie.');
+      }
+    }catch(e){
+      showMsg('BONUS', 'No se pudo consultar el historial para obtener el BONUS.');
+    }
+  }
 
   // Comodín
   $("#btnVerComodin").onclick = ()=>{
@@ -780,7 +928,8 @@
       valor: valorInp.value||'',
       reintegro: reiSel.value||'',
       cant: cantEsp.value||'',
-      aleatorio: aleSel.value||''
+      aleatorio: aleSel.value||'',
+      // (el ZIP actual del backend no usa BONUS; se imprime por /impresion normal)
     }).toString();
     const url = '/impresion_zip?'+q;
     try{
@@ -799,7 +948,10 @@
   };
   $("#btnRefresh").onclick = ()=> refreshAll();
 
-  [hastaInp, valorInp, cantEsp, aleSel].forEach(el=> el.addEventListener('input', ()=>{recalcTotals(); enableSuperButtons();}));
+  // NUEVO: click del botón BONUS del día
+  if(btnVerBonusDia){ btnVerBonusDia.onclick = abrirBonusDelDia; }
+
+  [hastaInp, valorInp, cantEsp, aleSel, bonusEnabled, bk5, bk4, bk3, bk2, bk1].forEach(el=> el.addEventListener('input', ()=>{recalcTotals(); enableSuperButtons();}));
   reiSel.addEventListener('change', ()=> setInnerPreview());
   [serieSel, $("#fecha_sorteo")].forEach(el=> el.addEventListener('change', async ()=>{
     if(el.id==='fecha_sorteo') $("#fecha_planilla").value = $("#fecha_sorteo").value;
@@ -818,9 +970,10 @@
   })();
 
   window.addEventListener('click', e=>{
-    [modalCom, modalHist, modalMsg].forEach(m=>{ if(e.target===m) m.style.display='none'; });
+    [modalCom, modalHist, modalMsg, modalBonus].forEach(m=>{ if(e.target===m) m.style.display='none'; });
   });
   $("#msgClose").onclick = ()=> modalMsg.style.display='none';
+  $("#bonusClose").onclick = ()=> modalBonus.style.display='none';
 })();
 </script>
 </body>

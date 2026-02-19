@@ -152,4 +152,36 @@
       <meta_boletos>60</meta_boletos>
     </configuracion>
   </dia>
+  <dia fecha="2025-10-19">
+    <configuracion>
+      <valor_boleto>0.50</valor_boleto>
+      <comision_vendedor>30.0</comision_vendedor>
+      <comision_extra_meta>5.0</comision_extra_meta>
+      <meta_boletos>60</meta_boletos>
+    </configuracion>
+  </dia>
+  <dia fecha="2025-11-12">
+    <configuracion>
+      <valor_boleto>0.50</valor_boleto>
+      <comision_vendedor>30.0</comision_vendedor>
+      <comision_extra_meta>5.0</comision_extra_meta>
+      <meta_boletos>60</meta_boletos>
+    </configuracion>
+  </dia>
+  <dia fecha="2026-02-04">
+    <configuracion>
+      <valor_boleto>0.50</valor_boleto>
+      <comision_vendedor>30.0</comision_vendedor>
+      <comision_extra_meta>5.0</comision_extra_meta>
+      <meta_boletos>60</meta_boletos>
+    </configuracion>
+  </dia>
+  <dia fecha="2026-02-05">
+    <configuracion>
+      <valor_boleto>0.50</valor_boleto>
+      <comision_vendedor>30.0</comision_vendedor>
+      <comision_extra_meta>5.0</comision_extra_meta>
+      <meta_boletos>60</meta_boletos>
+    </configuracion>
+  </dia>
 </caja>
