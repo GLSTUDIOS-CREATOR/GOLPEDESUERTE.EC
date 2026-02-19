@@ -38,3 +38,10 @@ python app.py
 
 
 cd /d "D:\Documents\SISTEMA\GOLPE DE SUERTE\GOLPEDESUERTE.EC" && py -m pip install --upgrade pip && py -m pip install pandas qrcode[pil] pillow flask openpyxl reportlab && py app.py
+
+
+
+
+
+
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$repo='D:\Documents\SISTEMA\GOLPE DE SUERTE\GOLPEDESUERTE.EC'; Set-Location $repo; $remote='https://github.com/GLSTUDIOS-CREATOR/GOLPEDESUERTE.EC.git'; function FindGit{ $g=(Get-Command git -EA SilentlyContinue).Source; if($g){return $g}; foreach($p in @('C:\Program Files\Git\cmd\git.exe','C:\Program Files (x86)\Git\cmd\git.exe')){if(Test-Path $p){return $p}}; $base=Join-Path $env:LOCALAPPDATA 'GitHubDesktop'; if(Test-Path $base){ $apps=Get-ChildItem $base -Directory -Filter 'app-*' -EA SilentlyContinue | Sort-Object Name -Descending; foreach($a in $apps){ foreach($p in @('resources\app\git\cmd\git.exe','resources\app.asar.unpacked\git\cmd\git.exe','resources\app\git\mingw64\bin\git.exe','resources\app.asar.unpacked\git\mingw64\bin\git.exe')){ $full=Join-Path $a.FullName $p; if(Test-Path $full){return $full}}}}; return $null }; $git=FindGit; if(-not $git){Write-Host '[ERROR] No se encontro Git.'; exit 1}; & $git remote get-url origin 2>$null; if($LASTEXITCODE -ne 0){ & $git remote add origin $remote }; & $git remote set-url origin $remote; & $git add -A; & $git diff --cached --quiet; if($LASTEXITCODE -ne 0){ & $git commit -m ('Update '+(Get-Date -Format 'yyyy-MM-dd_HH-mm-ss')) | Out-Null } else { Write-Host '[INFO] No hay cambios para commit' }; & $git pull --rebase origin main; & $git push -u origin main"
