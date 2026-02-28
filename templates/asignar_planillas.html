@@ -86,6 +86,50 @@
     /* Helper text under inputs */
     .help{width:100%;text-align:center;color:#7b7a96;font-size:.9em;margin:-8px 0 8px}
     .help strong{color:#23213b}
+  
+
+    /* === Panel elegante de asignaciones (tabla_asignaciones.html) === */
+    .assign-wrap{padding:14px}
+    .top-resume{display:grid;grid-template-columns:1.2fr 1fr;gap:12px;margin-bottom:12px}
+    .resume-card,.avail-card{background:#fff;border:1px solid #ecebfa;border-radius:16px;padding:14px;box-shadow:0 4px 18px rgba(91,111,230,.06)}
+    .resume-title{font-weight:900;display:flex;align-items:center;gap:8px;margin-bottom:8px}
+    .resume-grid{display:grid;grid-template-columns:repeat(3,minmax(110px,1fr));gap:8px}
+    .kpi{background:#f8f9ff;border:1px solid #eceeff;border-radius:12px;padding:8px 10px}
+    .kpi .l{font-size:.78rem;color:#6d6c88;font-weight:700}
+    .kpi .n{font-size:1.15rem;font-weight:900;color:#23213b}
+    .resume-meta{margin-top:8px;color:#666585;font-size:.9rem;font-weight:700}
+    .muted{color:#777694}
+    .avail-title{display:flex;justify-content:space-between;align-items:center;gap:8px;font-weight:900;margin-bottom:8px}
+    .badge-soft{background:#eef2ff;color:#3843a8;border-radius:999px;padding:4px 10px;font-size:.78rem;font-weight:800}
+    .avail-ranges{font-size:.86rem;color:#4b4a66;background:#fafaff;border:1px dashed #dfe3ff;border-radius:10px;padding:8px 10px;max-height:62px;overflow:auto}
+    .avail-actions{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+    .mini-btn{border:1px solid #d9defb;background:#fff;color:#3943a5;border-radius:10px;padding:6px 10px;font-weight:800;cursor:pointer}
+    .mini-btn:hover{background:#f4f6ff}
+    .mini-btn.ok{border-color:#bfeedd;color:#0f8f63}
+    .avail-grid{margin-top:10px;display:grid;grid-template-columns:repeat(auto-fill,minmax(48px,1fr));gap:6px;max-height:172px;overflow:auto;padding-right:2px}
+    .num-btn{border:1px solid #e2e5fb;background:#fff;border-radius:10px;padding:6px 4px;font-weight:800;cursor:pointer;color:#2f2d4f}
+    .num-btn:hover{border-color:#bfc7ff;background:#f5f7ff}
+    .vendor-list{display:grid;gap:10px}
+    .vendor-card{background:#fff;border:1px solid #ebeafb;border-radius:16px;overflow:hidden;box-shadow:0 4px 14px rgba(20,24,55,.04)}
+    .vendor-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 14px;background:linear-gradient(180deg,#fafbff,#f5f7ff)}
+    .vendor-id{display:flex;align-items:center;gap:10px;min-width:0}
+    .avatar-badge{width:40px;height:40px;border-radius:12px;background:linear-gradient(135deg,#5b6fe6,#8d7bff);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:900;box-shadow:0 6px 16px rgba(91,111,230,.25)}
+    .v-name{font-weight:900;line-height:1.1}
+    .v-name small{display:block;font-weight:700;color:#12bc9b}
+    .v-stats{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+    .count-pill{background:#eff6ff;color:#2447a6;border:1px solid #dbeafe;border-radius:999px;padding:4px 10px;font-weight:900;font-size:.82rem}
+    .range-pill{background:#f5f3ff;color:#5a4ab8;border:1px solid #e8e3ff;border-radius:999px;padding:4px 10px;font-weight:800;font-size:.8rem;max-width:360px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .vendor-actions{display:flex;gap:6px;flex-wrap:wrap}
+    .vendor-body{padding:12px 14px;border-top:1px solid #f0effb}
+    .planillas-wrap{display:flex;flex-wrap:wrap;gap:8px}
+    .pill{background:#5b6fe6;color:#fff;font-weight:800;border-radius:10px;padding:6px 10px;display:flex;gap:8px;align-items:center}
+    .pill small{opacity:.92}
+    .pill .del{background:rgba(255,255,255,.14);border:none;color:#fff;cursor:pointer;width:24px;height:24px;border-radius:7px;display:inline-flex;align-items:center;justify-content:center}
+    .pill .del:hover{background:rgba(255,255,255,.24)}
+    .empty-box{padding:22px 14px;text-align:center;color:#676680;background:#fff;border:1px dashed #dcdcf3;border-radius:14px}
+    .hint-bottom{margin-top:8px;color:#767593;font-size:.85rem}
+    @media (max-width:900px){.top-resume{grid-template-columns:1fr}.resume-grid{grid-template-columns:1fr 1fr 1fr}.vendor-head{align-items:flex-start;flex-direction:column}.v-stats{justify-content:flex-start}}
+
   </style>
 </head>
 <body>
@@ -122,7 +166,7 @@
     <div class="main-card">
       <img src="{{ url_for('static', filename='img/logo.png') }}" alt="GL Studios Logo" class="logo-gl">
       <h1>Asignación de Planillas</h1>
-      <div class="subtitle">Solo se asignan planillas de <b>boletos impresos</b> (por <b>serie</b> y <b>fecha de sorteo</b>).</div>
+      <div class="subtitle">Solo se asignan planillas de <b>boletos impresos</b> (por <b>serie</b> y <b>fecha de sorteo</b>). <br><small>Referencia: <b>1 planilla = {{ boletos_por_planilla }} boletos</b> y <b>1 hoja A4 = 2 planillas ({{ boletos_por_planilla * 2 }} boletos)</b>.</small></div>
 
       <!-- Chips resumen por SERIE+FECHA -->
       <div class="chips" id="chips" role="status" aria-live="polite">
@@ -130,6 +174,8 @@
         <div class="chip a"><i class="bi bi-clipboard2-check"></i> Asignadas (serie): <span class="v" id="asignadas_serie">{{ asignadas_serie }}</span></div>
         <div class="chip b"><i class="bi bi-file-minus"></i> En blanco (serie): <span class="v" id="blancoSerie">{{ blanco_serie }}</span></div>
         <div class="chip"><i class="bi bi-grid-3x3-gap"></i> Boletos/planilla: <span class="v">{{ boletos_por_planilla }}</span></div>
+        <div class="chip i"><i class="bi bi-file-earmark"></i> Planillas/hoja A4: <span class="v">2</span></div>
+        <div class="chip a"><i class="bi bi-files"></i> Boletos/hoja A4: <span class="v">{{ boletos_por_planilla * 2 }}</span></div>
       </div>
 
       <!-- Alerta -->
@@ -322,6 +368,62 @@
     const f = document.getElementById('fecha-select').value;
     const s = document.getElementById('serie-select-view').value;
     location.href = `?fecha=${encodeURIComponent(f)}&serie=${encodeURIComponent(s)}`;
+  });
+
+  // Acciones rápidas: elegir vendedor / agregar planillas disponibles
+  function selectVendorFromButton(btn){
+    const val = btn.dataset.vendorValue || '';
+    if(!val) return;
+    const sel = document.getElementById('vendedor-select');
+    let opt = Array.from(sel.options).find(o => o.value === val);
+
+    // Si el vendedor ya tiene planillas pero no existe en el combo (por XML viejo o vendedor no registrado),
+    // lo agregamos temporalmente para permitir asignarle más planillas desde su tarjeta.
+    if(!opt){
+      const parts = val.split('|');
+      const nombre = (parts[0] || '').trim();
+      const apellido = (parts[1] || '').trim();
+      const seudo = (parts[2] || '').trim();
+      opt = document.createElement('option');
+      opt.value = val;
+      opt.textContent = `${nombre} ${apellido} (${seudo || 'Sin seudónimo'})`.replace(/\s+/g,' ').trim();
+      sel.appendChild(opt);
+    }
+
+    sel.value = val;
+    sel.focus();
+    document.getElementById('planillas-input')?.scrollIntoView({behavior:'smooth', block:'center'});
+  }
+
+  function appendPlanillas(raw){
+    const current = parsePlanillas(planillasInput.value);
+    const incoming = parsePlanillas(raw);
+    const merged = Array.from(new Set([...current, ...incoming])).sort((a,b)=>a-b);
+    planillasInput.value = compactRanges(merged);
+    planillasInput.focus();
+  }
+
+  document.addEventListener('click', (e)=>{
+    const useVendorBtn = e.target.closest('.pick-vendor');
+    if(useVendorBtn){
+      e.preventDefault();
+      selectVendorFromButton(useVendorBtn);
+      return;
+    }
+
+    const pickNumBtn = e.target.closest('.pick-planilla');
+    if(pickNumBtn){
+      e.preventDefault();
+      appendPlanillas(String(pickNumBtn.dataset.numero || ''));
+      return;
+    }
+
+    const pickRangeBtn = e.target.closest('.pick-rango');
+    if(pickRangeBtn){
+      e.preventDefault();
+      appendPlanillas(String(pickRangeBtn.dataset.rango || ''));
+      return;
+    }
   });
 
   // Delegado para eliminar planilla (envía también la serie)

@@ -1,0 +1,23 @@
+<?xml version='1.0' encoding='utf-8'?>
+<spinners>
+  <spinner index="1" locked="1" used="1" />
+  <spinner index="2" locked="1" used="1" />
+  <spinner index="3" locked="0" used="0" />
+  <spinner index="4" locked="0" used="0" />
+  <spinner index="5" locked="0" used="0" />
+  <spinner index="6" locked="0" used="0" />
+  <spinner index="7" locked="0" used="0" />
+  <spinner index="8" locked="0" used="0" />
+  <spinner index="9" locked="0" used="0" />
+  <spinner index="10" locked="0" used="0" />
+  <spinner index="11" locked="0" used="0" />
+  <spinner index="12" locked="0" used="0" />
+  <spinner index="13" locked="0" used="0" />
+  <spinner index="14" locked="0" used="0" />
+  <spinner index="15" locked="0" used="0" />
+  <spinner index="16" locked="0" used="0" />
+  <spinner index="17" locked="0" used="0" />
+  <spinner index="18" locked="0" used="0" />
+  <spinner index="19" locked="0" used="0" />
+  <spinner index="20" locked="0" used="0" />
+</spinners>

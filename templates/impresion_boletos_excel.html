@@ -48,6 +48,7 @@
     .grid{display:grid;gap:12px}
     .grid.cols-2{grid-template-columns:1fr 1fr}
     .grid.cols-3{grid-template-columns:repeat(3,1fr)}
+    .grid.cols-5{grid-template-columns:repeat(5,minmax(0,1fr))}
     label{font-size:.82rem;color:#6772a6;font-weight:800;margin-bottom:6px;display:block}
     input,select{width:100%;padding:10px;border:1px solid var(--ring);border-radius:12px;background:#fff;font-weight:700;color:#1b2240}
     input[readonly]{background:#f5f7ff;color:#6973a6}
@@ -206,6 +207,7 @@
               <div>
                 Activa el <b>BONUS</b> para generar 5 números aleatorios (se imprimen bajo el comodín).
                 Puedes decidir cuántos <b>ganadores</b> quieres por cantidad de aciertos. <br>
+                <b>Patrón automático:</b> se conserva de derecha a izquierda y cambia desde la izquierda (5=iguales, 4=cambia el 1ro, 3=cambian los 2 primeros, 2=cambian los 3 primeros, 1=cambian los 4 primeros).<br>
                 Ejemplo: 5 aciertos = 0 ganadores, 4 aciertos = 2 ganadores, 3 aciertos = 3 ganadores, 2 aciertos = 5 ganadores, 1 acierto = 3 ganadores.
               </div>
             </div>
@@ -236,6 +238,35 @@
               <div>
                 <label>Ganadores con 1 acierto</label>
                 <input type="number" min="0" step="1" name="bonus_k1" id="bonus_k1" value="0">
+              </div>
+            </div>
+
+            <div class="grid cols-5" style="margin-top:10px;align-items:end">
+              <div>
+                <label>Bonus X (+der / -izq)</label>
+                <input type="number" step="0.5" name="bonus_move_x" id="bonus_move_x" value="0">
+              </div>
+              <div>
+                <label>Bonus Y (+sube / -baja)</label>
+                <input type="number" step="0.5" name="bonus_move_y" id="bonus_move_y" value="0">
+              </div>
+              <div>
+                <label>Tamaño números</label>
+                <input type="number" min="6" max="24" step="0.5" name="bonus_num_size" id="bonus_num_size" value="9">
+              </div>
+              <div>
+                <label>Separación</label>
+                <input type="number" min="0" max="25" step="0.5" name="bonus_num_gap" id="bonus_num_gap" value="3.5">
+              </div>
+              <div>
+                <label>Ancho (alargar)</label>
+                <input type="number" min="4" max="30" step="0.5" name="bonus_num_width" id="bonus_num_width" value="8.5">
+              </div>
+            </div>
+            <div class="note" style="margin-top:8px">
+              <i class="bi bi-rulers"></i>
+              <div>
+                Ajustes del <b>BONUS</b> para impresión: muévelo en X/Y, cambia tamaño de número, sepáralos o alárgalos sin afectar el resto del boleto.
               </div>
             </div>
             <!-- ===== /BONUS ===== -->
@@ -825,6 +856,15 @@
       const req = inf.requested||{};
       const wins = inf.winners||{};
       const k = (x)=> (wins[String(x)]||[]).join(', ');
+      const det = Array.isArray(inf.tickets_detalle) ? inf.tickets_detalle : [];
+      const detRows = det.map(r=>{
+        const vec = (r.bonus_boleto||[]).join(', ');
+        const cp = (r.coincidencias_posicion ?? '');
+        const cn = (r.coincidencias_numeros ?? '');
+        const ch = Array.isArray(r.cambian_posiciones) && r.cambian_posiciones.length ? r.cambian_posiciones.join(', ') : '—';
+        return `<tr><td>${r.boleto||''}</td><td>${vec||'—'}</td><td>${cp}</td><td>${cn}</td><td>${ch}</td></tr>`;
+      }).join('');
+
       bonusBody.innerHTML = `
         <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">
           <span class="pill pill-blue"><b>Código:</b> ${inf.code||'—'}</span>
@@ -841,6 +881,14 @@
             <tr><td>1</td><td>${req['1']||0}</td><td>${k(1)||'—'}</td></tr>
           </tbody>
         </table>
+        ${detRows ? `
+          <div style="margin-top:10px;font-weight:700">Historial por boleto (verificación)</div>
+          <div style="max-height:280px;overflow:auto;border:1px solid #e6e6e6;border-radius:10px;margin-top:6px">
+            <table style="width:100%;font-size:12px">
+              <thead><tr><th>ID</th><th>Franja BONUS</th><th>Coinc. posición</th><th>Coinc. número</th><th>Cambia pos.</th></tr></thead>
+              <tbody>${detRows}</tbody>
+            </table>
+          </div>` : ''}
       `;
       showModal(modalBonus);
     }catch(e){

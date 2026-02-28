@@ -54,4 +54,72 @@
       <meta_boletos>60</meta_boletos>
     </configuracion>
   </dia>
+  <dia fecha="2026-02-20">
+    <configuracion>
+      <valor_boleto>0.50</valor_boleto>
+      <comision_vendedor>30.0</comision_vendedor>
+      <comision_extra_meta>5.0</comision_extra_meta>
+      <meta_boletos>60</meta_boletos>
+    </configuracion>
+  </dia>
+  <dia fecha="2026-02-21">
+    <configuracion>
+      <valor_boleto>0.50</valor_boleto>
+      <comision_vendedor>30.0</comision_vendedor>
+      <comision_extra_meta>5.0</comision_extra_meta>
+      <meta_boletos>60</meta_boletos>
+    </configuracion>
+  </dia>
+  <dia fecha="2026-02-23">
+    <configuracion>
+      <valor_boleto>0.50</valor_boleto>
+      <comision_vendedor>30.0</comision_vendedor>
+      <comision_extra_meta>5.0</comision_extra_meta>
+      <meta_boletos>60</meta_boletos>
+    </configuracion>
+  </dia>
+  <dia fecha="2026-02-24">
+    <configuracion>
+      <valor_boleto>1.0</valor_boleto>
+      <comision_vendedor>30.0</comision_vendedor>
+      <comision_extra_meta>5.0</comision_extra_meta>
+      <meta_boletos>60</meta_boletos>
+      <valor_boleto>1.0</valor_boleto>
+      <comision_vendedor>30.0</comision_vendedor>
+      <comision_extra_meta>5.0</comision_extra_meta>
+      <meta_boletos>60</meta_boletos>
+    </configuracion>
+    <cobros>
+      <cobro seudonimo="PAPI PAPI DE PEPE" id="2026-02-24__PAPI PAPI DE PEPE" devueltos="0" vendidos="120" total_pagar="79.00" transferencia="0.00" efectivo="79.00" pagado="1" fecha_hora="2026-02-24 06:26:08" valor_boleto="1.00" comision_vendedor="30.00" comision_extra_meta="5.00" meta_boletos="60" pct_aplicado="35.0000" valor_total_venta="120.00" gan_vendedor="42.00" a_pagar_caja="78.00" vuelto="1.00" creado_en="2026-02-24T06:26:08" creado_por="GLSTUDIOS" creado_rol="Super Administrador" creado_ip="192.168.0.5" actualizado_en="2026-02-24T06:26:08" actualizado_por="GLSTUDIOS" actualizado_ip="192.168.0.5" />
+    </cobros>
+  </dia>
+  <dia fecha="2026-02-25">
+    <configuracion>
+      <valor_boleto>1.0</valor_boleto>
+      <comision_vendedor>30.0</comision_vendedor>
+      <comision_extra_meta>5.0</comision_extra_meta>
+      <meta_boletos>60</meta_boletos>
+    </configuracion>
+    <cobros>
+      <cobro seudonimo="PAPI PAPI DE PEPE" id="2026-02-25__PAPI PAPI DE PEPE" devueltos="50" vendidos="150" total_pagar="100.00" transferencia="0.00" efectivo="100.00" pagado="1" fecha_hora="2026-02-25 21:26:14" valor_boleto="1.00" comision_vendedor="30.00" comision_extra_meta="5.00" meta_boletos="60" pct_aplicado="35.0000" valor_total_venta="150.00" gan_vendedor="52.50" a_pagar_caja="97.50" vuelto="2.50" creado_en="2026-02-25T21:26:14" creado_por="GLSTUDIOS" creado_rol="Super Administrador" creado_ip="127.0.0.1" actualizado_en="2026-02-25T21:26:14" actualizado_por="GLSTUDIOS" actualizado_ip="127.0.0.1" modo_devolucion="manual">
+        <boletos_devueltos_qr total="0" actualizado_en="2026-02-25 21:26:14" />
+      </cobro>
+    </cobros>
+  </dia>
+  <dia fecha="2026-02-26">
+    <configuracion>
+      <valor_boleto>0.50</valor_boleto>
+      <comision_vendedor>30.0</comision_vendedor>
+      <comision_extra_meta>5.0</comision_extra_meta>
+      <meta_boletos>60</meta_boletos>
+    </configuracion>
+  </dia>
+  <dia fecha="2026-02-27">
+    <configuracion>
+      <valor_boleto>0.50</valor_boleto>
+      <comision_vendedor>30.0</comision_vendedor>
+      <comision_extra_meta>5.0</comision_extra_meta>
+      <meta_boletos>60</meta_boletos>
+    </configuracion>
+  </dia>
 </caja>

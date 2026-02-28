@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>GL Bingo • Enlaces vMix</title>
+  <style>
+    body{margin:0;font-family:Inter,Segoe UI,Arial,sans-serif;background:#06122a;color:#ecf3ff}
+    .wrap{max-width:1100px;margin:24px auto;padding:0 16px}
+    .top{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:18px}
+    .title{font-size:28px;font-weight:800}
+    .sub{opacity:.8;font-size:13px}
+    .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:16px}
+    .card{background:linear-gradient(180deg,#0b1f47,#08172f);border:1px solid #1a3768;border-radius:16px;padding:14px;box-shadow:0 8px 30px rgba(0,0,0,.25)}
+    .card h3{margin:0 0 12px;font-size:18px}
+    .item{background:#081327;border:1px solid #173767;border-radius:12px;padding:10px 10px;margin-bottom:10px}
+    .name{font-weight:700;font-size:13px;color:#9fd0ff;margin-bottom:6px}
+    .url{word-break:break-all;font-family:Consolas,monospace;font-size:12px;background:#030b18;border:1px solid #10284d;padding:8px;border-radius:8px}
+    .actions{display:flex;gap:8px;margin-top:8px}
+    .btn{border:1px solid #24569a;background:#11305d;color:#fff;border-radius:8px;padding:6px 10px;font-size:12px;text-decoration:none;display:inline-block;cursor:pointer}
+    .btn:hover{background:#17407b}
+    .note{margin-top:18px;background:#10213f;border:1px dashed #29579a;border-radius:12px;padding:12px;font-size:13px;line-height:1.45}
+    code{background:#081327;padding:2px 6px;border-radius:6px;border:1px solid #173767}
+  </style>
+  <script>
+    function copiar(url){ navigator.clipboard.writeText(url).then(()=>alert('Copiado:\n'+url)).catch(()=>prompt('Copia este enlace:',url)); }
+  </script>
+</head>
+<body>
+  <div class="wrap">
+    <div class="top">
+      <div>
+        <div class="title">Enlaces XML para vMix</div>
+        <div class="sub">Base actual: {{ base_url }}</div>
+      </div>
+      <a class="btn" href="{{ url_for('juego.juego_ui') if false else '/juego' }}">Volver al Juego</a>
+    </div>
+
+    <div class="grid">
+      {% for grupo, items in enlaces.items() %}
+      <div class="card">
+        <h3>{{ grupo }}</h3>
+        {% for item in items %}
+        <div class="item">
+          <div class="name">{{ item.nombre }}</div>
+          <div class="url">{{ item.url }}</div>
+          <div class="actions">
+            <a class="btn" href="{{ item.url }}" target="_blank">Abrir</a>
+            <button class="btn" onclick="copiar('{{ item.url }}')">Copiar</button>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+      {% endfor %}
+    </div>
+
+    <div class="note">
+      Para <strong>vMix Data Source</strong> usa estas rutas tipo tabla:<br>
+      <code>/juego/xml/figuras_presentacion</code> (una fila por figura del día) y <code>/juego/xml/carton_ganador</code> (una sola fila, se reemplaza con el último ganador).<br><br>
+      En vMix configura <strong>XPath</strong> así:
+      <ul>
+        <li>Figuras del día: <code>/presentacion/fila</code></li>
+        <li>Cartón ganador: <code>/carton_ganador/fila</code></li>
+      </ul>
+      Las columnas <code>N1..N25</code>, <code>C1..C25</code>, <code>P1..P25</code> están en orden por filas: B1,I1,N1,G1,O1 → ... → B5,I5,N5,G5,O5.
+    </div>
+  </div>
+</body>
+</html>

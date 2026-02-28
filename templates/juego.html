@@ -19,13 +19,14 @@
       --spnPanelA:#ffffff; --spnPanelB:#f6f8ff; --spnPanelC:#e9eef9;
     }
     *{box-sizing:border-box}
-    html{scroll-behavior:smooth}
+    html{scroll-behavior:smooth; scrollbar-gutter:stable both-edges}
     html,body{height:100%}
     :focus-visible{outline:2px solid rgba(100,181,255,.7);outline-offset:2px;border-radius:4px}
     body{
       margin:0;color:var(--ink);
       background:radial-gradient(90% 90% at 50% 0%, #16294f 0%, #0b1220 60%, #090f1a 100%);
-      font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Arial
+      font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Arial;
+      overflow-y:scroll;
     }
     html.overlay, body.overlay{ background:transparent !important; }
     .layout.hidden{display:none !important}
@@ -75,10 +76,49 @@
     .ghost{background:#162542;color:#e8eef8;border:1px solid var(--muted)}
     .spacer{flex:1}
 
+    /* Bonus + Reintegro (vMix Data Source) */
+    .extras-wrap{padding:0 16px 14px}
+    .extras-card{background:linear-gradient(180deg,#101e39,#0c1528);border:1px solid var(--muted);border-radius:14px;padding:12px;box-shadow:var(--ring)}
+    .extras-head{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+    .extras-title{font-weight:900;font-size:14px;letter-spacing:.3px}
+    .extras-sub{font-size:12px;opacity:.8}
+    .extras-body{display:grid;grid-template-columns:1.3fr .9fr;gap:10px}
+    .bonus-box,.rein-box{background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:10px}
+    .bonus-box h4,.rein-box h4{margin:0 0 8px;font-size:13px}
+    .bonus-grid{display:grid;grid-template-columns:repeat(5,minmax(58px,1fr));gap:8px}
+    .bonus-btn{position:relative;min-height:54px;border:1px solid rgba(255,255,255,.14);background:linear-gradient(180deg,#1b2b49,#16233d);color:#f3f6fb;font-weight:900;border-radius:12px;padding:0;cursor:pointer;box-shadow:var(--ring);display:flex;align-items:center;justify-content:center;overflow:hidden;transition:transform .12s ease,filter .15s ease,border-color .15s ease}
+    .bonus-btn:hover{filter:brightness(1.08);transform:translateY(-1px)}
+    .bonus-btn:active{transform:translateY(1px)}
+    .bonus-btn.active{background:linear-gradient(180deg,#ffd777,#f4b532);color:#201200;border-color:#ffd777;box-shadow:0 0 0 1px rgba(255,215,119,.22),0 0 22px rgba(255,194,58,.25)}
+    .bonus-btn.rolling{animation:bonusPulse .55s ease-in-out}
+    .bonus-btn.rolling .bonus-dice{animation:bonusDiceRoll .55s ease-in-out}
+    .bonus-btn:disabled{opacity:.45;cursor:not-allowed}
+    .bonus-dice{font-size:28px;line-height:1;filter:drop-shadow(0 2px 6px rgba(0,0,0,.28));user-select:none}
+    .bonus-btn::after{content:'';position:absolute;inset:-30%;background:radial-gradient(circle at 50% 50%, rgba(255,255,255,.20), rgba(255,255,255,0) 55%);opacity:0;transition:opacity .15s ease}
+    .bonus-btn:hover::after{opacity:1}
+    @keyframes bonusDiceRoll{
+      0%{transform:rotate(0deg) scale(1)}
+      25%{transform:rotate(-18deg) scale(1.08)}
+      50%{transform:rotate(14deg) scale(.96)}
+      75%{transform:rotate(-10deg) scale(1.05)}
+      100%{transform:rotate(0deg) scale(1)}
+    }
+    @keyframes bonusPulse{
+      0%{box-shadow:var(--ring)}
+      45%{box-shadow:0 0 0 2px rgba(255,255,255,.08), 0 0 22px rgba(80,144,255,.35)}
+      100%{box-shadow:var(--ring)}
+    }
+    .rein-btn{width:100%;border:1px solid rgba(255,255,255,.14);background:linear-gradient(180deg,#173d2c,#123121);color:#ecfff4;font-weight:900;border-radius:10px;padding:10px 8px;cursor:pointer;box-shadow:var(--ring)}
+    .rein-btn:hover{filter:brightness(1.06)}
+    .rein-btn.active{background:linear-gradient(180deg,#b8ffd1,#49df7e);color:#082012;border-color:#9bffc0}
+    .rein-btn:disabled{opacity:.45;cursor:not-allowed}
+    .extras-note{margin-top:8px;font-size:12px;opacity:.8}
+    @media (max-width: 900px){ .extras-body{grid-template-columns:1fr}.bonus-grid{grid-template-columns:repeat(5,1fr)} }
+
     .main{padding:0 16px 20px}
     .board{position:relative;background:linear-gradient(180deg,#0f1b33,#0e182c);border:1px solid var(--muted);border-radius:16px;padding:14px;box-shadow:var(--ring)}
     .grid-wrap{overflow-x:auto; display:flex; justify-content:center; padding:4px 6px}
-    .grid{display:grid; gap:clamp(2px, .22vw, 6px); grid-template-columns: repeat(15, var(--ball)); width:max-content;}
+    .grid{display:grid; gap:clamp(2px, .22vw, 6px); grid-template-columns: repeat(15, var(--ball)); grid-auto-rows:var(--ball); width:max-content;}
     .ball{
       width:var(--ball); height:var(--ball); border-radius:999px;
       display:flex; align-items:center; justify-content:center;
@@ -101,6 +141,82 @@
     .ball.marked{color:#1b1202; background:radial-gradient(120% 120% at 50% 10%, #fff3cf 0%, var(--gold) 55%, #f1b938 100%)}
     .ball.last{color:#2a0c11; background:radial-gradient(120% 120% at 50% 8%, #ffd5d8 0%, var(--redSoft) 45%, #ff1f2d 100%)}
 
+    /* Tablero 75 en modales (consulta/corrección) */
+    .board75{
+      --ball: 42px;
+      --ball-fs: 16px;
+      display:grid;
+      grid-template-columns: repeat(15, var(--ball));
+      grid-auto-rows: var(--ball);
+      gap:6px;
+      width:max-content;
+      margin:0 auto;
+      justify-content:center;
+      align-content:start;
+      padding:4px;
+    }
+    .board75 .ball{
+      width:var(--ball);
+      height:var(--ball);
+      font-size:var(--ball-fs);
+      cursor:default;
+      flex:0 0 auto;
+    }
+    #fixBoletoModal .winner-quick{
+      overflow-x:auto;
+      overflow-y:hidden;
+      padding-bottom:4px;
+      scrollbar-gutter:stable;
+    }
+    #fixBoletoModal #fixBoard75{ --ball: 42px; --ball-fs: 16px; }
+    #viewBoletoModal #viewBoard75{ --ball: 28px; --ball-fs: 12px; }
+    @media (max-width: 1200px){ #fixBoletoModal #fixBoard75{ --ball: 38px; --ball-fs: 14px; gap:5px; } }
+    @media (max-width: 980px){ #fixBoletoModal #fixBoard75{ --ball: 34px; --ball-fs: 13px; gap:4px; } }
+    @media (max-width: 760px){ #fixBoletoModal #fixBoard75{ --ball: 30px; --ball-fs: 12px; gap:4px; } }
+
+    /* Corrección boleto: tablero 75 en panel completo (evita que se vea en columna) */
+    #fixBoletoModal .fix-panel-board75{
+      margin-top: 2px;
+    }
+    #fixBoletoModal .fix-board-wrap{
+      overflow-x:auto;
+      overflow-y:hidden;
+      padding:8px;
+      border-radius:16px;
+      background:rgba(255,255,255,.03);
+      border:1px solid rgba(255,255,255,.08);
+      scrollbar-gutter:stable;
+    }
+    #fixBoletoModal #fixBoard75{
+      display:grid !important;
+      grid-template-columns: repeat(15, var(--ball)) !important;
+      grid-auto-rows: var(--ball) !important;
+      width:max-content;
+      min-width:max-content;
+      margin:0 auto;
+      justify-content:start;
+      align-content:start;
+      gap:6px;
+      --ball: 44px;
+      --ball-fs: 18px;
+      padding:4px;
+    }
+    #fixBoletoModal #fixBoard75 .ball{
+      width:var(--ball);
+      height:var(--ball);
+      font-size:var(--ball-fs);
+      cursor:default;
+    }
+    @media (max-width: 1200px){
+      #fixBoletoModal #fixBoard75{ --ball: 40px; --ball-fs: 16px; gap:5px; }
+    }
+    @media (max-width: 980px){
+      #fixBoletoModal #fixBoard75{ --ball: 36px; --ball-fs: 14px; gap:4px; }
+    }
+    @media (max-width: 760px){
+      #fixBoletoModal #fixBoard75{ --ball: 30px; --ball-fs: 12px; gap:4px; }
+    }
+
     .lock{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:linear-gradient(180deg,rgba(7,12,22,.72),rgba(7,12,22,.72));border-radius:18px;backdrop-filter:blur(2px);color:#d7def1;font-weight:900;letter-spacing:.3px;font-size:20px}
     .lock .tag{background:#182747;border:1px solid #26406e;padding:9px 12px;border-radius:14px;display:flex;gap:10px;align-items:center}
     .hint{margin-top:8px;opacity:.85;font-size:14px}
@@ -114,11 +230,58 @@
       background:linear-gradient(180deg,#0f1b33,#0e182c);
       box-shadow: var(--ring);
     }
-    .board-history-mini .bh-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px}
+    .board-history-mini .bh-head{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:10px;
+      margin-bottom:8px;
+      flex-wrap:wrap;
+    }
     .board-history-mini .bh-title{font-weight:900}
-    .history-list.mini{display:flex;gap:8px;flex-wrap:nowrap;overflow-x:auto;overflow-y:hidden;padding-bottom:2px}
-    .hchip.mini{width:34px;height:34px;border-radius:12px;font-size:14px}
+    .history-list.mini{
+      display:grid;
+      grid-template-columns: repeat(auto-fill, 34px);
+      grid-auto-rows: 34px;
+      justify-content:start;
+      align-content:start;
+      gap:8px;
+      width:100%;
+      max-height:118px;
+      overflow-y:auto;
+      overflow-x:hidden;
+      padding:2px 2px 4px 2px;
+      box-sizing:border-box;
+      scrollbar-gutter:stable;
+    }
+    .hchip.mini{
+      width:34px;
+      height:34px;
+      border-radius:12px;
+      font-size:14px;
+      margin:0 !important;
+      flex:none !important;
+    }
     .hchip.mini .order{display:none}
+
+    /* Historial principal estable: evita saltos/reacomodos feos cuando crece */
+    #hist.history-list{
+      display:grid;
+      grid-template-columns: repeat(auto-fill, 44px);
+      grid-auto-rows: 44px;
+      justify-content:start;
+      align-content:start;
+      gap:8px;
+      max-height:220px;
+      overflow:auto;
+      padding:6px;
+      scrollbar-gutter:stable;
+    }
+    #hist.history-list .hchip{
+      width:44px;
+      height:44px;
+      margin:0;
+    }
 
     .figs-wrap{padding:0 22px 20px}
     .figs{background:linear-gradient(180deg,#0f1b33,#0e182c);border:1px solid var(--muted);border-radius:18px;padding:16px;box-shadow:var(--ring)}
@@ -196,7 +359,182 @@
     .spn-title{text-align:center; font-weight:900; font-size:clamp(22px, 3vw, 36px); margin-bottom:16px; color:#8cc9ff}
     .spn-grid.large .spn-cell{min-height:92px; font-size:clamp(28px, 3.2vw, 44px)}
 
-    .solo.hidden{display:none}
+    
+    /* ===== Spinners (modal elegante) ===== */
+    .spn-shell{
+      display:grid;
+      grid-template-columns: 340px 1fr;
+      gap:14px;
+      align-items:stretch;
+    }
+    .spn-left{
+      background: linear-gradient(180deg, rgba(12,25,48,.75), rgba(8,14,28,.55));
+      border:1px solid rgba(255,255,255,.10);
+      border-radius:16px;
+      padding:12px;
+      box-shadow: 0 10px 24px rgba(0,0,0,.35);
+      min-height: 420px;
+      display:flex;
+      flex-direction:column;
+    }
+    .spn-search{
+      display:flex; gap:10px; align-items:center; margin-bottom:10px;
+    }
+    #spnSearch{
+      width:100%;
+      padding:10px 12px;
+      border-radius:12px;
+      border:1px solid rgba(255,255,255,.14);
+      background: rgba(0,0,0,.22);
+      color:#eaf2ff;
+      outline:none;
+    }
+    .spn-count{
+      min-width:36px;
+      text-align:center;
+      font-weight:900;
+      border-radius:999px;
+      padding:6px 10px;
+      background: rgba(255,255,255,.10);
+      border:1px solid rgba(255,255,255,.10);
+      color:#cfe4ff;
+    }
+    .spn-list{
+      overflow:auto;
+      padding-right:6px;
+      display:flex;
+      flex-direction:column;
+      gap:10px;
+    }
+    .spn-item{
+      cursor:pointer;
+      user-select:none;
+      padding:10px 12px;
+      border-radius:14px;
+      border:1px solid rgba(255,255,255,.10);
+      background: rgba(255,255,255,.06);
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:10px;
+      transition: transform .08s ease, background .18s ease, border-color .18s ease;
+    }
+    .spn-item:hover{ transform: translateY(-1px); background: rgba(255,255,255,.10); }
+    .spn-item.active{
+      border-color: rgba(98,176,255,.65);
+      background: linear-gradient(180deg, rgba(35,90,160,.35), rgba(255,255,255,.06));
+      box-shadow: 0 0 0 2px rgba(80,150,255,.22) inset;
+    }
+    .spn-item .left{
+      display:flex; flex-direction:column; gap:3px;
+    }
+    .spn-item .idx{ font-weight:900; color:#cfe4ff; }
+    .spn-item .val{ font-weight:1000; letter-spacing:.20em; font-size:18px; color:#ffffff; }
+    .spn-item .tag{
+      font-size:12px; font-weight:900; padding:6px 10px; border-radius:999px;
+      border:1px solid rgba(255,255,255,.14);
+      background: rgba(0,0,0,.25);
+      color:#d8e9ff;
+      white-space:nowrap;
+    }
+    .spn-item .tag.used{ background: rgba(255,70,70,.16); border-color: rgba(255,70,70,.35); color:#ffd6d6; }
+    .spn-item .tag.lock{ background: rgba(255,190,70,.12); border-color: rgba(255,190,70,.32); color:#ffe9c9; }
+
+    .spn-right{
+      background: linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.03));
+      border:1px solid rgba(255,255,255,.10);
+      border-radius:16px;
+      padding:14px;
+      box-shadow: 0 10px 26px rgba(0,0,0,.32);
+      min-height: 420px;
+      display:flex;
+      flex-direction:column;
+      gap:12px;
+    }
+    .spn-preview-top{ display:flex; align-items:center; justify-content:space-between; gap:10px; }
+    .spn-preview-title{ font-size:15px; color:#d8e9ff; }
+    .spn-badge{
+      font-weight:1000;
+      font-size:12px;
+      letter-spacing:.12em;
+      padding:8px 12px;
+      border-radius:999px;
+      border:1px solid rgba(255,255,255,.14);
+      background: rgba(0,0,0,.25);
+      color:#d8e9ff;
+    }
+    .spn-badge.used{ background: rgba(255,70,70,.16); border-color: rgba(255,70,70,.35); color:#ffd6d6; }
+    .spn-badge.lock{ background: rgba(255,190,70,.12); border-color: rgba(255,190,70,.32); color:#ffe9c9; }
+
+    .spn-digits{
+      display:flex; gap:10px; justify-content:center;
+      padding:14px 10px;
+      border-radius:18px;
+      background: rgba(0,0,0,.26);
+      border:1px solid rgba(255,255,255,.10);
+    }
+    .spn-digits .d{
+      width:74px; height:92px;
+      display:flex; align-items:center; justify-content:center;
+      border-radius:16px;
+      font-weight:1000;
+      font-size:48px;
+      color:#0b1426;
+      background: linear-gradient(#ffffff,#e9eef6);
+      box-shadow: 0 12px 22px rgba(0,0,0,.35);
+    }
+    .spn-note{ font-size:12.5px; color:#bcd6ff; opacity:.95; }
+
+    .spn-actions2{ display:grid; grid-template-columns: 1fr 1fr; gap:10px; }
+    .spn-btn{
+      border-radius:14px;
+      padding:12px 12px;
+      font-weight:1000;
+      border:1px solid rgba(255,255,255,.12);
+      cursor:pointer;
+      transition: transform .08s ease, filter .18s ease;
+    }
+    .spn-btn:hover{ transform: translateY(-1px); filter: brightness(1.06); }
+    .spn-btn.gen{
+      background: linear-gradient(180deg, rgba(32,210,140,.95), rgba(18,150,100,.95));
+      color:#062115;
+    }
+    .spn-btn.launch{
+      background: linear-gradient(180deg, rgba(255,90,90,.98), rgba(190,0,0,.98));
+      color:#fff;
+    }
+    .spn-btn.off{
+      grid-column: 1 / -1;
+      background: rgba(255,255,255,.08);
+      color:#d8e9ff;
+    }
+    .spn-vmix{
+      background: rgba(0,0,0,.22);
+      border:1px solid rgba(255,255,255,.10);
+      border-radius:14px;
+      padding:12px;
+    }
+    .spn-vmix-row{ display:flex; gap:10px; align-items:center; }
+    .spn-vmix-row label{ min-width:150px; font-size:13px; color:#cfe4ff; font-weight:900; }
+    #vmixInputName{
+      width:100%;
+      padding:10px 12px;
+      border-radius:12px;
+      border:1px solid rgba(255,255,255,.14);
+      background: rgba(0,0,0,.22);
+      color:#eaf2ff;
+      outline:none;
+    }
+    .spn-vmix-help{ margin-top:8px; font-size:12px; color:#bcd6ff; opacity:.9; }
+    @media (max-width: 960px){
+      .spn-shell{ grid-template-columns: 1fr; }
+      .spn-left{ min-height: unset; }
+      .spn-right{ min-height: unset; }
+      .spn-digits .d{ width:64px; height:82px; font-size:42px; }
+      .spn-vmix-row{ flex-direction:column; align-items:stretch; }
+      .spn-vmix-row label{ min-width: unset; }
+    }
+.solo.hidden{display:none}
     .solo{position:fixed; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:18px; background: transparent;}
     .solo .card{ width:min(900px, 92vw); border-radius:26px; padding:22px 24px; border:1px solid #ffffff26; background:transparent; }
     .solo .screen{display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:220px}
@@ -855,6 +1193,34 @@
         <button id="btnConsultarBoleto" class="btn ghost" title="Consultar boleto" type="button" aria-label="Consultar boleto" onclick="window.__openViewBoleto && window.__openViewBoleto()">👁️</button>
       </div>
 
+      <div class="extras-wrap">
+        <div class="extras-card">
+          <div class="extras-head">
+            <div>
+              <div class="extras-title">🎁 Bonus y Reintegro del día (vMix)</div>
+              <div class="extras-sub">Al dar clic se actualiza el XML para Data Source en vMix.</div>
+            </div>
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+              <span class="pill">Bonus XML: <b>/static/db/vmix_bonus.xml</b></span>
+              <span class="pill">Reintegro XML: <b>/static/db/vmix_reintegro.xml</b></span>
+              <button class="btn ghost" id="btnRefreshExtras">⟳ Extras</button>
+            </div>
+          </div>
+          <div class="extras-body">
+            <div class="bonus-box">
+              <h4>🎲 5 números del Bonus</h4>
+              <div id="bonusGrid" class="bonus-grid"></div>
+              <div class="extras-note" id="bonusNote">Cargando bonus…</div>
+            </div>
+            <div class="rein-box">
+              <h4>🧾 Reintegro</h4>
+              <button id="btnReintegroFire" class="rein-btn" disabled>Sin reintegro</button>
+              <div class="extras-note" id="reintegroNote">Cargando reintegro…</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div class="main">
         <div class="board">
           <div class="grid-wrap"><div id="grid" class="grid"></div></div>
@@ -878,6 +1244,7 @@
           <h3>🧩 Figuras del día (en juego)</h3>
           <div class="fig-toolbar">
             <div class="pill">Fecha de sorteo: <b id="figFecha">—</b></div>
+            <div class="pill">Sorteo activo: <b id="figSorteo">—</b></div>
             <div class="pill">Ganadores: <b id="ganCount">0</b></div>
             <div class="pill">Figuras ganadas: <b id="ganFigList">—</b></div>
             <button class="btn" id="btnRefrescarFig">⟳ Actualizar</button>
@@ -921,18 +1288,56 @@
           </div>
           <div class="modal-body">
             <div class="subbar">
-              <div class="pill">Fuente: <b>/juego/spinners</b> (fallback: XML /static/db)</div>
+              <div class="pill">Fuente: <b>/juego/spinners</b> • Config: <b>/static/db/vmix_spinners.xml</b> • Control: <b>/static/db/vmix_spinners_ctrl.xml</b></div>
               <div class="subbar-actions">
                 <button id="btnRefreshSpn" class="btn-xs">⟳ Actualizar</button>
-                <button id="btnOpenWindowSpn" class="btn-xs">🗔 Previsualizar overlay</button>
-                <a id="lnkFullUrlSpn" class="btn-xs" target="_blank" rel="noopener noreferrer" href="#">🔗 Abrir visor (URL)</a>
-                <a id="lnkOverlayUrlSpn" class="btn-xs" target="_blank" rel="noopener noreferrer" href="#" title="Overlay integrado">🧷 Overlay integrado</a>
-                <a id="lnkOverlayStaticSpn" class="btn-xs" target="_blank" rel="noopener noreferrer" href="/juego/spinner_overlay" title="Para vMix/OBS">🌐 Overlay público</a>
+                <button id="btnCopyVmixUrl" class="btn-xs">📋 Copiar URL vMix</button>
+                <a id="lnkOverlayVmix" class="btn-xs" target="_blank" rel="noopener noreferrer" href="#">🌐 Abrir overlay vMix</a>
+                <a id="lnkOverlayLocal" class="btn-xs" target="_blank" rel="noopener noreferrer" href="#">🗔 Previsualizar (local)</a>
               </div>
             </div>
-            <div id="gridSpinners" class="spn-grid"></div>
-            <p class="hint" style="margin-top:10px">Usa <b>Generar</b> (0000), <b>Lanzar</b> y <b>Desbloquear</b> para controlar cada spinner.</p>
-          </div>
+
+            <div class="spn-shell">
+              <div class="spn-left">
+                <div class="spn-search">
+                  <input id="spnSearch" placeholder="Buscar # (1-20) o valor..." />
+                  <span id="spnCount" class="spn-count">0</span>
+                </div>
+                <div id="spnList" class="spn-list"></div>
+              </div>
+
+              <div class="spn-right">
+                <div class="spn-preview">
+                  <div class="spn-preview-top">
+                    <div class="spn-preview-title">Spinner seleccionado: <b id="spnSelLbl">#1</b></div>
+                    <span id="spnBadge" class="spn-badge free">LIBRE</span>
+                  </div>
+                  <div id="spnPreviewDigits" class="spn-digits">
+                    <span class="d">0</span><span class="d">0</span><span class="d">0</span><span class="d">0</span>
+                  </div>
+                  <div class="spn-note">El valor viene de <b>vmix_spinners.xml</b> (Sorteo). Generar solo prepara el visor en 0000; Lanzar anima al valor real.</div>
+                </div>
+
+                <div class="spn-actions2">
+                  <button id="btnSpnGen" class="btn spn-btn gen">⚙ GENERAR (0000)</button>
+                  <button id="btnSpnLaunch" class="btn spn-btn launch">🚀 LANZAR EN vMix</button>
+                  <button id="btnSpnOverlayOn" class="btn spn-btn gen">▶ ACTIVAR VISOR</button>
+                  <button id="btnSpnOverlayOff" class="btn spn-btn off">⛔ APAGAR OVERLAY</button>
+                </div>
+
+                <div class="spn-vmix">
+                  <div class="spn-vmix-row">
+                    <label for="vmixInputName">Input vMix (opcional):</label>
+                    <input id="vmixInputName" placeholder="Ej: Browser Spinner" />
+                  </div>
+                  <div class="spn-vmix-help">Si lo dejas vacío, el servidor usa <b>VMIX_SPINNER_INPUT</b> (recomendado).</div>
+                </div>
+
+              </div>
+            </div>
+
+            <p class="hint" style="margin-top:12px">Concordancia: <b>Sorteo</b> define los 20 valores → <b>Juego</b> los muestra → <b>Lanzar</b> dispara evento HTTP → <b>vMix</b> lo anima en el overlay.</p>
+</div>
           <div class="modal-foot">
             <button class="btn ghost" data-close-modal>Cerrar</button>
           </div>
@@ -1186,10 +1591,16 @@
 
               <div id="fixPreview" class="tf-preview" style="margin-top:10px"></div>
 
-              <div class="winner-quick" style="margin-top:10px">
-                <div class="hint" style="margin:0 0 8px">📌 Números salidos (rojo = marcado · gris = no ha salido · azul = último)</div>
-                <div id="fixBoard75" class="board75"></div>
-              </div>
+              <!-- El tablero 75 se muestra abajo en panel completo para mantener estética estable -->
+            </div>
+          </div>
+
+          <!-- TABLERO 75 COMPLETO (igual al del juego, sin deformarse) -->
+          <div class="fix-panel full fix-panel-board75">
+            <div class="fix-title">🎯 Tablero 75 (números salidos)</div>
+            <div class="fix-sub">Rojo = marcado · Gris = no ha salido · Azul = último</div>
+            <div class="fix-board-wrap" style="margin-top:10px">
+              <div id="fixBoard75" class="board75 fix-grid75"></div>
             </div>
           </div>
         </div>
@@ -1220,6 +1631,8 @@
       }
     };
 
+    const safeJSON = safeFetch;
+
     // Canal local
     const BC_NAME='glbingo-spin';
     let bc;
@@ -1227,6 +1640,7 @@
 
     /* ========= Juego base ========= */
     let running=false, timer=null, secs=0, stack=[], histRev=0;
+    let bonusDia = [], bonusSelectedIndex = 0, reintegroDia = '', reintegroPulse = 0;
     const seg=$('#seg'), tot=$('#tot'), last6El=$('#last6'), ultimoCircle=$('#ultimoCircle'),
           grid=$('#grid'), lockEl=$('#lock'), histEl=$('#hist'), histMiniEl=$('#histMini'), histMiniInfo=$('#histMiniInfo');
 
@@ -1446,19 +1860,134 @@ async function cargar(){
     $('#revn').onclick=()=>{ const k=parseInt(prompt('¿Cuántas balotas reversar?','1'),10); if(Number.isFinite(k)&&k>0) reversaK(k); };
     $('#revall').onclick=reversaAll;
 
+    $('#btnRefreshExtras')?.addEventListener('click', loadExtrasPanel);
+    $('#btnReintegroFire')?.addEventListener('click', async ()=>{
+      if(!reintegroDia) return;
+      const j = await safeFetch('/juego/reintegro/click', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({reintegro: reintegroDia})
+      });
+      if(!j || !j.ok){ alert((j && j.error) || 'No se pudo lanzar el reintegro'); return; }
+      reintegroPulse = Number(j.click_count || (reintegroPulse+1));
+      renderExtrasPanel();
+    });
+
     $('#ultimoCircle').addEventListener('click', async ()=>{
       const n=stack.at(-1); if(!n) return;
       await fetch('/juego/activar_stinger',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({numero:n})});
     });
 
     /* ========= Figuras ========= */
-    async function resolverFecha(){
+    async function resolverSorteoInfo(){
       const j = await safeFetch('/juego/sorteo_fecha'+bust());
-      return (j && j.fecha) ? j.fecha : new Date().toISOString().slice(0,10);
+      const fecha = (j && j.fecha) ? j.fecha : new Date().toISOString().slice(0,10);
+      const nombre = (j && (j.nombre_sorteo || j.sorteo)) ? (j.nombre_sorteo || j.sorteo) : (fecha ? `Sorteo ${fecha}` : '—');
+      const identificador = (j && (j.identificador || j.id)) ? (j.identificador || j.id) : '';
+      const estado = (j && j.estado) ? j.estado : '';
+      const activo = (j && (String(j.activo) === '1' || String(j.estado || '').toLowerCase() === 'activo'));
+      const etiquetaEstado = activo ? 'ACTIVO' : (estado ? String(estado).toUpperCase() : 'SIN ACTIVAR');
+      const nombreCorto = identificador ? `${nombre} (${identificador})` : nombre;
+      return { fecha, nombre, identificador, estado, activo, etiquetaEstado, nombreCorto };
     }
+    function renderExtrasPanel(){
+  const bonusGrid = $('#bonusGrid');
+  const bonusNote = $('#bonusNote');
+  const btnRein = $('#btnReintegroFire');
+  const reinNote = $('#reintegroNote');
+  if(!bonusGrid || !bonusNote || !btnRein || !reinNote) return;
+
+  bonusGrid.innerHTML = '';
+  if(Array.isArray(bonusDia) && bonusDia.length){
+    bonusDia.forEach((n, i)=>{
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'bonus-btn' + ((i+1)===bonusSelectedIndex ? ' active' : '');
+      b.title = `Lanzar bonus #${i+1} (${n}) en vMix`;
+      b.setAttribute('aria-label', `Bonus ${i+1} número ${n}`);
+      b.innerHTML = '<span class="bonus-dice" aria-hidden="true">🎲</span>';
+      b.addEventListener('click', async ()=>{
+        if(b.disabled) return;
+        // animación visible antes de actualizar el XML / overlay
+        b.classList.add('rolling');
+        bonusNote.textContent = `🎲 Lanzando bonus #${i+1} (${n})...`;
+        try{
+          await new Promise(r=>setTimeout(r, 420));
+          const j = await safeFetch('/juego/bonus/click', {
+            method:'POST',
+            headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({index:i+1})
+          });
+          if(!j || !j.ok){
+            bonusNote.textContent = 'No se pudo lanzar el bonus';
+            alert((j && j.error) || 'No se pudo lanzar el bonus');
+            return;
+          }
+          bonusSelectedIndex = Number(j.selected_index || (i+1));
+          bonusDia = Array.isArray(j.bonus_numbers) ? j.bonus_numbers : bonusDia;
+          bonusNote.textContent = `✅ Bonus lanzado: ${j.selected_number} · Clicks: ${j.click_count || 1} · [${bonusDia.join(' · ')}]`;
+          renderExtrasPanel();
+        } finally {
+          setTimeout(()=> b.classList.remove('rolling'), 80);
+        }
+      });
+      bonusGrid.appendChild(b);
+    });
+    if(!bonusNote.textContent || /Cargando|No hay bonus|Lanzando/.test(bonusNote.textContent)){
+      bonusNote.textContent = `Bonus del día: ${bonusDia.join(' · ')} · (clic en un dado para lanzar)`;
+    }
+  }else{
+    for(let i=0;i<5;i++){
+      const b = document.createElement('button');
+      b.type='button';
+      b.className='bonus-btn';
+      b.disabled = true;
+      b.title = 'Bonus sin configurar';
+      b.innerHTML = '<span class="bonus-dice" aria-hidden="true">🎲</span>';
+      bonusGrid.appendChild(b);
+    }
+    bonusNote.textContent = 'No hay bonus configurado para este día';
+  }
+
+  if(reintegroDia){
+    btnRein.disabled = false;
+    btnRein.textContent = reintegroDia;
+    btnRein.classList.toggle('active', reintegroPulse > 0);
+    reinNote.textContent = reintegroPulse > 0 ? `✅ Reintegro lanzado · Clicks: ${reintegroPulse}` : 'Listo para lanzar en vMix';
+  }else{
+    btnRein.disabled = true;
+    btnRein.textContent = 'Sin reintegro';
+    btnRein.classList.remove('active');
+    reinNote.textContent = 'No hay reintegro configurado para este día';
+  }
+}
+
+
+    async function loadExtrasPanel(){
+      const j = await safeFetch('/juego/extras' + bust());
+      if(!j || !j.ok){
+        bonusDia = []; bonusSelectedIndex = 0; reintegroDia = ''; reintegroPulse = 0;
+        renderExtrasPanel();
+        return;
+      }
+      bonusDia = Array.isArray(j.bonus_numbers) ? j.bonus_numbers : [];
+      reintegroDia = (j.reintegro || '').toString();
+      bonusSelectedIndex = Number((j.bonus_state && j.bonus_state.selected_index) || 0);
+      reintegroPulse = Number((j.reintegro_state && j.reintegro_state.click_count) || 0);
+      renderExtrasPanel();
+      const bn = $('#bonusNote');
+      if(bn && bonusDia.length){
+        const code = (j.bonus_code || '').toString().trim();
+        const fact = (j.bonus_feasible === true) ? 'Factible: Sí' : (j.bonus_feasible === false ? 'Factible: No' : '');
+        bn.textContent = `${code ? ('Código: ' + code + ' · ') : ''}${fact ? (fact + ' · ') : ''}Bonus del día: ${bonusDia.join(' · ')} · (clic en un dado para lanzar)`;
+      }
+    }
+
     async function loadFiguras(){
-        const fecha = await resolverFecha();
-        $('#figFecha') && ($('#figFecha').textContent = fecha);
+        const srt = await resolverSorteoInfo();
+        const fecha = srt.fecha;
+        $('#figFecha') && ($('#figFecha').textContent = fecha || '—');
+        $('#figSorteo') && ($('#figSorteo').textContent = srt && srt.nombreCorto ? srt.nombreCorto : '—');
 
         // Cargamos figuras del día y ganadores (para mostrar resumen + tablas ganadoras por figura)
         const [jF, jG] = await Promise.all([
@@ -1867,161 +2396,289 @@ async function cargar(){
       fetchSpinnerState();
     });
 
-    /* ========= Spinners (20 / modal / overlay 1:1) ========= */
-    const modalSpn = $('#spinnerModal'), gridSpinners=$('#gridSpinners'),
-          btnSpinners=$('#btnSpinners'), btnRefreshSpn=$('#btnRefreshSpn'),
-          btnOpenWindowSpn=$('#btnOpenWindowSpn'), lnkFullUrlSpn=$('#lnkFullUrlSpn'), lnkOverlayUrlSpn=$('#lnkOverlayUrlSpn'), lnkOverlayStaticSpn=$('#lnkOverlayStaticSpn');
+    
+    /* ========= Spinners (modal elegante + concordancia Sorteo → Juego → vMix) ========= */
+    const modalSpn = $('#spinnerModal');
+    const btnSpinners = $('#btnSpinners');
 
-    const VISOR20_URL = location.origin + location.pathname + '?spinners=1';
-    const SOLO_INTEGRATED = location.origin + location.pathname + '?spin=1&overlay=1';
-    lnkFullUrlSpn.href = VISOR20_URL;
-    lnkOverlayUrlSpn.href = SOLO_INTEGRATED;
-    lnkOverlayStaticSpn.href = '/juego/spinner_overlay';
+    // Modal elements
+    const btnRefreshSpn   = $('#btnRefreshSpn');
+    const btnCopyVmixUrl  = $('#btnCopyVmixUrl');
+    const lnkOverlayVmix  = $('#lnkOverlayVmix');
+    const lnkOverlayLocal = $('#lnkOverlayLocal');
 
-    // --- COMPAT: acepta JSON como lista directa o como {spinners:[...]} ---
-    async function fetchSpnersJSON(){
-      const j = await safeFetch('/juego/spinners'+bust());
-      if (!j) return new Array(20).fill('');
-      if (Array.isArray(j)) return j.slice(0,20).map(normaliza4);
-      if (Array.isArray(j.spinners)) return j.spinners.slice(0,20).map(normaliza4);
-      return new Array(20).fill('');
-    }
-    const fetchSpinnersJSON = fetchSpnersJSON; // alias
+    const spnList   = $('#spnList');
+    const spnSearch = $('#spnSearch');
+    const spnCount  = $('#spnCount');
 
-    function normaliza4(v){
-      if (v==null) return '';
-      if (typeof v === 'object' && v.value!=null) return String(v.value).padStart(4,'0').slice(0,4);
-      return String(v).replace(/\D/g,'').padStart(4,'0').slice(0,4);
-    }
+    const spnSelLbl = $('#spnSelLbl');
+    const spnBadge  = $('#spnBadge');
+    const spnPreviewDigits = $('#spnPreviewDigits');
 
-    // --- COMPAT XML ---
-    async function fetchXML(url){
-      const r = await fetch(url + (url.includes('?')?'&':'?') + '_=' + Date.now());
-      if(!r.ok) return null;
-      const txt = await r.text();
-      const xml = new DOMParser().parseFromString(txt, "text/xml");
-      const out=[];
-      xml.querySelectorAll('spinner').forEach(n=>{
-        const v = n.getAttribute('value') || n.textContent || '';
-        out.push(normaliza4(v));
-      });
-      if (out.length===0){
-        xml.querySelectorAll('n').forEach(n=>{
-          const v = n.getAttribute('v') || n.textContent || '';
-          out.push(normaliza4(v));
-        });
-      }
-      return (out.concat(Array(20).fill(''))).slice(0,20);
-    }
+    const btnSpnGen       = $('#btnSpnGen');
+    const btnSpnLaunch    = $('#btnSpnLaunch');
+    const btnSpnOverlayOn = $('#btnSpnOverlayOn');
+    const btnSpnOverlayOff= $('#btnSpnOverlayOff');
+    const vmixInputName   = $('#vmixInputName');
 
-    async function fetchSpinnersSafe(){
-      const j = await fetchSpinnersJSON(); if(j.some(Boolean)) return j;
-      let x = await fetchXML('/static/db/vmix_spinners.xml'); if(x && x.some(Boolean)) return x;
-      x = await fetchXML('/static/db/spinners.xml'); if(x && x.some(Boolean)) return x;
-      const s = await safeFetch('/juego/estado.json'+bust()); if(s && Array.isArray(s.spinners)) return s.spinners.slice(0,20).map(normaliza4);
-      return new Array(20).fill('');
-    }
+    let spnData = [];
+    let spnSel = 1; // 1..20
+    let baseURL = '';
 
-    function storeBase(f){ return `soloSpin:${f}`; }
-    function loadUsed(f){ try{ const raw = localStorage.getItem(storeBase(f)+':used'); if(raw) return new Set(JSON.parse(raw)); }catch(_){ } return new Set(); }
-    function saveUsed(f, set){ localStorage.setItem(storeBase(f)+':used', JSON.stringify(Array.from(set))); }
+    const SPN_LAN_FALLBACK = 'http://192.168.0.7:5000';
 
-    function emitSpin(op,index){
-      try{ bc && bc.postMessage({type:'solo-spin',op,index}); }catch(_){}
-      try{ localStorage.setItem('glbingo-spin-evt', JSON.stringify({t:Date.now(),op,index})); }catch(_){}
-    }
-
-    async function renderSpinnersGridWithActions(container){
-      const valores = await fetchSpinnersSafe();
-      const fecha = await resolverFecha();
-      const usados = loadUsed(fecha);
-
-      container.innerHTML='';
-      valores.forEach((val,idx)=>{
-        const valor = (val||'').toString().padStart(4,'•');
-        const used = usados.has(idx);
-        const cell=document.createElement('div'); cell.className='spn-cell';
-        if (used) cell.classList.add('used');
-        cell.innerHTML=`
-          <div class="label">#${idx+1}</div>
-          <div class="spn-num">${valor}</div>
-          <div class="spn-actions">
-            <button class="mini gen"   data-gen>⚙ Generar</button>
-            <button class="mini ${used?'lock':'lanz'}" data-launch>${used?'🔒 Enviado':'🚀 Lanzar'}</button>
-            ${used ? '<button class="mini unlock" data-unlock>🔓 Desbloquear</button>' : ''}
-          </div>`;
-
-        // Generar => sólo posiciona el overlay 1:1
-        cell.querySelector('[data-gen]').onclick = ()=> emitSpin('gen', idx);
-
-        // Lanzar (si está usado, pregunta y lo libera antes de volver a lanzarlo)
-        cell.querySelector('[data-launch]').onclick = async ()=>{
-          if (usados.has(idx)){
-            const ok = confirm('Este spinner ya fue lanzado. ¿Deseas volver a lanzarlo?');
-            if (!ok) return;
-            usados.delete(idx); saveUsed(fecha, usados);
-          }
-          const target = String((val||'')).replace(/\D/g,'').padStart(4,'0').slice(0,4);
-          if (!target) { alert('Este spinner no tiene valor asignado.'); return; }
-
-          const r = await fetch('/juego/spinners/launch',{
-            method:'POST',
-            headers:{'Content-Type':'application/json'},
-            body: JSON.stringify({ index: idx, target, overlay_on: true }) // 0-based
-          });
-          let js=null; try{ js = await r.json(); }catch(_){}
-          if (!r.ok || !js || !js.ok){
-            alert((js && (js.error||js.msg)) || 'No se pudo lanzar el spinner');
-            return;
-          }
-
-          usados.add(idx); saveUsed(fecha, usados);
-          renderSpinnersGridWithActions(container);
-
-          try{ bc && bc.postMessage({type:'solo-spin', op:'launch', index:idx}); }catch(_){}
-          try{ localStorage.setItem('glbingo-spin-evt', JSON.stringify({t:Date.now(), op:'launch', index:idx})); }catch(_){}
-        };
-
-        // Desbloquear individual (nuevo)
-        const btnUn = cell.querySelector('[data-unlock]');
-        if (btnUn){
-          btnUn.onclick = ()=>{
-            usados.delete(idx); saveUsed(fecha, usados);
-            renderSpinnersGridWithActions(container);
+    function asSpinnerObjects(anyList, fallbackState){
+      const arr = Array.isArray(anyList) ? anyList.slice(0,20) : [];
+      return arr.map((item, idx)=>{
+        if (item && typeof item === 'object' && ('index' in item || 'value' in item)){
+          return {
+            index: Number(item.index || (idx+1)),
+            value: String(item.value || '0000').replace(/\D/g,'').padStart(4,'0').slice(0,4),
+            used: !!item.used,
+            locked: !!item.locked
           };
         }
-
-        container.appendChild(cell);
+        const v = String(item || '').replace(/\D/g,'').padStart(4,'0').slice(0,4);
+        return { index: idx+1, value: v || '0000', used: !!(fallbackState && fallbackState.used), locked: !!(fallbackState && fallbackState.locked) };
       });
     }
 
-    function openModalSpinners(){ modalSpn.classList.remove('hidden'); renderSpinnersGridWithActions(gridSpinners); }
-    function closeModalSpinners(){ modalSpn.classList.add('hidden'); }
-    $('#btnSpinners')?.addEventListener('click', openModalSpinners);
-    $('#btnRefreshSpn')?.addEventListener('click', ()=>renderSpinnersGridWithActions(gridSpinners));
-    $('#btnOpenWindowSpn')?.addEventListener('click', ()=> window.open('/juego/spinner_overlay','SoloSpinnerPreview','width=920,height=680'));
+    async function readSpinnersForModal(){
+      let j = await safeJSON('/juego/spinners/list' + `?_=${Date.now()}`);
+      if (Array.isArray(j) && j.length) return asSpinnerObjects(j);
+      j = await safeJSON('/juego/spinners' + `?_=${Date.now()}`);
+      if (Array.isArray(j) && j.length) return asSpinnerObjects(j);
+      if (j && Array.isArray(j.spinners) && j.spinners.length) return asSpinnerObjects(j.spinners, j.state || {});
+      try{
+        const r = await fetch('/static/db/vmix_spinners.xml' + `?_=${Date.now()}`);
+        if (r.ok){
+          const xml = new DOMParser().parseFromString(await r.text(), 'text/xml');
+          const raw = [];
+          xml.querySelectorAll('n').forEach(n=> raw.push((n.getAttribute('v') || n.textContent || '').trim()));
+          if (!raw.length){ xml.querySelectorAll('spinner').forEach(n=> raw.push((n.getAttribute('value') || n.getAttribute('v') || n.textContent || '').trim())); }
+          const list = asSpinnerObjects(raw);
+          while(list.length < 20) list.push({index:list.length+1, value:'0000', used:false, locked:false});
+          return list.slice(0,20);
+        }
+      }catch(_){ }
+      return Array.from({length:20}, (_,i)=>({index:i+1, value:'0000', used:false, locked:false}));
+    }
+
+    function toastOK(msg){
+      try{
+        let t = document.querySelector('#_toastOK');
+        if(!t){
+          t = document.createElement('div');
+          t.id = '_toastOK';
+          t.style.position='fixed';
+          t.style.right='18px';
+          t.style.bottom='18px';
+          t.style.zIndex='99999';
+          t.style.padding='12px 14px';
+          t.style.borderRadius='14px';
+          t.style.background='rgba(0,0,0,.75)';
+          t.style.border='1px solid rgba(255,255,255,.14)';
+          t.style.color='#eaf2ff';
+          t.style.fontWeight='900';
+          t.style.boxShadow='0 14px 28px rgba(0,0,0,.35)';
+          t.style.backdropFilter='blur(6px)';
+          document.body.appendChild(t);
+        }
+        t.textContent = msg;
+        t.style.opacity='1';
+        clearTimeout(window.__toastOKT);
+        window.__toastOKT = setTimeout(()=>{ try{ t.style.opacity='0'; }catch(_){} }, 2200);
+      }catch(_){
+        console.log(msg);
+      }
+    }
+
+    function setPreviewDigits(v){
+      const s = String(v||'0000').replace(/\D/g,'').padStart(4,'0').slice(0,4);
+      const boxes = $$('.d', spnPreviewDigits);
+      for(let i=0;i<4;i++) boxes[i].textContent = s[i];
+    }
+    function setBadge(used, locked){
+      spnBadge.classList.remove('used','lock','free');
+      if (used) { spnBadge.classList.add('used'); spnBadge.textContent='ENVIADO'; return; }
+      if (locked){ spnBadge.classList.add('lock'); spnBadge.textContent='BLOQUEADO'; return; }
+      spnBadge.classList.add('free'); spnBadge.textContent='LIBRE';
+    }
+
+    async function loadBaseURL(){
+      if (baseURL) return baseURL;
+      const j = await safeJSON('/juego/spinners/base_url' + `?_=${Date.now()}`);
+      baseURL = (j && j.base_url) ? String(j.base_url).replace(/\/$/,'') : location.origin;
+      if (/^https?:\/\/(127\.0\.0\.1|localhost)(:\d+)?$/i.test(baseURL)) baseURL = SPN_LAN_FALLBACK;
+      return baseURL;
+    }
+    async function refreshOverlayLinks(){
+      const b = await loadBaseURL();
+      const vmixUrl = `${b}/juego/spinner_overlay?vmix=1`;
+      lnkOverlayVmix.href = vmixUrl;
+      lnkOverlayLocal.href = `/juego/spinner_overlay?i=${Math.max(0, Math.min(19, spnSel-1))}`;
+    }
+
+    function renderList(filterText=''){
+      const f = String(filterText||'').trim().toLowerCase();
+      const items = spnData.filter(s=>{
+        if(!f) return true;
+        const a = `#${s.index}`.toLowerCase();
+        const b = String(s.value||'').toLowerCase();
+        return a.includes(f) || b.includes(f);
+      });
+
+      spnCount.textContent = String(items.length);
+
+      spnList.innerHTML = '';
+      items.forEach(s=>{
+        const row = document.createElement('div');
+        row.className = 'spn-item' + (s.index===spnSel ? ' active':'');
+        const tagClass = s.used ? 'tag used' : (s.locked ? 'tag lock' : 'tag');
+        const tagText = s.used ? 'ENVIADO' : (s.locked ? 'BLOQUEADO' : 'LIBRE');
+
+        row.innerHTML = `
+          <div class="left">
+            <div class="idx">#${s.index}</div>
+            <div class="val">${String(s.value||'0000').padStart(4,'0')}</div>
+          </div>
+          <div class="${tagClass}">${tagText}</div>
+        `;
+        row.onclick = ()=>{
+          spnSel = s.index;
+          renderList(spnSearch.value);
+          updatePreviewFromSelected();
+          refreshOverlayLinks();
+        };
+        spnList.appendChild(row);
+      });
+    }
+
+    function updatePreviewFromSelected(){
+      const s = spnData.find(x=>x.index===spnSel) || {value:'0000', used:false, locked:false};
+      spnSelLbl.textContent = `#${spnSel}`;
+      setPreviewDigits(s.value || '0000');
+      setBadge(!!s.used, !!s.locked);
+    }
+
+    async function refreshSpinners(){
+      spnData = await readSpinnersForModal();
+      if (!Array.isArray(spnData) || !spnData.length){
+        spnData = Array.from({length:20}, (_,i)=>({index:i+1, value:'0000', used:false, locked:false}));
+      }
+      const exists = spnData.find(x=>x.index===spnSel);
+      if (!exists){
+        const firstWithValue = spnData.find(x => String(x.value||'').replace(/\D/g,'') && String(x.value||'') !== '0000');
+        spnSel = firstWithValue ? firstWithValue.index : 1;
+      }
+      renderList(spnSearch.value);
+      updatePreviewFromSelected();
+      refreshOverlayLinks();
+    }
+
+    function openModalSpinners(){
+      modalSpn.classList.remove('hidden');
+      modalSpn.setAttribute('aria-hidden','false');
+      refreshSpinners();
+    }
+    function closeModalSpinners(){
+      modalSpn.classList.add('hidden');
+      modalSpn.setAttribute('aria-hidden','true');
+    }
+
+    btnSpinners?.addEventListener('click', openModalSpinners);
+    btnRefreshSpn?.addEventListener('click', refreshSpinners);
+    spnSearch?.addEventListener('input', ()=> renderList(spnSearch.value));
+
+    // Copiar URL vMix
+    btnCopyVmixUrl?.addEventListener('click', async ()=>{
+      const b = await loadBaseURL();
+      const vmixUrl = `${b}/juego/spinner_overlay?vmix=1`;
+      try{ await navigator.clipboard.writeText(vmixUrl); toastOK(`URL vMix copiada: ${vmixUrl}`); }
+      catch(_){ prompt('Copia esta URL vMix:', vmixUrl); }
+    });
+
+    // Abrir previsualizador local (respeta selección)
+    lnkOverlayLocal?.addEventListener('click', ()=>{
+      lnkOverlayLocal.href = `/juego/spinner_overlay?i=${Math.max(0, Math.min(19, spnSel-1))}`;
+    });
+
+    // Generar (0000) => evento + desbloqueo/used=0
+    btnSpnGen?.addEventListener('click', async ()=>{
+      const r = await safeJSON('/juego/spinners/generar', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ index: spnSel })
+      });
+      if(!r || !r.ok){ alert((r && (r.msg||r.error)) || 'No se pudo generar'); return; }
+
+      // Previsualizador local (BroadcastChannel/localStorage)
+      const idx0 = spnSel-1;
+      try{ bc && bc.postMessage({type:'solo-spin', op:'gen', index: idx0}); }catch(_){}
+      try{ localStorage.setItem('glbingo-spin-evt', JSON.stringify({t:Date.now(), op:'gen', index: idx0})); }catch(_){}
+
+      setPreviewDigits('0000');
+      setBadge(false, false);
+      toastOK(`Spinner #${spnSel}: Generado (0000)`);
+      refreshSpinners();
+    });
+
+    // Lanzar => toma el valor REAL desde Sorteo (vmix_spinners.xml) y lo anima en vMix
+    btnSpnLaunch?.addEventListener('click', async ()=>{
+      const current = spnData.find(x=>x.index===spnSel) || {value:'0000'};
+      const realValue = String(current.value || '').replace(/\D/g,'').padStart(4,'0').slice(0,4);
+      if (!realValue || realValue === '0000'){
+        alert(`Spinner #${spnSel} no tiene valor cargado desde Sorteo.`);
+        return;
+      }
+      const vmix_input = (vmixInputName?.value || '').trim();
+      const payload = { index: spnSel, overlay_on: true };
+      if (vmix_input) payload.vmix_input = vmix_input;
+
+      const r = await safeJSON('/juego/spinners/lanzar', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify(payload)
+      });
+      if(!r || !r.ok){ alert((r && (r.msg||r.error)) || 'No se pudo lanzar'); return; }
+
+      const idx0 = spnSel-1;
+      const bcPayload = {type:'solo-spin', op:'launch', index: idx0, target: (r.target || realValue)};
+      try{ bc && bc.postMessage(bcPayload); }catch(_){ }
+      try{ localStorage.setItem('glbingo-spin-evt', JSON.stringify({t:Date.now(), op:'launch', index: idx0, target: (r.target || realValue)})); }catch(_){ }
+
+      toastOK(`Spinner #${spnSel}: Lanzado -> ${r.target || ''}`);
+      refreshSpinners();
+    });
+
+    // Activar visor (vMix)
+    btnSpnOverlayOn?.addEventListener('click', async ()=>{
+      const vmix_input = (vmixInputName?.value || '').trim();
+      const payload = { index: spnSel };
+      if (vmix_input) payload.vmix_input = vmix_input;
+      const r = await safeJSON('/juego/spinners/overlay/on', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify(payload)
+      });
+      if(!r || !r.ok){ alert((r && (r.msg||r.error)) || 'No se pudo activar el visor'); return; }
+      const idx0 = spnSel-1;
+      try{ bc && bc.postMessage({type:'solo-spin', op:'gen', index: idx0, target:'0000'}); }catch(_){ }
+      try{ localStorage.setItem('glbingo-spin-evt', JSON.stringify({t:Date.now(), op:'gen', index: idx0, target:'0000'})); }catch(_){ }
+      setPreviewDigits('0000');
+      setBadge(false, false);
+      toastOK('Visor activado en vMix');
+    });
+
+    // Apagar Overlay (vMix)
+    btnSpnOverlayOff?.addEventListener('click', async ()=>{
+      const r = await safeJSON('/juego/spinners/overlay/off', {method:'POST'});
+      if(!r || !r.ok){ alert((r && (r.msg||r.error)) || 'No se pudo apagar overlay'); return; }
+      toastOK('Overlay apagado');
+    });
+
+    // Close handlers
     $$('#spinnerModal [data-close-modal]').forEach(el=> el.addEventListener('click', closeModalSpinners));
-    window.addEventListener('focus', ()=> !modalSpn.classList.contains('hidden') && renderSpinnersGridWithActions(gridSpinners));
-
-    // Visor 20 (página completa)
-    async function bootFull20(){
-      $('.layout')?.classList.add('hidden');
-      $('#SpinnersFullView').classList.remove('hidden');
-      const valores = await fetchSpinnersSafe();
-      const fecha = await resolverFecha();
-      const usados = loadUsed(fecha);
-      const g = $('#spnFullGrid'); g.innerHTML='';
-      valores.forEach((val,idx)=>{
-        const cell=document.createElement('div'); cell.className='spn-cell';
-        if (usados.has(idx)) cell.classList.add('used');
-        cell.innerHTML=`<div class="label">#${idx+1}</div><div class="spn-num">${(val||'').toString().padStart(4,'•')}</div>`;
-        g.appendChild(cell);
-      });
-      setTimeout(bootFull20, 3000);
-    }
-
-    // Overlay integrado 1:1
-    $('#btnSoloSpin')?.addEventListener('click', ()=> window.open(location.origin + location.pathname + '?spin=1&overlay=1', 'SoloSpinner', 'width=900,height=650'));
 
     /* ========= Overlay integrado (solo navegador) ========= */
     const soloDigits = $('#soloDigits');
@@ -2064,6 +2721,32 @@ async function cargar(){
       setSoloDigits(t);
     }
 
+    function norm4Solo(v){
+      if (v == null) return '';
+      if (typeof v === 'object' && v.value != null) return String(v.value).replace(/\D/g,'').padStart(4,'0').slice(0,4);
+      return String(v).replace(/\D/g,'').padStart(4,'0').slice(0,4);
+    }
+
+    async function soloRenderEvent(op, index0, target=''){
+      const f = await resolverFecha();
+      if (Number.isFinite(index0) && index0 >= 0 && index0 < SOLO_LIST.length){
+        SOLO_I = index0;
+      }
+      if (op === 'gen'){
+        setSoloDigits('0000');
+        saveIdx(f);
+        return;
+      }
+      if (op === 'launch'){
+        const t = String(target || targetForIndex(SOLO_I) || '').replace(/\D/g,'').padStart(DIGS,'0').slice(-DIGS);
+        if (!t) return;
+        await tambolaRollTo(t);
+        SOLO_USED.add(SOLO_I);
+        saveUsedSolo(f);
+        saveIdx(f);
+      }
+    }
+
     function updateSoloUI(fecha){
       if (SOLO_I>=0 && SOLO_USED.has(SOLO_I)) setSoloDigits(targetForIndex(SOLO_I));
       else setSoloDigits('0000');
@@ -2091,12 +2774,19 @@ async function cargar(){
     }
 
     async function bootSolo(){
-      const j = await safeFetch('/juego/spinners'+bust());
+      let j = await safeFetch('/juego/spinners/list'+bust());
       if (j){
-        if (Array.isArray(j)) SOLO_LIST = j.slice(0,20).map(normaliza4);
-        else if (Array.isArray(j.spinners)) SOLO_LIST = j.spinners.slice(0,20).map(normaliza4);
+        if (Array.isArray(j)) SOLO_LIST = j.slice(0,20).map(norm4Solo);
+        else if (Array.isArray(j.spinners)) SOLO_LIST = j.spinners.slice(0,20).map(norm4Solo);
       } else {
-        SOLO_LIST = new Array(20).fill('');
+        j = await safeFetch('/juego/spinners'+bust());
+        if (j){
+          if (Array.isArray(j)) SOLO_LIST = j.slice(0,20).map(norm4Solo);
+          else if (Array.isArray(j.spinners)) SOLO_LIST = j.spinners.slice(0,20).map(norm4Solo);
+          else SOLO_LIST = new Array(20).fill('');
+        } else {
+          SOLO_LIST = new Array(20).fill('');
+        }
       }
       const f = await resolverFecha();
       SOLO_USED = loadUsedSolo(f);
@@ -2115,16 +2805,39 @@ async function cargar(){
         else if (e.key==='g' || e.key==='G'){ e.preventDefault(); soloGenerar(); }
       });
 
-      try{ bc && bc.addEventListener('message', async (ev)=>{ const d=ev.data||{}; if(d.type!=='solo-spin') return; if(Number.isFinite(d.index)){ SOLO_I=d.index; updateSoloUI(await resolverFecha()); } if(d.op==='gen') await soloGenerar(); else if(d.op==='launch') await soloLanzar(); }); }catch(_){}
+      let soloLastSeq = 0;
+      async function pollSoloEvent(){
+        const ev = await safeJSON('/juego/spinners/event'+bust());
+        if (!ev || !ev.seq) return;
+        const seq = parseInt(ev.seq,10) || 0;
+        if (seq <= soloLastSeq) return;
+        soloLastSeq = seq;
+        const idx1 = parseInt(ev.index,10) || 1;
+        const idx0 = Math.max(0, Math.min(SOLO_LIST.length-1, idx1 - 1));
+        await soloRenderEvent(ev.op, idx0, ev.target || '');
+      }
+
+      try{ bc && bc.addEventListener('message', async (ev)=>{
+        const d = ev.data || {};
+        if(d.type!=='solo-spin') return;
+        const idx0 = Number.isFinite(d.index)
+          ? Math.max(0, Math.min(SOLO_LIST.length-1, Number(d.index)))
+          : SOLO_I;
+        await soloRenderEvent(d.op, idx0, d.target || '');
+      }); }catch(_){}
       window.addEventListener('storage', async (ev)=>{
         if (ev.key !== 'glbingo-spin-evt') return;
         try{
-          const d = JSON.parse(ev.newValue||{});
-          if (Number.isFinite(d.index)){ SOLO_I = d.index; updateSoloUI(await resolverFecha()); }
-          if (d.op === 'gen')      await soloGenerar();
-          else if (d.op === 'launch') await soloLanzar();
+          const d = JSON.parse(ev.newValue||'{}');
+          const idx0 = Number.isFinite(d.index)
+            ? Math.max(0, Math.min(SOLO_LIST.length-1, Number(d.index)))
+            : SOLO_I;
+          await soloRenderEvent(d.op, idx0, d.target || '');
         }catch(_){}
       });
+
+      pollSoloEvent();
+      setInterval(pollSoloEvent, 250);
     }
 
     // Modo visor/overlay
@@ -2143,6 +2856,7 @@ async function cargar(){
     // Boot
     setLockedUI(true);
     cargar();
+    loadExtrasPanel();
     loadFiguras();
         loadResultadosPanel();
 setInterval(fetchSpinnerState, 3000);
@@ -2258,7 +2972,11 @@ setInterval(fetchSpinnerState, 3000);
 
     renderGrid(w);
 
+    // Sincroniza el XML único de vMix con el ganador que se está viendo en el modal
+    try { syncVmixWinnerToDatasource(w); } catch(_) {}
+
     // Editor: permite escribir boletín/premio sin salir del modal
+    window.__currentWinnerData = w;
     window.__currentWinnerRef = {
       fig: String(w.figura || "").trim(),
       boleto: String(w.tabla || w.boleto || "").trim(),
@@ -2292,8 +3010,10 @@ setInterval(fetchSpinnerState, 3000);
       tx.value = row.querySelector(".res-nombre")?.value ?? "";
       pr.value = row.querySelector(".res-premio")?.value ?? "";
     } else {
-      tx.value = "";
-      pr.value = "";
+      const w = window.__currentWinnerData || {};
+      tx.value = String(w.nota || w.nombre || "");
+      const vv = (w.valor !== undefined && w.valor !== null) ? w.valor : "";
+      pr.value = (vv === "" ? "" : String(vv));
     }
   };
 
@@ -2316,6 +3036,82 @@ setInterval(fetchSpinnerState, 3000);
     setTimeout(()=> row.classList.remove("flash"), 900);
 
     return row;
+  };
+
+
+  const saveWinnerEditorDirect = async () => {
+    const ref = window.__currentWinnerRef || {};
+    const tx = byId("wBoletinTxt");
+    const pr = byId("wPremioTxt");
+    if (!ref.fig || !ref.boleto || !tx || !pr) {
+      alert("No hay ganador seleccionado.");
+      return false;
+    }
+
+    // Reflejar en la fila si ya existe, pero no depender de eso
+    _applyWinnerEditorToRow();
+
+    try {
+      const fd = new FormData();
+      fd.append("figura", String(ref.fig || ""));
+      fd.append("boleto", String(ref.boleto || ""));
+      fd.append("nombre", String(tx.value || ""));
+      fd.append("premio", String(pr.value || ""));
+
+      const r = await fetch('/api/resultados/upsert-ganador', { method:'POST', body: fd });
+      const j = await r.json().catch(()=>({ok:false,msg:'Respuesta inválida'}));
+      if (!j.ok) throw new Error(j.msg || 'No se pudo guardar');
+
+      // Refresca panel y datos laterales
+      if (typeof window.refreshResultadosPanel === 'function') {
+        try { await window.refreshResultadosPanel(); } catch(_){}
+      }
+      try { await pollGanadores(); } catch(_){}
+
+      // Si al refrescar aparece la fila, sincronizamos visualmente con lo guardado
+      _applyWinnerEditorToRow();
+      return true;
+    } catch (e) {
+      // fallback a guardado global del panel (compatibilidad)
+      try {
+        if (typeof guardarResultadosPanel === 'function') {
+          await guardarResultadosPanel();
+          return true;
+        }
+      } catch(_){}
+      alert(e?.message || 'No se pudo sincronizar el ganador.');
+      return false;
+    }
+  };
+
+  const syncVmixWinnerToDatasource = async (w) => {
+    try {
+      if (!w) return;
+      let list = Array.isArray(window.__ganadoresCache) ? window.__ganadoresCache : [];
+      const key = makeKey(w);
+      let idx = (key && list.length) ? list.findIndex(x => makeKey(x) === key) : -1;
+
+      // Si no está en cache, refrescamos la lista completa y buscamos otra vez
+      if (idx < 0) {
+        try {
+          const j = await safeFetch('/juego/ganadores' + bust());
+          if (j && Array.isArray(j.ganadores)) {
+            list = j.ganadores;
+            window.__ganadoresCache = list;
+            idx = key ? list.findIndex(x => makeKey(x) === key) : -1;
+          }
+        } catch(_) {}
+      }
+
+      const url = (idx >= 0)
+        ? `/juego/xml/carton_ganador?index=${idx + 1}`
+        : `/juego/xml/carton_ganador`;
+
+      // Solo dispara la actualización del XML (vMix volverá a leer la fuente)
+      // OJO: si la URL ya trae ?index=..., debemos agregar cache-bust con & y no con ?
+      const vmixUrl = url + (url.includes("?") ? "&" : "?") + "_=" + Date.now();
+      fetch(vmixUrl, { cache: 'no-store' }).catch(() => {});
+    } catch(_) {}
   };
 
   const showNext = () => {
@@ -2412,9 +3208,7 @@ setInterval(fetchSpinnerState, 3000);
 
     const btnSaveRes = byId("wSaveRes");
     if (btnSaveRes) btnSaveRes.addEventListener("click", async () => {
-      _applyWinnerEditorToRow();
-      // guarda al servidor usando la misma lógica del panel de Resultados
-      if (typeof guardarResultadosPanel === "function") await guardarResultadosPanel();
+      await saveWinnerEditorDirect();
     });
 
     const btnGoRes = byId("wGoRes");
