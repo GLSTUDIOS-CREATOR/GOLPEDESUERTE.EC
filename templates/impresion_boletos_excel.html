@@ -1,0 +1,1030 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <title>Impresión | GL Bingo</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+  <style>
+    :root{
+      --bg:#f6f8fc; --panel:#ffffff; --ink:#1b2240; --muted:#7b81a6;
+      --brand:#1c3faa; --brand-weak:#eaf0ff; --brand-weak-2:#eef4ff;
+      --accent:#0fb79a; --accent-weak:#e6fbf5;
+      --danger:#e0434f; --danger-weak:#ffe9ec;
+      --ring:#e6e9f7; --ring-2:#d6dbfb;
+      --r:14px; --shadow:0 10px 28px rgba(27,34,64,.08);
+    }
+    *{box-sizing:border-box}
+    body{margin:0;font-family:Inter, ui-sans-serif, system-ui, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;background:var(--bg);color:var(--ink)}
+    a{color:inherit;text-decoration:none}
+    .app{display:grid;grid-template-columns:260px 1fr;min-height:100vh}
+
+    /* Sidebar */
+    .sidebar{background:#0f1733;color:#dfe6ff;display:flex;flex-direction:column}
+    .logo{display:flex;align-items:center;gap:12px;padding:18px 16px;border-bottom:1px solid rgba(255,255,255,.07)}
+    .logo img{width:44px;height:44px;border-radius:10px;background:#fff;padding:4px}
+    .logo .t{font-weight:900;letter-spacing:.3px}
+    .nav{list-style:none;margin:8px 8px 12px;padding:0}
+    .nav a{display:flex;align-items:center;gap:10px;padding:10px 12px;color:#c9d2ff;border-radius:10px;font-weight:700}
+    .nav a:hover{background:rgba(255,255,255,.08)}
+    .nav a.active{background:var(--accent);color:#05231d}
+    .logout{display:block;margin:8px;background:var(--danger);color:#fff;text-align:center;padding:10px;border-radius:10px;font-weight:900}
+
+    /* Main */
+    main{padding:22px}
+    .top{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}
+    .title{margin:0;font-size:1.85rem;font-weight:900;color:var(--brand)}
+    .who{display:flex;align-items:center;gap:10px}
+    .who img{width:36px;height:36px;border-radius:50%}
+
+    .cols{display:grid;grid-template-columns:1.05fr 1fr;gap:18px}
+    .card{background:var(--panel);border-radius:var(--r);box-shadow:var(--shadow)}
+    .card .hd{display:flex;align-items:center;gap:10px;padding:14px 16px;border-bottom:1px solid var(--ring)}
+    .card .hd h3{margin:0;font-size:1.06rem}
+    .card .bd{padding:16px}
+    .step{display:flex;align-items:center;gap:8px;font-weight:900;color:var(--brand)}
+    .step .dot{width:22px;height:22px;border-radius:50%;display:grid;place-content:center;background:var(--brand);color:#fff;font-size:.8rem}
+
+    .grid{display:grid;gap:12px}
+    .grid.cols-2{grid-template-columns:1fr 1fr}
+    .grid.cols-3{grid-template-columns:repeat(3,1fr)}
+    .grid.cols-5{grid-template-columns:repeat(5,minmax(0,1fr))}
+    label{font-size:.82rem;color:#6772a6;font-weight:800;margin-bottom:6px;display:block}
+    input,select{width:100%;padding:10px;border:1px solid var(--ring);border-radius:12px;background:#fff;font-weight:700;color:#1b2240}
+    input[readonly]{background:#f5f7ff;color:#6973a6}
+    .help{font-size:.82rem;color:#muted;margin-top:6px}
+
+    .btn{display:inline-flex;align-items:center;gap:8px;border:none;border-radius:12px;padding:12px 16px;font-weight:900;cursor:pointer}
+    .btn-primary{background:var(--brand);color:#fff}
+    .btn-ghost{background:var(--brand-weak);color:var(--brand)}
+    .btn-accent{background:var(--accent);color:#05352c}
+    .btn-danger{background:var(--danger);color:#fff}
+    .btn-mini{padding:8px 10px;border-radius:10px}
+
+    .note{background:var(--brand-weak-2);border:1px dashed var(--ring-2);color:#3a458a;border-radius:10px;padding:10px;display:flex;gap:8px;align-items:flex-start}
+
+    .preview{display:grid;grid-template-rows:auto 1fr auto;gap:10px}
+    .preview .img{border:1px dashed var(--ring);border-radius:12px;display:flex;align-items:center;justify-content:center;background:#fafbff;min-height:160px}
+    .preview .img img{max-height:150px;max-width:100%}
+    .kv{display:grid;grid-template-columns:140px 1fr;gap:6px;font-size:.92rem}
+    .kv .k{color:#6c75a8;font-weight:800}
+    .kv .v{font-weight:900}
+
+    table{width:100%;border-collapse:collapse}
+    th,td{padding:10px 8px;text-align:center;border-bottom:1px solid var(--ring);font-size:.95rem}
+    thead{background:#eef2ff;color:#3b45b1}
+    .pill{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;font-size:.82rem;font-weight:900}
+    .pill-blue{background:#eef2ff;color:#3b45b1}
+    .pill-green{background:var(--accent-weak);color:#0b6e5d}
+    .pill-red{background:var(--danger-weak);color:#b01922}
+    .pill-lock{background:#f2f4ff;color:#2b3aa6;border:1px solid #dfe2ff}
+
+    .readonly{pointer-events:none;background:#f2f4ff!important;color:#6a73a6!important}
+
+    .modal{position:fixed;inset:0;background:rgba(0,0,0,.5);display:none;align-items:center;justify-content:center;z-index:50}
+    .modal .box{background:#fff;border-radius:14px;box-shadow:0 30px 60px rgba(0,0,0,.2);max-width:980px;width:92%}
+    .modal .box .hd{border-bottom:1px solid var(--ring)}
+    .modal .box .bd{max-height:70vh;overflow:auto}
+    .gal{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:12px}
+    .gal .itm{border:1px solid var(--ring);border-radius:12px;padding:10px;text-align:center;cursor:pointer}
+    .gal .itm img{max-width:100%;height:90px;object-fit:contain}
+    .gal .itm.active{outline:3px solid var(--accent)}
+
+    .bar{position:sticky;bottom:0;left:0;right:0;background:#0f1733;color:#cdd7ff;padding:10px 14px;display:flex;gap:18px;align-items:center;font-weight:800}
+    .bar small{opacity:.9}
+
+    .only-super[disabled]{opacity:.5;cursor:not-allowed}
+    @media (max-width:1100px){ .cols{grid-template-columns:1fr} }
+    @media (max-width:900px){ .app{grid-template-columns:1fr} .sidebar{display:none} main{padding:12px} }
+  </style>
+</head>
+<body data-role="{{ (rol|default('')|lower) }}">
+<div class="app">
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="logo">
+      <img src="{{ url_for('static', filename='img/logo.png') }}" alt="GL Bingo">
+      <div class="t">GL Bingo</div>
+    </div>
+    <ul class="nav">
+      <li><a href="/dashboard"><i class="bi bi-speedometer2"></i> Dashboard</a></li>
+      
+      {% if can('admin_sistema') %}<li><a href="/admin/sistema">🛠️ Sistema</a></li>{% endif %}
+{% if can('usuarios') %}<li><a href="/usuarios"><i class="bi bi-people-fill"></i> Usuarios</a></li>{% endif %}
+      {% if can('juego') %}<li><a href="/juego"><i class="bi bi-dice-5-fill"></i> Juego</a></li>{% endif %}
+      {% if can('contabilidad') %}<li><a href="/contabilidad"><i class="bi bi-bar-chart-fill"></i> Contabilidad</a></li>{% endif %}
+      {% if can('vendedores') %}<li><a href="/vendedores"><i class="bi bi-person-badge-fill"></i> Vendedores</a></li>{% endif %}
+      {% if can('asignar_planillas') %}<li><a href="/asignar-planillas"><i class="bi bi-journal-text"></i> Asignar Planillas</a></li>{% endif %}
+      <li><a class="active" href="/impresion"><i class="bi bi-printer-fill"></i> Impresión de Boletos</a></li>
+      {% if can('cobro') %}<li><a href="/cobro"><i class="bi bi-cash-coin"></i> Cobro de Caja</a></li>{% endif %}
+      {% if can('pago_premios') %}<li><a href="/pago-premios"><i class="bi bi-trophy-fill"></i> Pago de Premios</a></li>{% endif %}
+      {% if can('sorteo') %}<li><a href="/sorteo"><i class="bi bi-ticket-perforated"></i> Sorteo</a></li>{% endif %}
+      {% if can('crear_figuras') %}<li><a href="/crear-figuras"><i class="bi bi-shapes"></i> Crear Figuras</a></li>{% endif %}
+      {% if can('escoger_figuras') %}<li><a href="/escoger-figuras"><i class="bi bi-grid-3x3-gap-fill"></i> Escoger Figuras</a></li>{% endif %}
+      {% if can('boletin') %}<li><a href="/boletin"><i class="bi bi-megaphone-fill"></i> Boletín</a></li>{% endif %}
+      <li><a href="/logs-impresion"><i class="bi bi-clock-history"></i> Logs Impresión</a></li>
+    </ul>
+    <a class="logout" href="{{ url_for('logout') }}"><i class="bi bi-box-arrow-right"></i> Cerrar sesión</a>
+  </aside>
+
+  <!-- Main -->
+  <main>
+    <div class="top">
+      <h1 class="title">Impresión de Boletos & Planillas</h1>
+      <div class="who">
+        <span style="color:var(--muted);font-weight:700">{{ username|default('Usuario') }}</span>
+        <img src="{{ url_for('static', filename='avatars/' ~ (avatar|default('avatar-male.png'))) }}" alt="avatar">
+      </div>
+    </div>
+
+    <div class="cols">
+      <!-- Panel Boletos -->
+      <section class="card" id="panel-boletos">
+        <div class="hd">
+          <div class="step"><span class="dot">1</span> Serie, fecha y valor</div>
+          <span class="pill pill-green" id="modeEx">Excedente automático</span>
+        </div>
+        <div class="bd">
+          <form id="formBoletos" method="post" action="/impresion">
+            <input type="hidden" name="form_type" value="boletos">
+
+            <div class="grid cols-3">
+              <div>
+                <label>Serie (solo V, +, &, M)</label>
+                <select name="serie_archivo" id="serie_archivo" required>
+                  {% for f, letra in series %}
+                  <option value="{{ f }}" data-letra="{{ letra }}">{{ letra }} — {{ f }}</option>
+                  {% endfor %}
+                </select>
+                <div class="help">La serie se usa también en Planillas y en el ZIP.</div>
+              </div>
+              <div>
+                <label>Fecha sorteo</label>
+                <input type="date" name="fecha_sorteo" id="fecha_sorteo" value="{{ fecha_hoy }}" required>
+              </div>
+              <div>
+                <label>Valor</label>
+                <input type="number" step="0.01" min="0" name="valor" id="valor" value="1.00" required>
+              </div>
+            </div>
+
+            <div class="hd" style="margin-top:10px;border:0;padding:0">
+              <div class="step"><span class="dot">2</span> Reintegro / Comodín</div>
+              <span id="pillLock" class="pill pill-lock" style="display:none"><i class="bi bi-lock-fill"></i> Comodín bloqueado por el día</span>
+              <button class="btn btn-mini btn-ghost" type="button" id="btnVerComodin"><i class="bi bi-eye"></i> Ver comodín</button>
+              <button class="btn btn-mini btn-ghost" type="button" id="btnUltimoImpreso"><i class="bi bi-clock-history"></i> Último impreso</button>
+              <!-- NUEVO: botón para ver BONUS del día -->
+              <button class="btn btn-mini btn-accent" type="button" id="btnVerBonusDia"><i class="bi bi-stars"></i> Ver BONUS del día</button>
+            </div>
+
+            <div class="grid cols-3" style="margin-top:8px">
+              <div>
+                <label>Reintegro especial</label>
+                <select name="reintegro_especial" id="reintegro_especial">
+                  <option value="">— Ninguno —</option>
+                  {% for r in reintegros %}
+                  <option value="{{ r }}">{{ r }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+              <div>
+                <label>Cantidad especial</label>
+                <input type="number" min="0" step="1" name="cant_reintegro_especial" id="cant_reintegro_especial" value="0">
+              </div>
+              <div>
+                <label>Incluir reintegros aleatorios</label>
+                <select name="incluir_aleatorio" id="incluir_aleatorio">
+                  <option value="1" selected>Sí</option>
+                  <option value="0">No</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- ===== BONUS ===== -->
+            <div class="hd" style="margin-top:14px;border:0;padding:0">
+              <div class="step"><span class="dot">2.1</span> BONUS (números y ganadores)</div>
+            </div>
+            <div class="note" style="margin:10px 0">
+              <i class="bi bi-stars"></i>
+              <div>
+                Activa el <b>BONUS</b> para generar 5 números aleatorios (se imprimen bajo el comodín).
+                Puedes decidir cuántos <b>ganadores</b> quieres por cantidad de aciertos. <br>
+                <b>Patrón automático:</b> se conserva de derecha a izquierda y cambia desde la izquierda (5=iguales, 4=cambia el 1ro, 3=cambian los 2 primeros, 2=cambian los 3 primeros, 1=cambian los 4 primeros).<br>
+                Ejemplo: 5 aciertos = 0 ganadores, 4 aciertos = 2 ganadores, 3 aciertos = 3 ganadores, 2 aciertos = 5 ganadores, 1 acierto = 3 ganadores.
+              </div>
+            </div>
+            <div class="grid cols-3" style="align-items:end">
+              <div>
+                <label>Usar BONUS</label>
+                <select name="bonus_enabled" id="bonus_enabled">
+                  <option value="0" selected>No</option>
+                  <option value="1">Sí</option>
+                </select>
+              </div>
+              <div>
+                <label>Ganadores con 5 aciertos</label>
+                <input type="number" min="0" step="1" name="bonus_k5" id="bonus_k5" value="0">
+              </div>
+              <div>
+                <label>Ganadores con 4 aciertos</label>
+                <input type="number" min="0" step="1" name="bonus_k4" id="bonus_k4" value="0">
+              </div>
+              <div>
+                <label>Ganadores con 3 aciertos</label>
+                <input type="number" min="0" step="1" name="bonus_k3" id="bonus_k3" value="0">
+              </div>
+              <div>
+                <label>Ganadores con 2 aciertos</label>
+                <input type="number" min="0" step="1" name="bonus_k2" id="bonus_k2" value="0">
+              </div>
+              <div>
+                <label>Ganadores con 1 acierto</label>
+                <input type="number" min="0" step="1" name="bonus_k1" id="bonus_k1" value="0">
+              </div>
+            </div>
+
+            <div class="grid cols-5" style="margin-top:10px;align-items:end">
+              <div>
+                <label>Bonus X (+der / -izq)</label>
+                <input type="number" step="0.5" name="bonus_move_x" id="bonus_move_x" value="0">
+              </div>
+              <div>
+                <label>Bonus Y (+sube / -baja)</label>
+                <input type="number" step="0.5" name="bonus_move_y" id="bonus_move_y" value="0">
+              </div>
+              <div>
+                <label>Tamaño números</label>
+                <input type="number" min="6" max="24" step="0.5" name="bonus_num_size" id="bonus_num_size" value="9">
+              </div>
+              <div>
+                <label>Separación</label>
+                <input type="number" min="0" max="25" step="0.5" name="bonus_num_gap" id="bonus_num_gap" value="3.5">
+              </div>
+              <div>
+                <label>Ancho (alargar)</label>
+                <input type="number" min="4" max="30" step="0.5" name="bonus_num_width" id="bonus_num_width" value="8.5">
+              </div>
+            </div>
+            <div class="note" style="margin-top:8px">
+              <i class="bi bi-rulers"></i>
+              <div>
+                Ajustes del <b>BONUS</b> para impresión: muévelo en X/Y, cambia tamaño de número, sepáralos o alárgalos sin afectar el resto del boleto.
+              </div>
+            </div>
+            <!-- ===== /BONUS ===== -->
+
+            <div class="note" style="margin:10px 0">
+              <i class="bi bi-exclamation-triangle"></i>
+              <div>
+                <b>Excedente auto:</b> “Desde” = último <b>HASTA</b> de <b>boletos</b> del día/serie + 1.
+                <b>Comodín del día:</b> al elegirlo o imprimir el primer lote con comodín, queda <b>bloqueado</b> para el resto del día en la misma serie.
+                No se permite reimprimir la misma fecha con serie distinta.
+              </div>
+            </div>
+
+            <div class="grid cols-3">
+              <div>
+                <label>Desde (bloqueado)</label>
+                <input type="number" name="serie_inicio" id="serie_inicio" readonly>
+              </div>
+              <div>
+                <label>Hasta</label>
+                <input type="number" name="serie_fin" id="serie_fin" min="1" required>
+                <div class="help"><span id="tot_boletos">0</span> boletos</div>
+              </div>
+              <div style="display:flex;align-items:flex-end;gap:10px;flex-wrap:wrap">
+                <button class="btn btn-primary" type="submit"><i class="bi bi-printer"></i> Imprimir Boletos</button>
+                <button class="btn btn-ghost" type="button" id="btnHistorial"><i class="bi bi-journal-text"></i> Historial</button>
+                <button class="btn btn-ghost" type="button" id="btnRefresh"><i class="bi bi-arrow-repeat"></i> Actualizar</button>
+              </div>
+            </div>
+
+            <div style="margin-top:12px">
+              <label style="font-weight:900;color:#5560a1">Comodín seleccionado</label>
+              <div class="preview" style="height:auto">
+                <div class="img" id="imgPreview"><span style="color:#8b92bb;font-size:.9rem">Sin comodín…</span></div>
+              </div>
+            </div>
+          </form>
+        </div>
+      </section>
+
+      <!-- Vista previa + Planillas + ZIP -->
+      <section class="card">
+        <div class="hd">
+          <div class="step"><span class="dot">3</span> Vista previa, Planillas & ZIP</div>
+        </div>
+        <div class="bd">
+          <div class="grid cols-2">
+            <div>
+              <div class="preview">
+                <div style="font-weight:900;color:#5560a1">Vista previa</div>
+                <div class="img" id="imgPreview2"><span style="color:#8b92bb;font-size:.9rem">Sin comodín…</span></div>
+                <div class="kv">
+                  <div class="k">Serie</div><div class="v" id="kv-serie">—</div>
+                  <div class="k">Fecha sorteo</div><div class="v" id="kv-fecha">—</div>
+                  <div class="k">Valor</div><div class="v" id="kv-valor">$0,00</div>
+                  <div class="k">Rango</div><div class="v" id="kv-rango">—</div>
+                  <div class="k">Total boletos</div><div class="v" id="kv-tot">0</div>
+                  <div class="k">Planillas (~20)</div><div class="v" id="kv-planillas">0</div>
+                  <div class="k">Comodín esp.</div><div class="v" id="kv-rei">—</div>
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <form id="formPlanilla" method="post" action="/impresion">
+                <input type="hidden" name="form_type" value="planilla">
+                <div class="grid cols-2">
+                  <div>
+                    <label>Serie (vinculada)</label>
+                    <input type="text" id="serie_planilla_show" readonly>
+                    <input type="hidden" name="serie_archivo_planilla" id="serie_archivo_planilla">
+                  </div>
+                  <div>
+                    <label>Fecha planilla</label>
+                    <input type="date" name="fecha_planilla" id="fecha_planilla" value="{{ fecha_hoy }}" required>
+                  </div>
+                  <div>
+                    <label>Desde (boleto)</label>
+                    <input type="number" name="planilla_inicio" id="planilla_inicio" required>
+                  </div>
+                  <div>
+                    <label>Hasta (boleto)</label>
+                    <input type="number" name="planilla_fin" id="planilla_fin" required>
+                    <div class="help"><span id="planillas_estimadas">0</span> planillas estimadas / <span id="planillas_boletos">0</span> boletos</div>
+                  </div>
+                </div>
+                <div style="margin-top:10px;display:flex;gap:10px;flex-wrap:wrap">
+                  <button class="btn btn-accent" type="submit"><i class="bi bi-printer"></i> Imprimir Planillas</button>
+                  <button class="btn btn-ghost" type="button" id="btnZip"><i class="bi bi-file-zip"></i> Imprimir ZIP</button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <!-- Ya impreso hoy -->
+    <section class="card" style="margin-top:18px">
+      <div class="hd">
+        <h3 style="margin:0"><i class="bi bi-calendar-day"></i> Ya impreso (día seleccionado)</h3>
+        <div style="margin-left:auto;display:flex;gap:8px;align-items:center">
+          <button class="btn btn-mini btn-ghost" id="btnIrHoy"><i class="bi bi-compass"></i> Ir a hoy</button>
+          <button class="btn btn-mini btn-ghost" id="btnHistCompleto"><i class="bi bi-window"></i> Historial completo</button>
+        </div>
+      </div>
+      <div class="bd">
+        <div class="grid cols-2" style="margin-bottom:8px">
+          <div>
+            <label>Fecha</label>
+            <input type="date" id="hist_fecha" value="{{ fecha_hoy }}">
+          </div>
+          <div>
+            <label>Serie</label>
+            <select id="hist_serie">
+              <option value="">— Todas —</option>
+              {% for f, letra in series %}
+              <option value="{{ f }}" data-letra="{{ letra }}">{{ letra }} — {{ f }}</option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+
+        <div class="note" style="background:var(--danger-weak);border-color:#f6c2c9;color:#7b151b;margin-bottom:12px">
+          <i class="bi bi-info-circle"></i>
+          <div><b>Excedente auto:</b> “Desde” se fija con el último HASTA de <b>boletos</b> del día/serie. El <b>Comodín del día</b> queda bloqueado para toda impresión de ese día.</div>
+        </div>
+
+        <table id="tbl_hist_resumen" style="margin-bottom:12px">
+          <thead>
+            <tr>
+              <th>Fecha</th><th>Serie del día</th><th>Rango del día</th><th>Boletos</th><th>Planillas (~20)</th><th>Comodín del día</th>
+            </tr>
+          </thead>
+          <tbody><!-- JS --></tbody>
+        </table>
+
+        <details id="detallito">
+          <summary style="cursor:pointer;margin-bottom:8px;font-weight:900;color:#3a46a5"><i class="bi bi-caret-down-square"></i> Ver detalle de impresiones</summary>
+          <table id="tbl_hist">
+            <thead>
+            <tr>
+              <th>Hora</th><th>Tipo</th><th>Serie</th><th>Usuario</th><th>Rango</th><th>Boletos</th><th>Planillas</th><th>Reint. esp.</th><th>Cant.</th><th>Aleatorios</th><th>BONUS</th><th>Acciones</th>
+            </tr>
+            </thead>
+            <tbody><!-- JS --></tbody>
+          </table>
+        </details>
+      </div>
+    </section>
+
+    <!-- Barra -->
+    <div class="bar" id="stickyBar">
+      <small id="barUser"><i class="bi bi-person-badge"></i> {{ username|default('Usuario') }}</small>
+      <span id="barSerie">Serie: —</span>
+      <span id="barRango">Rango: —</span>
+      <span id="barBoletos">Boletos: 0</span>
+      <span id="barPlanillas">Planillas: 0</span>
+    </div>
+  </main>
+</div>
+
+<!-- MODAL: Comodín -->
+<div class="modal" id="modalComodin">
+  <div class="box">
+    <div class="hd" style="display:flex;gap:10px;align-items:center;padding:12px 16px">
+      <i class="bi bi-images"></i><h3 style="margin:0">Seleccionar comodín</h3>
+      <div style="margin-left:auto;display:flex;gap:8px">
+        <button class="btn btn-mini btn-ghost" id="comodinNone"><i class="bi bi-x-circle"></i> Quitar comodín</button>
+        <button class="btn btn-mini btn-primary" id="comodinAceptar"><i class="bi bi-check2"></i> Aplicar</button>
+      </div>
+    </div>
+    <div class="bd" style="padding:14px 16px">
+      <div class="gal" id="galeriaComodin">
+        {% for r in reintegros %}
+        <div class="itm" data-name="{{ r }}">
+          <img src="{{ url_for('static', filename='REINTEGROS/' ~ r) }}" alt="{{ r }}">
+          <div style="margin-top:6px;font-weight:800;font-size:.85rem">{{ r }}</div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: Historial completo -->
+<div class="modal" id="modalHist">
+  <div class="box">
+    <div class="hd" style="display:flex;align-items:center;gap:10px;padding:12px 16px">
+      <i class="bi bi-clock-history"></i><h3 style="margin:0">Historial de Impresiones</h3>
+      <div style="margin-left:auto;display:flex;gap:8px">
+        <a class="btn btn-mini btn-ghost" href="/logs-impresion" target="_blank"><i class="bi bi-box-arrow-up-right"></i> Abrir</a>
+        <a class="btn btn-mini btn-accent" href="/logs-impresion.csv"><i class="bi bi-filetype-csv"></i> CSV</a>
+        <button class="btn btn-mini btn-danger" id="closeHist"><i class="bi bi-x-lg"></i> Cerrar</button>
+      </div>
+    </div>
+    <div class="bd" style="padding:12px 16px">
+      <table id="tbl_hist_modal">
+        <thead>
+        <tr>
+          <th>Fecha/Hora</th><th>Tipo</th><th>Serie</th><th>Usuario</th><th>Fecha (sorteo/planilla)</th>
+          <th>Desde</th><th>Hasta</th><th>Boletos</th><th>Planillas</th><th>Reint. esp.</th><th>Cant.</th><th>Aleatorios</th><th>BONUS</th><th>Acciones</th>
+        </tr>
+        </thead>
+        <tbody><!-- JS --></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: Mensaje -->
+<div class="modal" id="modalMsg">
+  <div class="box" style="max-width:560px">
+    <div class="hd" style="display:flex;align-items:center;gap:10px;padding:12px 16px">
+      <i class="bi bi-info-circle"></i><h3 id="msgTitle" style="margin:0">Mensaje</h3>
+      <div style="margin-left:auto">
+        <button class="btn btn-mini btn-danger" id="msgClose"><i class="bi bi-x-lg"></i> Cerrar</button>
+      </div>
+    </div>
+    <div class="bd" style="padding:14px 16px">
+      <div id="msgBody">—</div>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: BONUS -->
+<div class="modal" id="modalBonus">
+  <div class="box" style="max-width:760px">
+    <div class="hd" style="display:flex;align-items:center;gap:10px;padding:12px 16px">
+      <i class="bi bi-stars"></i><h3 style="margin:0">BONUS de impresión</h3>
+      <div style="margin-left:auto">
+        <button class="btn btn-mini btn-danger" id="bonusClose"><i class="bi bi-x-lg"></i> Cerrar</button>
+      </div>
+    </div>
+    <div class="bd" style="padding:14px 16px">
+      <div id="bonusBody">—</div>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  const $  = (q, el=document)=> el.querySelector(q);
+  const $$ = (q, el=document)=> Array.from(el.querySelectorAll(q));
+  const money = n => Number(n||0).toLocaleString('es-EC',{style:'currency',currency:'USD'});
+  const reiPath = (name)=> name ? "{{ url_for('static', filename='REINTEGROS/') }}"+name : "";
+
+  const ROLE = (document.body.dataset.role || '').toLowerCase().trim();
+  const IS_SUPER = /super\s*admin|superadmin|root/.test(ROLE);
+  const enableSuperButtons = () => {
+    $$('.only-super').forEach(btn=>{
+      if(IS_SUPER){ btn.removeAttribute('disabled'); }
+      else{ btn.setAttribute('disabled','disabled'); }
+    });
+  };
+
+  // Refs
+  const serieSel = $("#serie_archivo");
+  const fechaInp = $("#fecha_sorteo");
+  const valorInp = $("#valor");
+  const reiSel   = $("#reintegro_especial");
+  const cantEsp  = $("#cant_reintegro_especial");
+  const aleSel   = $("#incluir_aleatorio");
+  const desdeInp = $("#serie_inicio");
+  const hastaInp = $("#serie_fin");
+  const totSpan  = $("#tot_boletos");
+
+  // BONUS refs
+  const bonusEnabled = $("#bonus_enabled");
+  const bk5 = $("#bonus_k5"), bk4=$("#bonus_k4"), bk3=$("#bonus_k3"), bk2=$("#bonus_k2"), bk1=$("#bonus_k1");
+
+  const kvSerie=$("#kv-serie"), kvFecha=$("#kv-fecha"), kvValor=$("#kv-valor"),
+        kvRango=$("#kv-rango"), kvTot=$("#kv-tot"), kvRei=$("#kv-rei"), kvPlan=$("#kv-planillas");
+  const img1 = $("#imgPreview"), img2 = $("#imgPreview2");
+
+  const seriePlanillaShow = $("#serie_planilla_show");
+  const seriePlanilla     = $("#serie_archivo_planilla");
+  const planI = $("#planilla_inicio");
+  const planF = $("#planilla_fin");
+  const planEst = $("#planillas_estimadas");
+  const planBols= $("#planillas_boletos");
+  const fechaPlan = $("#fecha_planilla");
+
+  const histFecha = $("#hist_fecha"), histSerie = $("#hist_serie");
+  const tblHist = $("#tbl_hist tbody");
+  const tblRes  = $("#tbl_hist_resumen tbody");
+  const tblHistModal = $("#tbl_hist_modal tbody");
+
+  const barSerie=$("#barSerie"), barRango=$("#barRango"), barBoletos=$("#barBoletos"), barPlanillas=$("#barPlanillas");
+
+  const modalCom = $("#modalComodin"), gal = $("#galeriaComodin");
+  const modalHist= $("#modalHist"), modalMsg=$("#modalMsg"), modalBonus=$("#modalBonus");
+  const msgTitle=$("#msgTitle"), msgBody=$("#msgBody");
+  const bonusBody=$("#bonusBody");
+  const btnVerComodin = $("#btnVerComodin");
+  const pillLock = $("#pillLock");
+
+  // NUEVO: botón para abrir el modal BONUS del día
+  const btnVerBonusDia = $("#btnVerBonusDia");
+
+  function showModal(m){ m.style.display='flex'; }
+  function hideModal(m){ m.style.display='none'; }
+  function showMsg(title, html){ msgTitle.textContent = title; msgBody.innerHTML = html; showModal(modalMsg); }
+
+  const allowedLetters = new Set(['V','+','&','M']);
+  function filterSeriesOptions(){
+    Array.from(serieSel.options).forEach(opt=>{
+      if(!allowedLetters.has((opt.dataset.letra||'').trim())) opt.remove();
+    });
+    Array.from(histSerie.options).forEach(opt=>{
+      const letra = opt.dataset?.letra;
+      if(letra && !allowedLetters.has(letra.trim())) opt.remove();
+    });
+  }
+  filterSeriesOptions();
+
+  function setInnerPreview(){
+    const opt = serieSel.options[serieSel.selectedIndex];
+    const label = opt ? ((opt.dataset.letra?opt.dataset.letra+" — ":"") + opt.value) : "—";
+    kvSerie.textContent = label;
+    kvFecha.textContent = fechaInp.value || "—";
+    kvValor.textContent = money(valorInp.value);
+
+    const d = Number(desdeInp.value||0), h = Number(hastaInp.value||0);
+    const tot = (d && h && h>=d) ? (h-d+1) : 0;
+    kvRango.textContent = (d&&h) ? (d+"—"+h) : "—";
+    kvTot.textContent = tot;
+    const estPlan = Math.ceil(tot/20);
+    kvPlan.textContent = Number.isFinite(estPlan)? estPlan : 0;
+
+    const rei = reiSel.value || "";
+    kvRei.textContent = rei || "—";
+    const inner = rei ? `<img src="${reiPath(rei)}" alt="${rei}">`
+                      : `<span style="color:#8b92bb;font-size:.9rem">Sin comodín…</span>`;
+    img1.innerHTML = inner; img2.innerHTML = inner;
+
+    // Planillas sincronizadas
+    seriePlanillaShow.value = label;
+    seriePlanilla.value = opt ? opt.value : "";
+    planI.value = desdeInp.value || "";
+    planF.value = hastaInp.value || "";
+    planBols.textContent = tot;
+    planEst.textContent = estPlan;
+
+    // Barra
+    barSerie.textContent   = "Serie: " + (opt ? opt.value : "—");
+    barRango.textContent   = "Rango: " + (d&&h? (d+"—"+h) : "—");
+    barBoletos.textContent = "Boletos: " + tot;
+    barPlanillas.textContent = "Planillas: " + estPlan;
+  }
+  function recalcTotals(){
+    const d = Number(desdeInp.value||0), h = Number(hastaInp.value||0);
+    const tot = (d && h && h>=d) ? (h-d+1) : 0;
+    totSpan.textContent = tot;
+    setInnerPreview();
+  }
+  function lockElement(el, locked){
+    el.classList.toggle('readonly', !!locked);
+    el.setAttribute('aria-readonly', locked ? 'true' : 'false');
+  }
+  const lockKey = ()=> `reiLock:${fechaInp.value||''}:${serieSel.value||''}`;
+  function isComodinLocked(){ return sessionStorage.getItem(lockKey()) ? true : false; }
+  function applyComodinLockUI(locked){
+    lockElement(reiSel, locked);
+    btnVerComodin.disabled = locked;
+    pillLock.style.display = locked ? 'inline-flex' : 'none';
+  }
+
+  async function readLogs(){
+    const r = await fetch('/logs-impresion.json');
+    return await r.json().catch(()=>({rows:[]}));
+  }
+
+  function findDayConstraints(rows){
+    const fecha = (fechaInp.value||'').trim();
+    const mapSerie = new Map();
+    rows.forEach(n=>{
+      const tipo = (n.tipo||'').toLowerCase();
+      const fechaOK = (tipo==='boletos') ? (n.fecha_sorteo===fecha) : (n.fecha_planilla===fecha);
+      if(!fechaOK) return;
+      const s = (n.serie_archivo||'').trim();
+      if(!s) return;
+      let o = mapSerie.get(s);
+      if(!o){ o = {maxHasta:0, minDesde:Infinity, lastRei:'', lastDT:0, hasB:false}; mapSerie.set(s,o); }
+      const d = parseInt(n.desde||'0',10), h = parseInt(n.hasta||'0',10);
+      if(!isNaN(d)) o.minDesde = Math.min(o.minDesde,d);
+      if(!isNaN(h)) o.maxHasta = Math.max(o.maxHasta,h);
+      if(tipo==='boletos'){
+        o.hasB = true;
+        const dt = (n.fecha_hora? new Date(n.fecha_hora.replace(' ','T')).getTime():0);
+        if((n.reintegro_especial||'') && dt >= o.lastDT){ o.lastRei = n.reintegro_especial; o.lastDT = dt; }
+      }
+    });
+    const seriesDelDia = Array.from(mapSerie.keys());
+    return {mapSerie, seriesDelDia};
+  }
+
+  function applyDayRulesFromLogs(constraints){
+    const {mapSerie, seriesDelDia} = constraints;
+
+    if(seriesDelDia.length>0){
+      const lockSerie = seriesDelDia[0];
+      Array.from(serieSel.options).forEach(o=> o.selected = (o.value===lockSerie));
+      lockElement(serieSel, true);
+      const o = mapSerie.get(lockSerie);
+      const nextStart = (o?.maxHasta||0) + 1;
+      desdeInp.value = Math.max(nextStart, 1);
+      if(!hastaInp.value || Number(hastaInp.value) < Number(desdeInp.value)) hastaInp.value = desdeInp.value;
+
+      if(o?.hasB && o?.lastRei){
+        reiSel.value = o.lastRei;
+        sessionStorage.setItem(`reiLock:${fechaInp.value}:${lockSerie}`, o.lastRei);
+        applyComodinLockUI(true);
+      }else{
+        applyComodinLockUI(isComodinLocked());
+        const saved = sessionStorage.getItem(lockKey());
+        if(saved){ reiSel.value = saved; }
+      }
+    }else{
+      lockElement(serieSel, false);
+      desdeInp.value = 1;
+      if(!hastaInp.value || Number(hastaInp.value) < 1) hastaInp.value = 1;
+      applyComodinLockUI(isComodinLocked());
+      const saved = sessionStorage.getItem(lockKey());
+      if(saved){ reiSel.value = saved; }
+    }
+    recalcTotals();
+  }
+
+  function paintDaySummary(rows){
+    const fecha = (histFecha.value||'').trim();
+    const serieFiltro = (histSerie.value||'').trim();
+    const {mapSerie, seriesDelDia} = findDayConstraints(rows);
+    let serieDelDia = serieFiltro || seriesDelDia[0] || '';
+    const o = mapSerie.get(serieDelDia)||null;
+    tblRes.innerHTML = '';
+    const tr = document.createElement('tr');
+    if(!o){
+      tr.innerHTML = `<td>${fecha}</td><td>—</td><td>—</td><td>0</td><td>0</td><td>—</td>`;
+    }else{
+      const minD = (o.minDesde===Infinity?1:o.minDesde);
+      const maxH = (o.maxHasta||0);
+      const total = maxH>=minD? (maxH-minD+1):0;
+      const plans = Math.ceil(total/20);
+      tr.innerHTML = `<td>${fecha}</td><td>${serieDelDia}</td><td>${minD}—${maxH}</td><td>${total}</td><td>${plans}</td><td>${o.lastRei||'—'}</td>`;
+    }
+    tblRes.appendChild(tr);
+  }
+
+  function actionCell(id){
+    return `<button class="btn btn-mini btn-danger only-super" onclick="window.__delLog('${id}')" title="Eliminar del historial"><i class="bi bi-trash"></i> Eliminar</button>`;
+  }
+
+  function bonusCell(r){
+    if((r.bonus_enabled==='1') || (r.bonus_numbers && r.bonus_numbers.length)){
+      const nums = (r.bonus_numbers||'').toString().replace(/,/g,' ');
+      const btn = `<button class="btn btn-mini btn-ghost" onclick="window.__verBonus('${r.id||''}')"><i class="bi bi-stars"></i> Ver BONUS</button>`;
+      return `<span class="pill pill-green">ON</span> <span class="pill pill-blue">${nums||'—'}</span> ${btn}`;
+    }
+    return '<span class="pill pill-red">OFF</span>';
+  }
+
+  function paintDayDetail(rows){
+    const fecha = (histFecha.value||'').trim();
+    const serieFiltro = (histSerie.value||'').trim();
+    tblHist.innerHTML = '';
+    rows.forEach(r=>{
+      const tipo = (r.tipo||'').toLowerCase();
+      const fechaOK = (tipo==='boletos') ? (r.fecha_sorteo===fecha) : (r.fecha_planilla===fecha);
+      if(!fechaOK) return;
+      if(serieFiltro && (r.serie_archivo||'')!==serieFiltro) return;
+      const isB = tipo==='boletos';
+      const totB = isB ? (parseInt(r.hasta||0,10)-parseInt(r.desde||0,10)+1) : '';
+      const pl = isB ? Math.ceil((totB||0)/20) : (parseInt(r.hasta||0,10)-parseInt(r.desde||0,10)+1 ? 1 : '');
+      const rei = r.reintegro_especial || '—';
+      const cant= r.cant_reintegro_especial || '—';
+      const ale = (r.incluir_aleatorio==='1')?'Sí':((r.incluir_aleatorio==='0')?'No':'—');
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td><span class="pill pill-red">${r.fecha_hora||''}</span></td>
+        <td>${isB?'<span class="pill pill-blue">Boletos</span>':'<span class="pill pill-green">Planilla</span>'}</td>
+        <td>${r.serie_archivo||''}</td>
+        <td>${r.usuario||''}</td>
+        <td>${(r.desde||'')}—${(r.hasta||'')}</td>
+        <td>${isB? (totB||''): ''}</td>
+        <td>${isB? (pl||''): '1'}</td>
+        <td>${isB? rei:'—'}</td>
+        <td>${isB? cant:'—'}</td>
+        <td>${isB? ale:'—'}</td>
+        <td>${isB? bonusCell(r):'—'}</td>
+        <td>${actionCell(r.id||'')}</td>
+      `;
+      tblHist.appendChild(tr);
+    });
+    enableSuperButtons();
+  }
+
+  async function refreshAll(scroll=false){
+    try{
+      const js = await readLogs();
+      applyDayRulesFromLogs(findDayConstraints(js.rows));
+      paintDaySummary(js.rows);
+
+      // Detalle día
+      paintDayDetail(js.rows);
+
+      // Modal completo
+      tblHistModal.innerHTML = '';
+      js.rows.slice().reverse().forEach(r=>{
+        const tipo = (r.tipo||'').toLowerCase();
+        const fecha = (tipo==='boletos') ? (r.fecha_sorteo||'') : (r.fecha_planilla||'');
+        const ale = (r.incluir_aleatorio==='1')?'Sí':((r.incluir_aleatorio==='0')?'No':'—');
+        const isB = tipo==='boletos';
+        const totB = isB ? (parseInt(r.hasta||0,10)-parseInt(r.desde||0,10)+1) : '';
+        const pl = isB ? Math.ceil((totB||0)/20) : (parseInt(r.hasta||0,10)-parseInt(r.desde||0,10)+1 ? 1 : '');
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${r.fecha_hora||''}</td>
+          <td>${r.tipo||''}</td>
+          <td>${r.serie_archivo||''}</td>
+          <td>${r.usuario||''}</td>
+          <td>${fecha}</td>
+          <td>${r.desde||''}</td>
+          <td>${r.hasta||''}</td>
+          <td>${isB? (totB||''): ''}</td>
+          <td>${isB? (pl||''):'1'}</td>
+          <td>${r.reintegro_especial||'—'}</td>
+          <td>${r.cant_reintegro_especial||'—'}</td>
+          <td>${ale}</td>
+          <td>${isB? bonusCell(r):'—'}</td>
+          <td>${actionCell(r.id||'')}</td>
+        `;
+        tblHistModal.appendChild(tr);
+      });
+      enableSuperButtons();
+
+      if(scroll){
+        const y = document.querySelector('section.card:last-of-type').getBoundingClientRect().top + window.scrollY - 80;
+        window.scrollTo({top:y, behavior:'smooth'});
+      }
+      setInnerPreview();
+    }catch(e){
+      showMsg('Error', 'No se pudo leer <b>logs-impresion.json</b>. Verifica el servidor.');
+    }
+  }
+
+  // API: eliminar log
+  window.__delLog = async (id)=>{
+    if(!id){ return; }
+    if(!IS_SUPER){
+      showMsg('Permisos', 'Solo el <b>super administrador</b> puede eliminar registros.');
+      return;
+    }
+    const ok = confirm('¿Eliminar este registro del historial? Esta acción no se puede deshacer.');
+    if(!ok) return;
+    try{
+      const r = await fetch('/logs-impresion/delete', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({id})
+      });
+      if(!r.ok){
+        const t = await r.text().catch(()=> '');
+        showMsg('Eliminar', 'Error al eliminar (HTTP '+r.status+'). '+t);
+        return;
+      }
+      const js = await r.json();
+      if(js.ok){ await refreshAll(); showMsg('Eliminar', 'Registro eliminado correctamente.'); }
+      else{ showMsg('Eliminar', 'No se pudo eliminar: '+(js.error||'desconocido')); }
+    }catch(e){
+      showMsg('Eliminar', 'No se pudo contactar el servidor.');
+    }
+  };
+
+  // BONUS viewer (abre modal con datos de un log específico)
+  window.__verBonus = async (logId)=>{
+    try{
+      const r = await fetch(`/impresion/bonus-informe/${logId}.json`);
+      if(!r.ok){
+        showMsg('BONUS', 'No se encontró el informe para esta impresión.');
+        return;
+      }
+      const js = await r.json();
+      if(!js.ok){ showMsg('BONUS', 'No se pudo cargar el informe.'); return; }
+      const inf = js.informe||{};
+      const nums = (inf.numbers||[]).join(' ');
+      const req = inf.requested||{};
+      const wins = inf.winners||{};
+      const k = (x)=> (wins[String(x)]||[]).join(', ');
+      const det = Array.isArray(inf.tickets_detalle) ? inf.tickets_detalle : [];
+      const detRows = det.map(r=>{
+        const vec = (r.bonus_boleto||[]).join(', ');
+        const cp = (r.coincidencias_posicion ?? '');
+        const cn = (r.coincidencias_numeros ?? '');
+        const ch = Array.isArray(r.cambian_posiciones) && r.cambian_posiciones.length ? r.cambian_posiciones.join(', ') : '—';
+        return `<tr><td>${r.boleto||''}</td><td>${vec||'—'}</td><td>${cp}</td><td>${cn}</td><td>${ch}</td></tr>`;
+      }).join('');
+
+      bonusBody.innerHTML = `
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">
+          <span class="pill pill-blue"><b>Código:</b> ${inf.code||'—'}</span>
+          <span class="pill pill-green"><b>Números:</b> ${nums||'—'}</span>
+          <span class="pill ${inf.feasible?'pill-green':'pill-red'}"><b>Factible:</b> ${inf.feasible?'Sí':'No'}</span>
+        </div>
+        <table style="width:100%">
+          <thead><tr><th>Aciertos</th><th>Solicitados</th><th>Boletos ganadores</th></tr></thead>
+          <tbody>
+            <tr><td>5</td><td>${req['5']||0}</td><td>${k(5)||'—'}</td></tr>
+            <tr><td>4</td><td>${req['4']||0}</td><td>${k(4)||'—'}</td></tr>
+            <tr><td>3</td><td>${req['3']||0}</td><td>${k(3)||'—'}</td></tr>
+            <tr><td>2</td><td>${req['2']||0}</td><td>${k(2)||'—'}</td></tr>
+            <tr><td>1</td><td>${req['1']||0}</td><td>${k(1)||'—'}</td></tr>
+          </tbody>
+        </table>
+        ${detRows ? `
+          <div style="margin-top:10px;font-weight:700">Historial por boleto (verificación)</div>
+          <div style="max-height:280px;overflow:auto;border:1px solid #e6e6e6;border-radius:10px;margin-top:6px">
+            <table style="width:100%;font-size:12px">
+              <thead><tr><th>ID</th><th>Franja BONUS</th><th>Coinc. posición</th><th>Coinc. número</th><th>Cambia pos.</th></tr></thead>
+              <tbody>${detRows}</tbody>
+            </table>
+          </div>` : ''}
+      `;
+      showModal(modalBonus);
+    }catch(e){
+      showMsg('BONUS', 'Error al cargar el informe.');
+    }
+  };
+
+  // NUEVO: Buscar y abrir el BONUS del día/serie actual
+  async function abrirBonusDelDia(){
+    const fecha = (fechaInp.value || '').trim();
+    const serie = (serieSel.value || '').trim();
+
+    try{
+      const js = await readLogs();
+      let recs = (js.rows || []).filter(r =>
+        (r.tipo || '').toLowerCase() === 'boletos' &&
+        r.fecha_sorteo === fecha &&
+        (!serie || (r.serie_archivo || '') === serie)
+      );
+
+      // Ordena por fecha/hora DESC
+      recs.sort((a,b) => {
+        const ta = new Date((a.fecha_hora||'').replace(' ','T')).getTime() || 0;
+        const tb = new Date((b.fecha_hora||'').replace(' ','T')).getTime() || 0;
+        return tb - ta;
+      });
+
+      const rec = recs.find(r => r.bonus_enabled === '1' || (r.bonus_numbers && r.bonus_numbers.length));
+      if(rec && rec.id){
+        await window.__verBonus(rec.id);
+      }else{
+        showMsg('BONUS', 'No hay BONUS registrado para esta fecha/serie.');
+      }
+    }catch(e){
+      showMsg('BONUS', 'No se pudo consultar el historial para obtener el BONUS.');
+    }
+  }
+
+  // Comodín
+  $("#btnVerComodin").onclick = ()=>{
+    if(btnVerComodin.disabled){
+      showMsg('Comodín bloqueado', 'El comodín del día ya está fijado y no puede cambiarse en excedentes.');
+      return;
+    }
+    $$(".gal .itm", gal).forEach(itm=>{
+      itm.classList.toggle('active', itm.dataset.name === reiSel.value);
+      itm.onclick = ()=> $$(".gal .itm", gal).forEach(x=> x.classList.toggle('active', x===itm));
+    });
+    showModal(modalCom);
+  };
+
+  $("#comodinAceptar").onclick = ()=>{
+    if(btnVerComodin.disabled){ hideModal(modalCom); return; }
+    const sel = $(".gal .itm.active", gal);
+    if(sel){
+      reiSel.value = sel.dataset.name;
+      sessionStorage.setItem(lockKey(), sel.dataset.name);
+      applyComodinLockUI(true);
+      setInnerPreview();
+    }
+    hideModal(modalCom);
+  };
+
+  $("#comodinNone").onclick = ()=>{
+    if(btnVerComodin.disabled){
+      showMsg('Comodín bloqueado', 'No puedes quitar el comodín: ya está fijado para el día.');
+      return;
+    }
+    reiSel.value = ""; sessionStorage.removeItem(lockKey()); applyComodinLockUI(false); setInnerPreview();
+    hideModal(modalCom);
+  };
+
+  // Historial UI
+  $("#btnHistorial").onclick = ()=> showModal(modalHist);
+  $("#btnHistCompleto").onclick = ()=> showModal(modalHist);
+  $("#closeHist").onclick = ()=> hideModal(modalHist);
+
+  // ZIP
+  $("#btnZip").onclick = async ()=>{
+    const q = new URLSearchParams({
+      fecha: fechaInp.value||'',
+      serie: serieSel.value||'',
+      desde: desdeInp.value||'',
+      hasta: hastaInp.value||'',
+      valor: valorInp.value||'',
+      reintegro: reiSel.value||'',
+      cant: cantEsp.value||'',
+      aleatorio: aleSel.value||'',
+      // (el ZIP actual del backend no usa BONUS; se imprime por /impresion normal)
+    }).toString();
+    const url = '/impresion_zip?'+q;
+    try{
+      const r = await fetch(url, {method:'GET'});
+      if(r.ok){ window.location.href = url; }
+      else{ showMsg('Generando ZIP', `<b>Error:</b> <code>/impresion_zip</code> no disponible (HTTP ${r.status}).`); }
+    }catch(e){ showMsg('Generando ZIP', 'No se pudo contactar el servidor para <b>/impresion_zip</b>.'); }
+  };
+
+  // Varios
+  $("#btnUltimoImpreso").onclick = ()=> refreshAll(true);
+  $("#btnIrHoy").onclick = ()=>{
+    const t = new Date().toISOString().slice(0,10);
+    $("#hist_fecha").value = t; $("#fecha_sorteo").value = t; $("#fecha_planilla").value = t;
+    refreshAll();
+  };
+  $("#btnRefresh").onclick = ()=> refreshAll();
+
+  // NUEVO: click del botón BONUS del día
+  if(btnVerBonusDia){ btnVerBonusDia.onclick = abrirBonusDelDia; }
+
+  [hastaInp, valorInp, cantEsp, aleSel, bonusEnabled, bk5, bk4, bk3, bk2, bk1].forEach(el=> el.addEventListener('input', ()=>{recalcTotals(); enableSuperButtons();}));
+  reiSel.addEventListener('change', ()=> setInnerPreview());
+  [serieSel, $("#fecha_sorteo")].forEach(el=> el.addEventListener('change', async ()=>{
+    if(el.id==='fecha_sorteo') $("#fecha_planilla").value = $("#fecha_sorteo").value;
+    await refreshAll();
+  }));
+  [histFecha, histSerie].forEach(el=> el.addEventListener('change', ()=> refreshAll()));
+
+  (async function init(){
+    enableSuperButtons();
+    if(serieSel.options.length===0){
+      showMsg('Series', 'No hay series válidas (permitidas: V, +, &, M).');
+    }
+    if(!valorInp.value) valorInp.value = "1.00";
+    $("#fecha_planilla").value = $("#fecha_sorteo").value;
+    await refreshAll();
+  })();
+
+  window.addEventListener('click', e=>{
+    [modalCom, modalHist, modalMsg, modalBonus].forEach(m=>{ if(e.target===m) m.style.display='none'; });
+  });
+  $("#msgClose").onclick = ()=> modalMsg.style.display='none';
+  $("#bonusClose").onclick = ()=> modalBonus.style.display='none';
+})();
+</script>
+</body>
+</html>
