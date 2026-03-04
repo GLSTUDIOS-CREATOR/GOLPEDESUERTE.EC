@@ -65,6 +65,95 @@ def require_session(f):
     return wrapper
 
 
+# ================== PERMISOS POR USUARIO (PARCHE SEGURO) ==================
+MODULOS_PERMISOS = [
+    ('dashboard', 'Dashboard', '/dashboard'),
+    ('usuarios', 'Usuarios', '/usuarios'),
+    ('juego', 'Juego', '/juego'),
+    ('contabilidad', 'Contabilidad', '/contabilidad'),
+    ('vendedores', 'Vendedores', '/vendedores'),
+    ('asignar_planillas', 'Asignar Planillas', '/asignar-planillas'),
+    ('impresion', 'Impresión de Boletos', '/impresion'),
+    ('cobro', 'Cobro de Caja', '/cobro'),
+    ('pago_premios', 'Pago de Premios', '/pago-premios'),
+    ('sorteo', 'Sorteo', '/sorteo'),
+    ('crear_figuras', 'Crear Figuras', '/crear-figuras'),
+    ('escoger_figuras', 'Escoger Figuras', '/escoger-figuras'),
+    ('boletin', 'Boletín', '/boletin'),
+]
+MODULOS_PERMISOS_KEYS = [k for k, _label, _path in MODULOS_PERMISOS]
+
+RUTAS_PERMISOS = {
+    '/dashboard': 'dashboard',
+    '/api/dashboard/hoy': 'dashboard',
+    '/usuarios': 'usuarios',
+    '/juego': 'juego',
+    '/contabilidad': 'contabilidad',
+    '/vendedores': 'vendedores',
+    '/asignar-planillas': 'asignar_planillas',
+    '/impresion': 'impresion',
+    '/cobro': 'cobro',
+    '/pago-premios': 'pago_premios',
+    '/sorteo': 'sorteo',
+    '/crear-figuras': 'crear_figuras',
+    '/escoger-figuras': 'escoger_figuras',
+    '/boletin': 'boletin',
+}
+
+def _perm_norm(v):
+    return str(v or '').strip().lower().replace('-', '_').replace(' ', '_')
+
+def _coerce_permisos(value):
+    if value is None:
+        return list(MODULOS_PERMISOS_KEYS)
+    if isinstance(value, (list, tuple, set)):
+        raw = [str(v).strip() for v in value if str(v).strip()]
+    else:
+        txt = str(value or '').strip()
+        raw = [p.strip() for p in txt.split(',')] if txt else []
+    out, seen = [], set()
+    for item in raw:
+        key = _perm_norm(item)
+        if key in MODULOS_PERMISOS_KEYS and key not in seen:
+            out.append(key)
+            seen.add(key)
+    return out
+
+def usuario_tiene_modulo(modulo):
+    return _perm_norm(modulo) in set(_coerce_permisos(session.get('permisos', None)))
+
+def _ruta_inicio_permitida():
+    for key, _label, path in MODULOS_PERMISOS:
+        if usuario_tiene_modulo(key):
+            return path
+    return '/logout'
+
+@app.context_processor
+def inject_can_helper():
+    return {'can': usuario_tiene_modulo}
+
+@app.before_request
+def _bloquear_acceso_por_permiso():
+    path = (request.path or '/').rstrip('/') or '/'
+    if path.startswith('/static') or path in {'/', '/login', '/logout'}:
+        return None
+    if 'usuario' not in session:
+        return None
+    for prefix, modulo in sorted(RUTAS_PERMISOS.items(), key=lambda x: len(x[0]), reverse=True):
+        if path == prefix or path.startswith(prefix + '/'):
+            if not usuario_tiene_modulo(modulo):
+                if path.startswith('/api/'):
+                    return Response('{"ok": false, "error": "No tienes permiso para este módulo."}', status=403, mimetype='application/json')
+                flash('No tienes permiso para entrar a esta sección.', 'error')
+                destino = _ruta_inicio_permitida()
+                if destino == path:
+                    destino = '/logout'
+                return redirect(destino)
+            break
+    return None
+# =======================================================================
+
+
 
 # ─── ARCHIVOS Y DIRECTORIOS ────────────────
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -280,13 +369,16 @@ def leer_usuarios():
     root = tree.getroot()
     usuarios = []
     for elem in root.findall('usuario'):
+        permisos_elem = elem.find('permisos')
+        permisos_raw = None if permisos_elem is None else (permisos_elem.text or '')
         usuarios.append({
-            'nombre': elem.find('nombre').text,
-            'clave': elem.find('clave').text,
-            'rol': elem.find('rol').text,
-            'email': elem.find('email').text if elem.find('email') is not None else '',
-            'estado': elem.find('estado').text,
-            'avatar': elem.find('avatar').text if elem.find('avatar') is not None else 'avatar-male.png'
+            'nombre': elem.findtext('nombre', ''),
+            'clave': elem.findtext('clave', ''),
+            'rol': elem.findtext('rol', ''),
+            'email': elem.findtext('email', ''),
+            'estado': elem.findtext('estado', 'activo'),
+            'avatar': elem.findtext('avatar', 'avatar-male.png') or 'avatar-male.png',
+            'permisos': _coerce_permisos(permisos_raw)
         })
     return usuarios
 
@@ -294,12 +386,13 @@ def guardar_usuarios(usuarios):
     root = ET.Element('usuarios')
     for u in usuarios:
         user_elem = ET.SubElement(root, 'usuario')
-        ET.SubElement(user_elem, 'nombre').text = u['nombre']
-        ET.SubElement(user_elem, 'clave').text = u['clave']
-        ET.SubElement(user_elem, 'rol').text = u['rol']
+        ET.SubElement(user_elem, 'nombre').text = u.get('nombre', '')
+        ET.SubElement(user_elem, 'clave').text = u.get('clave', '')
+        ET.SubElement(user_elem, 'rol').text = u.get('rol', '')
         ET.SubElement(user_elem, 'email').text = u.get('email', '')
-        ET.SubElement(user_elem, 'estado').text = u['estado']
+        ET.SubElement(user_elem, 'estado').text = u.get('estado', 'activo')
         ET.SubElement(user_elem, 'avatar').text = u.get('avatar', 'avatar-male.png')
+        ET.SubElement(user_elem, 'permisos').text = ','.join(_coerce_permisos(u.get('permisos', None)))
     tree = ET.ElementTree(root)
     tree.write(USUARIOS_XML, encoding='utf-8', xml_declaration=True)
 
@@ -328,7 +421,8 @@ def login():
             session['usuario'] = user['nombre']
             session['rol'] = user['rol']
             session['avatar'] = user.get('avatar', 'avatar-male.png')
-            return redirect(url_for('dashboard'))
+            session['permisos'] = list(user.get('permisos', _coerce_permisos(None)))
+            return redirect(_ruta_inicio_permitida())
         else:
             flash('Usuario o clave incorrectos o usuario inactivo', 'error')
     return render_template('login.html')
@@ -705,6 +799,7 @@ def usuarios():
         'usuarios.html',
         usuarios=lista_usuarios,
         roles=roles,
+        modulos_permisos=MODULOS_PERMISOS,
         usuario=session['usuario'],
         rol=session['rol'],
         avatar=session.get('avatar', 'avatar-male.png')
@@ -717,6 +812,7 @@ def guardar_usuario():
     rol   = request.form['rol']
     email = request.form.get('email', '')
     avatar_filename = request.form.get('avatar_select', 'avatar-male.png')
+    permisos = _coerce_permisos(request.form.getlist('permisos'))
     estado = 'activo'
 
     usuarios = leer_usuarios()
@@ -727,8 +823,10 @@ def guardar_usuario():
             u['rol'] = rol
             u['email'] = email
             u['avatar'] = avatar_filename
+            u['permisos'] = permisos
             u['estado'] = estado
             existe = True
+            break
     if not existe:
         usuarios.append({
             'nombre': nombre,
@@ -736,6 +834,7 @@ def guardar_usuario():
             'rol': rol,
             'email': email,
             'avatar': avatar_filename,
+            'permisos': permisos,
             'estado': estado
         })
     guardar_usuarios(usuarios)
@@ -755,18 +854,23 @@ def editar_usuario(nombre):
         user['clave'] = request.form['password']
         user['rol'] = request.form['rol']
         user['email'] = request.form.get('email', '')
-        user['avatar'] = request.form.get('avatar_select', user['avatar'])
+        user['avatar'] = request.form.get('avatar_select', user.get('avatar', 'avatar-male.png'))
+        user['permisos'] = _coerce_permisos(request.form.getlist('permisos'))
         usuarios = leer_usuarios()
         for u in usuarios:
             if u['nombre'] == nombre:
                 u.update(user)
+                break
         guardar_usuarios(usuarios)
+        if session.get('usuario') == nombre:
+            session['permisos'] = list(user.get('permisos', _coerce_permisos(None)))
         flash('Usuario editado correctamente', 'success')
         return redirect(url_for('usuarios'))
     return render_template(
         'usuarios_editar.html',
         user=user,
         roles=[r[1] for r in ROLES],
+        modulos_permisos=MODULOS_PERMISOS,
         usuario=session['usuario'],
         rol=session['rol'],
         avatar=session.get('avatar', 'avatar-male.png')
@@ -15163,304 +15267,6 @@ try:
         app.view_functions["juego.juego_spinners_event"] = _sp_hotfix_event_impl
 except Exception:
     pass
-
-
-# ================== RESCATE SEGURO: PANEL SISTEMA + RESET OPERATIVO ==================
-def _gl_can_norm(v):
-    return str(v or '').strip().lower().replace('-', '_').replace(' ', '_')
-
-@app.context_processor
-def inject_can_helper_safe():
-    def can(modulo):
-        perms = session.get('permisos', None)
-        if perms is None:
-            return True
-        if isinstance(perms, str):
-            items = [p.strip() for p in perms.split(',') if p.strip()]
-        elif isinstance(perms, (list, tuple, set)):
-            items = [str(p).strip() for p in perms if str(p).strip()]
-        else:
-            items = []
-        return _gl_can_norm(modulo) in {_gl_can_norm(x) for x in items}
-    return {'can': can}
-
-def _gl_is_admin_sistema():
-    rol = _gl_can_norm(session.get('rol', ''))
-    return rol in {
-        'admin', 'administrador',
-        'superadmin', 'super_administrador', 'superadministrador'
-    }
-
-def _gl_back_to_home():
-    try:
-        return redirect('/dashboard')
-    except Exception:
-        return redirect('/')
-
-def _gl_require_admin_sistema():
-    if not _gl_is_admin_sistema():
-        try:
-            flash('No tienes permiso para entrar al módulo Sistema.', 'error')
-        except Exception:
-            pass
-        return _gl_back_to_home()
-    return None
-
-def _gl_unique_paths(seq):
-    out = []
-    seen = set()
-    for p in seq:
-        if not p:
-            continue
-        ap = os.path.abspath(str(p))
-        if ap in seen:
-            continue
-        seen.add(ap)
-        out.append(ap)
-    return out
-
-def _gl_empty_xml(root_name, attrs=None):
-    root = ET.Element(root_name, attrs or {})
-    return ET.tostring(root, encoding='utf-8', xml_declaration=True)
-
-def _gl_default_spinners():
-    root = ET.Element('spinners', {'fecha': date.today().isoformat()})
-    for i in range(1, 21):
-        ET.SubElement(root, 'n', {'i': str(i), 'v': ''})
-    return ET.tostring(root, encoding='utf-8', xml_declaration=True)
-
-def _gl_default_bingo():
-    root = ET.Element('bingo')
-    balotas = ET.SubElement(root, 'balotas')
-    for i in range(1, 76):
-        ET.SubElement(balotas, 'balota', {'numero': str(i), 'estado': '', 'ultimo': ''})
-    return ET.tostring(root, encoding='utf-8', xml_declaration=True)
-
-def _gl_payload_for_path(path_abs):
-    name = os.path.basename(path_abs).lower()
-
-    # CAJA / COBROS / CONTABILIDAD
-    if name == 'caja.xml':
-        if os.sep + 'logs' + os.sep in path_abs.lower():
-            return _gl_empty_xml('movimientos')
-        return _gl_empty_xml('caja')
-    if name in ('ventas.xml',):
-        return _gl_empty_xml('ventas')
-    if name in ('gastos.xml',):
-        return _gl_empty_xml('gastos')
-    if name in ('bancos.xml',):
-        return _gl_empty_xml('bancos')
-    if name in ('sueldos.xml',):
-        return _gl_empty_xml('sueldos')
-    if name in ('auditoria.xml',):
-        return _gl_empty_xml('auditoria')
-
-    # VENDEDORES / ASIGNACIONES
-    if name == 'vendedores.xml':
-        return _gl_empty_xml('vendedores')
-    if name == 'asignaciones.xml':
-        return _gl_empty_xml('asignaciones')
-
-    # IMPRESIONES / QR
-    if name == 'impresiones.xml':
-        return _gl_empty_xml('impresiones')
-    if name == 'qr_registros.xml':
-        return _gl_empty_xml('registros')
-    if name == 'vmix_qr_clientes.xml':
-        return _gl_empty_xml('clientes')
-
-    # PAGO DE PREMIOS / RESULTADOS / SORTEO
-    if name in ('pagos_premios.xml', 'pagos.xml'):
-        return _gl_empty_xml('pagos')
-    if name in ('resultados_sorteo.xml', 'resultados.xml'):
-        return _gl_empty_xml('resultados')
-    if name == 'sorteos.xml':
-        return _gl_empty_xml('sorteos')
-
-    # JUEGO / BINGO / BONUS / SPINNERS
-    if name in ('spinners.xml', 'vmix_spinners.xml'):
-        return _gl_default_spinners()
-    if name == 'vmix_reintegro.xml':
-        root = ET.Element('reintegro')
-        for tag, val in [('nombre',''), ('valor',''), ('activo','0'),
-                         ('click_count','0'), ('click_token',''),
-                         ('updated_at',''), ('archivo',''), ('ruta',''), ('display','')]:
-            n = ET.SubElement(root, tag)
-            n.text = val
-        return ET.tostring(root, encoding='utf-8', xml_declaration=True)
-    if name == 'vmix_vendedores.xml':
-        return _gl_empty_xml('vendedores')
-    if name == 'vmix_ventas.xml':
-        root = ET.Element('ventas', {'fecha': date.today().isoformat()})
-        for tag, val in [('serie',''), ('primer_boleto','0'), ('ultimo_boleto','0'),
-                         ('valor_boleto','0'), ('boletos_impresos','0')]:
-            n = ET.SubElement(root, tag)
-            n.text = val
-        return ET.tostring(root, encoding='utf-8', xml_declaration=True)
-    if name == 'datos_bingo.xml':
-        return _gl_default_bingo()
-    if name == 'ganadores.xml':
-        return _gl_empty_xml('ganadores', {'fecha': date.today().isoformat(), 'ultimo_marcado': ''})
-    if name == 'vmix_bonus.xml':
-        root = ET.Element('bonus', {'fecha': date.today().isoformat()})
-        for tag, val in [('count','0'), ('code',''), ('feasible','0'),
-                         ('selected_index','0'), ('selected_number','0'),
-                         ('click_count','0'), ('click_token',''), ('updated_at','')]:
-            n = ET.SubElement(root, tag)
-            n.text = val
-        return ET.tostring(root, encoding='utf-8', xml_declaration=True)
-
-    # FIGURAS DEL DÍA / POR FECHA (SE LIMPIAN), FIGURAS CREADAS (NO)
-    if name == 'figuras_por_fecha.xml':
-        return _gl_empty_xml('agenda')
-    if name == 'figuras_del_dia.xml':
-        return _gl_empty_xml('figuras')
-
-    return None
-
-def _gl_reset_targets(preservar_usuarios='1'):
-    vars_to_clear = [
-        'CAJA_XML', 'ASIGNACIONES_XML', 'PAGOS_PREMIOS_XML',
-        'RESULTADOS_SORTEO_XML', 'RESULTADOS_XML', 'SORTEOS_XML',
-        'SPINNERS_XML', 'VMIX_REINTEGRO_XML', 'VMIX_SPINNERS_XML',
-        'VMIX_VENDEDORES_XML', 'VMIX_VENTAS_XML', 'VENDEDORES_XML',
-        'IMPRESIONES_XML', 'LOGS_CAJA_XML', 'LOGS_IMPRESIONES_XML',
-        'CONTAB_BANCOS_XML', 'CONTAB_GASTOS_XML', 'CONTAB_SUELDOS_XML',
-        'CONTAB_VENTAS_XML', 'GASTOS_XML', 'AUDIT_XML', 'BANCOS_XML',
-        'QR_REGISTROS_XML', 'VMIX_QR_CLIENTES_XML',
-        'BINGO_XML', 'GANADORES_XML', 'VMIX_BONUS_XML',
-        'FIGURAS_FECHA_XML', 'FIGURAS_DEL_DIA_XML'
-    ]
-    if str(preservar_usuarios) != '1':
-        vars_to_clear.append('USUARIOS_XML')
-
-    paths = []
-    for var_name in vars_to_clear:
-        p = globals().get(var_name)
-        if p:
-            paths.append(p)
-    return _gl_unique_paths(paths)
-
-def _gl_backup_bytes(targets, prefix='respaldo'):
-    from io import BytesIO
-    stamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-    mem = BytesIO()
-    with zipfile.ZipFile(mem, 'w', zipfile.ZIP_DEFLATED) as zf:
-        zf.writestr('meta.txt', f'Generado: {datetime.now().isoformat()}\nTipo: {prefix}\n')
-        for p in _gl_unique_paths(targets):
-            try:
-                if os.path.exists(p):
-                    zf.write(p, arcname=os.path.basename(p))
-            except Exception:
-                continue
-    mem.seek(0)
-    return mem, f'{prefix}_{stamp}.zip'
-
-def _gl_do_operational_reset(preservar_usuarios='1'):
-    targets = _gl_reset_targets(preservar_usuarios)
-    # Respaldo automático previo
-    try:
-        backup_mem, backup_name = _gl_backup_bytes(targets, prefix='reset_backup')
-        backup_dir = os.path.join(globals().get('DATA_DIR', BASE_DIR), 'backups')
-        os.makedirs(backup_dir, exist_ok=True)
-        with open(os.path.join(backup_dir, backup_name), 'wb') as fh:
-            fh.write(backup_mem.read())
-    except Exception:
-        pass
-
-    touched, skipped = [], []
-    for p in targets:
-        try:
-            payload = _gl_payload_for_path(p)
-            if payload is None:
-                skipped.append(p)
-                continue
-            os.makedirs(os.path.dirname(p), exist_ok=True)
-            with open(p, 'wb') as fh:
-                fh.write(payload)
-            touched.append(p)
-        except Exception:
-            skipped.append(p)
-    return touched, skipped
-
-@app.route('/admin/sistema')
-@require_session
-def admin_sistema_seguro():
-    denied = _gl_require_admin_sistema()
-    if denied:
-        return denied
-
-    tpl = os.path.join(BASE_DIR, 'templates', 'admin_sistema.html')
-    if not os.path.exists(tpl):
-        try:
-            flash('Falta templates/admin_sistema.html', 'error')
-        except Exception:
-            pass
-        return _gl_back_to_home()
-
-    return render_template(
-        'admin_sistema.html',
-        usuario=session.get('usuario', ''),
-        rol=session.get('rol', ''),
-        avatar=session.get('avatar', 'avatar-male.png'),
-        fecha_hoy=date.today().isoformat(),
-        respaldo_nombre='',
-        cierre_archivos=[]
-    )
-
-@app.route('/admin/backup', methods=['GET', 'POST'])
-@require_session
-def admin_backup_seguro():
-    denied = _gl_require_admin_sistema()
-    if denied:
-        return denied
-    if request.method == 'GET':
-        return redirect('/admin/sistema')
-    mem, fname = _gl_backup_bytes(_gl_reset_targets('1'), prefix='respaldo_liviano')
-    return send_file(mem, as_attachment=True, download_name=fname, mimetype='application/zip')
-
-@app.route('/admin/cierre', methods=['GET', 'POST'])
-@require_session
-def admin_cierre_seguro():
-    denied = _gl_require_admin_sistema()
-    if denied:
-        return denied
-    if request.method == 'GET':
-        return redirect('/admin/sistema')
-    fecha_ref = (request.form.get('fecha') or date.today().isoformat()).strip()
-    motivo = (request.form.get('motivo') or 'manual').strip()
-    mem, fname = _gl_backup_bytes(_gl_reset_targets('1'), prefix=f'cierre_{motivo}_{fecha_ref}')
-    return send_file(mem, as_attachment=True, download_name=fname, mimetype='application/zip')
-
-@app.route('/admin/reset', methods=['GET', 'POST'])
-@require_session
-def admin_reset_seguro():
-    denied = _gl_require_admin_sistema()
-    if denied:
-        return denied
-
-    if request.method == 'GET':
-        try:
-            flash('El reset se ejecuta desde el botón del panel Sistema.', 'info')
-        except Exception:
-            pass
-        return redirect('/admin/sistema')
-
-    preservar_usuarios = request.form.get('preservar_usuarios', '1')
-    touched, skipped = _gl_do_operational_reset(preservar_usuarios=preservar_usuarios)
-
-    try:
-        flash(
-            f'Reset operativo completado: {len(touched)} archivos reiniciados. '
-            f'Se conservaron las figuras creadas. '
-            + (f'{len(skipped)} omitidos por seguridad.' if skipped else ''),
-            'success'
-        )
-    except Exception:
-        pass
-    return redirect('/admin/sistema')
-# ================================================================================
-
 
 if __name__ == "__main__":
     import os
