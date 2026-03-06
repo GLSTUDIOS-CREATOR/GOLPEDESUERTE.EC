@@ -1052,14 +1052,14 @@ SERIE_MAP = {
 
 # ── OFFSETS EN CÓDIGO (boleto 0…7) ──
 per_cell_offsets = {
-    0: {"grid_x": -85, "grid_y": 20,  "info_x": 5,   "info_y": 20,  "rein_x": 215, "rein_y": 30},
-    1: {"grid_x": -162, "grid_y":20,  "info_x": -70, "info_y": 20,  "rein_x": 140, "rein_y": 30},
-    2: {"grid_x": -85, "grid_y": 85,  "info_x": 5,   "info_y": 82,  "rein_x": 215, "rein_y": -25},
-    3: {"grid_x": -162, "grid_y":85,  "info_x": -70, "info_y": 82,  "rein_x": 140, "rein_y": -25},
-    4: {"grid_x": -85, "grid_y": 143, "info_x": 5,   "info_y": 132, "rein_x": 215, "rein_y": -85},
-    5: {"grid_x": -162, "grid_y":143, "info_x": -70, "info_y": 132, "rein_x": 140, "rein_y": -85},
-    6: {"grid_x": -85, "grid_y": 205, "info_x": 5,   "info_y": 192, "rein_x": 215, "rein_y": -145},
-    7: {"grid_x": -162, "grid_y":205, "info_x": -70, "info_y": 192, "rein_x": 140, "rein_y": -145},
+    0: {"grid_x": -80, "grid_y": 20,  "info_x": 5,   "info_y": 25,  "rein_x": 225, "rein_y": 30},
+    1: {"grid_x": -155, "grid_y": 20,  "info_x": -60, "info_y": 25,  "rein_x": 170, "rein_y": 30},
+    2: {"grid_x": -80, "grid_y": 75,  "info_x": 5,   "info_y": 80,  "rein_x": 225, "rein_y": -25},
+    3: {"grid_x": -155, "grid_y": 75,  "info_x": -60, "info_y": 80,  "rein_x": 170, "rein_y": -25},
+    4: {"grid_x": -80, "grid_y": 133, "info_x": 5,   "info_y": 143, "rein_x": 225, "rein_y": -85},
+    5: {"grid_x": -155, "grid_y": 133, "info_x": -60, "info_y": 143, "rein_x": 170, "rein_y": -85},
+    6: {"grid_x": -80, "grid_y": 195, "info_x": 5,   "info_y": 200, "rein_x": 225, "rein_y": -145},
+    7: {"grid_x": -155, "grid_y": 195, "info_x": -60, "info_y": 200, "rein_x": 170, "rein_y": -145},
 }
 
 # ================== LOGS XML ==================
@@ -1423,27 +1423,44 @@ def logs_impresion_delete():
 # ================== GENERADORES PDF ==================
 def _try_draw_qr_on_canvas(c, data, x, y, size):
     try:
-        from qrcode.constants import ERROR_CORRECT_H
+        from qrcode.constants import ERROR_CORRECT_M
         qr = qrcode.QRCode(
             version=None,
-            error_correction=ERROR_CORRECT_H,
-            box_size=10,
-            border=2
+            error_correction=ERROR_CORRECT_M,
+            box_size=1,
+            border=4
         )
         qr.add_data(str(data))
         qr.make(fit=True)
 
-        img = qr.make_image(fill_color="black", back_color="white").convert("RGB")
-        buf_qr = BytesIO()
-        img.save(buf_qr, format="PNG")
-        buf_qr.seek(0)
+        matrix = qr.get_matrix()
+        rows = len(matrix)
+        cols = len(matrix[0]) if rows else 0
+        total = max(rows, cols)
+        if total <= 0:
+            return False
 
-        c.drawImage(
-            ImageReader(buf_qr),
-            x, y, size, size,
-            preserveAspectRatio=True,
-            mask="auto"
-        )
+        module = max(1.0, float(size) / float(total))
+        qr_size = module * total
+        ox = x + (size - qr_size) / 2.0
+        oy = y + (size - qr_size) / 2.0
+
+        c.saveState()
+        c.setFillColorRGB(1, 1, 1)
+        c.rect(ox, oy, qr_size, qr_size, stroke=0, fill=1)
+        c.setFillColorRGB(0, 0, 0)
+
+        for r, row in enumerate(matrix):
+            py = oy + (total - 1 - r) * module
+            run_start = None
+            for col, bit in enumerate(row + [False]):
+                if bit and run_start is None:
+                    run_start = col
+                elif not bit and run_start is not None:
+                    c.rect(ox + run_start * module, py, (col - run_start) * module, module, stroke=0, fill=1)
+                    run_start = None
+
+        c.restoreState()
         return True
     except Exception:
         c.setFillGray(0.95)
@@ -1452,6 +1469,7 @@ def _try_draw_qr_on_canvas(c, data, x, y, size):
         c.setFont("Helvetica", 6)
         c.drawCentredString(x + size/2, y + size/2 - 3, "QR")
         return False
+
 
 def _safe_draw_image(c, path_or_buf, x, y, w_, h_):
     try:
@@ -1499,7 +1517,7 @@ def _draw_bonus_franja(c: canvas.Canvas, x_left: float, y_top_rein: float, numbe
 
     # Etiqueta "BONUS"
     c.setFont("Helvetica-Bold", label_font)
-    c.drawCentredString(x_left + REINTEGRO_W/2.0 + offset_x, y0 + slot_h + 10, "BONUS")
+    # Se elimina solo la etiqueta visible del BONUS en el boleto, sin mover números ni alterar el resto
 
     # Solo números (sin bordes)
     c.setFont("Helvetica-Bold", font_sz)
@@ -1561,7 +1579,7 @@ def generar_pdf_boletos_excel(
                         qr_data = f"{ids[pos]}|{fecha_sorteo}"
                         try:
                             if qr_public_base:
-                                qr_data = _qr_ticket_url(
+                                qr_data = _qr_ticket_url_compact(
                                     base_url=qr_public_base,
                                     serie_archivo=nombre,
                                     boleto_id=str(ids[pos]),
@@ -1835,6 +1853,74 @@ def _qr_sign_payload(parts):
     msg = "|".join([str(p or "") for p in parts]).encode("utf-8")
     return hmac.new(secret, msg, hashlib.sha256).hexdigest()[:16]
 
+def _qr_fecha_compacta(fecha_iso: str) -> str:
+    try:
+        dt = datetime.strptime(str(fecha_iso), "%Y-%m-%d")
+        return dt.strftime("%y%m%d")
+    except Exception:
+        return str(fecha_iso or "").replace("-", "")
+
+
+def _qr_fecha_expandida(fecha_compacta: str) -> str:
+    raw = str(fecha_compacta or "").strip()
+    if len(raw) == 6 and raw.isdigit():
+        try:
+            dt = datetime.strptime(raw, "%y%m%d")
+            return dt.strftime("%Y-%m-%d")
+        except Exception:
+            return raw
+    return raw
+
+
+def _qr_serie_token(serie_archivo: str) -> str:
+    serie = str(serie_archivo or "").strip()
+    mapa = {
+        "Srs_ib1.xlsx": "1",
+        "Srs_ib2.xlsx": "2",
+        "Srs_ib3.xlsx": "3",
+        "Srs_Manila.xlsx": "M",
+        "Srs_ib1.csv": "1",
+        "Srs_ib2.csv": "2",
+        "Srs_ib3.csv": "3",
+        "Srs_Manila.csv": "M",
+    }
+    return mapa.get(serie, serie)
+
+
+def _qr_serie_from_token(token: str) -> str:
+    tk = str(token or "").strip()
+    mapa = {
+        "1": "Srs_ib1.xlsx",
+        "2": "Srs_ib2.xlsx",
+        "3": "Srs_ib3.xlsx",
+        "M": "Srs_Manila.xlsx",
+    }
+    if tk in mapa:
+        return mapa[tk]
+    return tk
+
+
+def _qr_ticket_url_compact(base_url: str, serie_archivo: str, boleto_id: str, fecha_iso: str) -> str:
+    from urllib.parse import urlencode
+    st = _qr_serie_token(serie_archivo)
+    fc = _qr_fecha_compacta(fecha_iso)
+    sig = _qr_sign_payload([serie_archivo, boleto_id, fecha_iso, "T"])[:10]
+    qs = urlencode({
+        "s": st,
+        "b": str(boleto_id),
+        "f": fc,
+        "k": sig,
+    })
+    return f"{base_url}/q/t?{qs}"
+
+
+def _qr_ticket_sig_ok_compact(serie_token, boleto, fecha_compacta, sig) -> bool:
+    serie = _qr_serie_from_token(serie_token)
+    fecha = _qr_fecha_expandida(fecha_compacta)
+    expected = _qr_sign_payload([serie, boleto, fecha, "T"])[:10]
+    return str(sig or "") == expected
+
+
 def _qr_ticket_url(base_url: str, serie_archivo: str, boleto_id: str, fecha_iso: str) -> str:
     from urllib.parse import urlencode
     sig = _qr_sign_payload([serie_archivo, boleto_id, fecha_iso, "T"])
@@ -2071,6 +2157,27 @@ def _qr_premios_de_boleto(fecha_iso: str, serie_archivo: str, boleto_id: str):
         return out
     except Exception:
         return out
+
+@app.route("/q/t", methods=["GET", "POST"])
+def qr_boleto_publico_compacto():
+    from flask import redirect, request
+    serie_token = (request.values.get("s") or "").strip()
+    boleto = (request.values.get("b") or "").strip()
+    fecha_compacta = (request.values.get("f") or "").strip()
+    sig = (request.values.get("k") or "").strip()
+
+    if not serie_token or not boleto or not fecha_compacta or not _qr_ticket_sig_ok_compact(serie_token, boleto, fecha_compacta, sig):
+        return "QR inválido o alterado.", 400
+
+    serie = _qr_serie_from_token(serie_token)
+    fecha = _qr_fecha_expandida(fecha_compacta)
+    from urllib.parse import urlencode
+    qs = urlencode({"serie": serie, "boleto": boleto, "fecha": fecha, "sig": _qr_sign_payload([serie, boleto, fecha, "T"] )})
+    target = f"/qr/boleto?{qs}"
+    if request.method == "POST":
+        return redirect(target, code=307)
+    return redirect(target)
+
 
 @app.route("/qr/boleto", methods=["GET", "POST"])
 def qr_boleto_publico():
@@ -7297,6 +7404,112 @@ VMIX_FIG_GRID_REL     = "vmix_figuras.xml"            # 25 celdas
 VMIX_SPINNERS_REL     = "vmix_spinners.xml"           # PRIORIDAD para Juego
 STD_SPINNERS_REL      = "spinners.xml"                # Fallback para Juego
 VMIX_REINTEGRO_REL    = "vmix_reintegro.xml"
+VMIX_REINTEGROS_REL   = "vmix_reintegros.xml"
+
+# Rutas reales de medios para reintegros (ajustables por variable de entorno)
+REINTEGRO_MEDIA_DIR  = os.getenv("REINTEGRO_MEDIA_DIR",  r"E:\MEDIA\REINTEGRO")
+REINTEGROS_MEDIA_DIR = os.getenv("REINTEGROS_MEDIA_DIR", r"E:\MEDIA\REINTEGROS")
+
+def _reintegro_stem(name: str) -> str:
+    base = os.path.basename(str(name or "").strip())
+    stem, _ext = os.path.splitext(base)
+    return (stem or base).strip()
+
+def _pick_file_case_insensitive(folder: str, preferred_names=None, prefix: str = ""):
+    try:
+        names = sorted(os.listdir(folder))
+    except Exception:
+        return ""
+
+    preferred_names = [str(x or "").strip() for x in (preferred_names or []) if str(x or "").strip()]
+    lower_map = {nm.lower(): nm for nm in names}
+
+    for want in preferred_names:
+        hit = lower_map.get(want.lower())
+        if hit:
+            return hit
+
+    if prefix:
+        pref = str(prefix).strip().lower()
+        for nm in names:
+            low = nm.lower()
+            if low.startswith(pref) and low.endswith('.png'):
+                return nm
+
+    for nm in names:
+        if nm.lower().endswith('.png'):
+            return nm
+    return ""
+
+def _find_subdir_case_insensitive(folder: str, wanted: str) -> str:
+    wanted = str(wanted or "").strip()
+    if not wanted or not os.path.isdir(folder):
+        return wanted
+    try:
+        for nm in os.listdir(folder):
+            if nm.lower() == wanted.lower() and os.path.isdir(os.path.join(folder, nm)):
+                return nm
+    except Exception:
+        pass
+    return wanted
+
+def _resolve_reintegro_media(reinteg_name: str):
+    nombre = str(reinteg_name or "").strip()
+    stem = _reintegro_stem(nombre)
+
+    flat_carpeta = os.path.normpath(REINTEGRO_MEDIA_DIR) if str(REINTEGRO_MEDIA_DIR or "").strip() else ""
+    flat_archivo = f"{stem}.png" if stem else ""
+    flat_ruta = os.path.normpath(os.path.join(flat_carpeta, flat_archivo)) if flat_carpeta and flat_archivo else ""
+    flat_encontrado = False
+
+    if stem and flat_carpeta and os.path.isdir(flat_carpeta):
+        hit = _pick_file_case_insensitive(flat_carpeta, [f"{stem}.png"], prefix=stem)
+        if hit:
+            flat_archivo = hit
+            flat_ruta = os.path.normpath(os.path.join(flat_carpeta, hit))
+            flat_encontrado = True
+
+    seq_base = os.path.normpath(REINTEGROS_MEDIA_DIR) if str(REINTEGROS_MEDIA_DIR or "").strip() else ""
+    seq_dir_name = _find_subdir_case_insensitive(seq_base, stem) if stem else ""
+    seq_carpeta = os.path.normpath(os.path.join(seq_base, seq_dir_name)) if seq_base and seq_dir_name else (seq_base or "")
+    seq_archivo = f"{stem}00000.png" if stem else ""
+    seq_ruta = os.path.normpath(os.path.join(seq_carpeta, seq_archivo)) if seq_carpeta and seq_archivo else ""
+    seq_encontrado = False
+
+    if stem and seq_carpeta and os.path.isdir(seq_carpeta):
+        hit = _pick_file_case_insensitive(seq_carpeta, [f"{stem}00000.png", f"{stem}0000.png", f"{stem}.png"], prefix=stem)
+        if hit:
+            seq_archivo = hit
+            seq_ruta = os.path.normpath(os.path.join(seq_carpeta, hit))
+            seq_encontrado = True
+
+    return {
+        "nombre": nombre,
+        "flat_archivo": flat_archivo,
+        "flat_ruta": flat_ruta,
+        "flat_carpeta": flat_carpeta,
+        "flat_encontrado": flat_encontrado,
+        "seq_archivo": seq_archivo,
+        "seq_ruta": seq_ruta,
+        "seq_carpeta": seq_carpeta,
+        "seq_encontrado": seq_encontrado,
+    }
+
+def _build_reintegro_root(fecha: str, nombre: str, archivo: str, ruta: str, carpeta: str, encontrado=False, click_count=0, click_token=""):
+    root = ET.Element("reintegro", {"fecha": str(fecha or "")})
+    ET.SubElement(root, "nombre").text = str(nombre or "")
+    ET.SubElement(root, "valor").text = str(nombre or "")
+    ET.SubElement(root, "activo").text = "1" if str(nombre or "").strip() else "0"
+    ET.SubElement(root, "click_count").text = str(int(click_count or 0))
+    ET.SubElement(root, "click_token").text = str(click_token or "")
+    ET.SubElement(root, "updated_at").text = datetime.now().isoformat(timespec="seconds")
+    ET.SubElement(root, "archivo").text = str(archivo or "")
+    ET.SubElement(root, "ruta").text = str(ruta or "")
+    ET.SubElement(root, "carpeta").text = str(carpeta or "")
+    ET.SubElement(root, "display").text = str(ruta or archivo or nombre or "")
+    ET.SubElement(root, "encontrado").text = "1" if bool(encontrado) else "0"
+    return root
+
 
 # Nuevos pedidos
 XML_FIGURAS_LISTA_REL = "xml_figuras_lista.xml"       # presentación (25 columnas)
@@ -7970,10 +8183,20 @@ def read_spinners_current():
     return [""]*20
 
 def write_vmix_reintegro(fecha, reinteg_name):
-    root = ET.Element("reintegro", {"fecha": fecha})
-    ET.SubElement(root, "archivo").text = reinteg_name or ""
-    ET.SubElement(root, "ruta").text    = "static/REINTEGROS/" + (reinteg_name or "")
-    _write_xml_both(ET.ElementTree(root), VMIX_REINTEGRO_REL)
+    meta = _resolve_reintegro_media(reinteg_name)
+
+    root_flat = _build_reintegro_root(
+        fecha, meta.get("nombre"), meta.get("flat_archivo"), meta.get("flat_ruta"),
+        meta.get("flat_carpeta"), meta.get("flat_encontrado"), 0, ""
+    )
+    root_seq = _build_reintegro_root(
+        fecha, meta.get("nombre"), meta.get("seq_archivo"), meta.get("seq_ruta"),
+        meta.get("seq_carpeta"), meta.get("seq_encontrado"), 0, ""
+    )
+
+    _write_xml_both(ET.ElementTree(root_flat), VMIX_REINTEGRO_REL)
+    _write_xml_both(ET.ElementTree(root_seq), VMIX_REINTEGROS_REL)
+    return meta
 
 # ---------------- Sorteos (estado/config por fecha) ----------------
 def _sorteos_load_tree():
@@ -10312,6 +10535,7 @@ SPINNERS_STATE_JSON = os.path.join(DB_DIR, "spinners_state.json")
 # Bonus / Reintegro para panel de juego (XML para vMix Data Source)
 VMIX_BONUS_XML = os.path.join(DB_DIR, "vmix_bonus.xml")
 VMIX_REINTEGRO_XML_GAME = os.path.join(DB_DIR, "vmix_reintegro.xml")
+VMIX_REINTEGROS_XML_GAME = os.path.join(DB_DIR, "vmix_reintegros.xml")
 
 # Sorteos / Figuras
 SORTEOS_XML = globals().get("SORTEOS_XML", os.path.join(DB_DIR, "sorteos.xml"))
@@ -10590,35 +10814,36 @@ def _write_vmix_reintegro_click(fecha_iso: str, reintegro_nombre: str):
     if not rein:
         raise ValueError("No hay reintegro del día")
 
-    # Conserva datos existentes (archivo/ruta/display) si ya fueron generados por otro módulo
-    archivo = ruta = display = ""
     prev_clicks = 0
     try:
         if os.path.exists(VMIX_REINTEGRO_XML_GAME):
             r0 = ET.parse(VMIX_REINTEGRO_XML_GAME).getroot()
-            archivo = (r0.findtext("archivo") or "").strip()
-            ruta   = (r0.findtext("ruta") or "").strip()
-            display= (r0.findtext("display") or "").strip()
             prev_clicks = int((r0.findtext("click_count") or "0").strip() or 0)
     except Exception:
         pass
 
     click_count = prev_clicks + 1
     token = datetime.now().strftime("%Y%m%d%H%M%S%f")
+    meta = _resolve_reintegro_media(rein)
 
-    root = ET.Element("reintegro", fecha=str(fecha_iso or ""))
-    ET.SubElement(root, "nombre").text = rein
-    ET.SubElement(root, "valor").text = rein
-    ET.SubElement(root, "activo").text = "1"
-    ET.SubElement(root, "click_count").text = str(click_count)
-    ET.SubElement(root, "click_token").text = token
-    ET.SubElement(root, "updated_at").text = datetime.now().isoformat(timespec="seconds")
-    ET.SubElement(root, "archivo").text = archivo
-    ET.SubElement(root, "ruta").text = ruta
-    ET.SubElement(root, "display").text = display or rein
+    root_flat = _build_reintegro_root(
+        fecha_iso, rein, meta.get("flat_archivo"), meta.get("flat_ruta"),
+        meta.get("flat_carpeta"), meta.get("flat_encontrado"), click_count, token
+    )
+    root_seq = _build_reintegro_root(
+        fecha_iso, rein, meta.get("seq_archivo"), meta.get("seq_ruta"),
+        meta.get("seq_carpeta"), meta.get("seq_encontrado"), click_count, token
+    )
 
-    _write_game_xml_dual(ET.ElementTree(root), "vmix_reintegro.xml")
-    return {"nombre": rein, "click_count": click_count, "click_token": token}
+    _write_game_xml_dual(ET.ElementTree(root_flat), "vmix_reintegro.xml")
+    _write_game_xml_dual(ET.ElementTree(root_seq), "vmix_reintegros.xml")
+    return {
+        "nombre": rein,
+        "click_count": click_count,
+        "click_token": token,
+        "ruta": meta.get("flat_ruta") or "",
+        "ruta_secundaria": meta.get("seq_ruta") or "",
+    }
 
 def _sync_vmix_bonus_snapshot(fecha_iso: str, bonus_numbers, bonus_code: str = "", bonus_feasible=None):
     """Escribe vmix_bonus.xml con los 5 números del día (sin disparar click)."""
@@ -10663,31 +10888,28 @@ def _sync_vmix_bonus_snapshot(fecha_iso: str, bonus_numbers, bonus_code: str = "
 
 def _sync_vmix_reintegro_snapshot(fecha_iso: str, reintegro_nombre: str):
     rein = str(reintegro_nombre or "").strip()
-    archivo = ruta = display = ""
     prev_clicks = 0
     prev_token = ""
     try:
         if os.path.exists(VMIX_REINTEGRO_XML_GAME):
             r0 = ET.parse(VMIX_REINTEGRO_XML_GAME).getroot()
-            archivo = (r0.findtext("archivo") or "").strip()
-            ruta   = (r0.findtext("ruta") or "").strip()
-            display= (r0.findtext("display") or "").strip()
             prev_clicks = int((r0.findtext("click_count") or "0").strip() or 0)
             prev_token = (r0.findtext("click_token") or "").strip()
     except Exception:
         pass
 
-    root = ET.Element("reintegro", fecha=str(fecha_iso or ""))
-    ET.SubElement(root, "nombre").text = rein
-    ET.SubElement(root, "valor").text = rein
-    ET.SubElement(root, "activo").text = "1" if rein else "0"
-    ET.SubElement(root, "click_count").text = str(prev_clicks)
-    ET.SubElement(root, "click_token").text = prev_token
-    ET.SubElement(root, "updated_at").text = datetime.now().isoformat(timespec="seconds")
-    ET.SubElement(root, "archivo").text = archivo
-    ET.SubElement(root, "ruta").text = ruta
-    ET.SubElement(root, "display").text = display or rein
-    _write_game_xml_dual(ET.ElementTree(root), "vmix_reintegro.xml")
+    meta = _resolve_reintegro_media(rein)
+    root_flat = _build_reintegro_root(
+        fecha_iso, rein, meta.get("flat_archivo"), meta.get("flat_ruta"),
+        meta.get("flat_carpeta"), meta.get("flat_encontrado"), prev_clicks, prev_token
+    )
+    root_seq = _build_reintegro_root(
+        fecha_iso, rein, meta.get("seq_archivo"), meta.get("seq_ruta"),
+        meta.get("seq_carpeta"), meta.get("seq_encontrado"), prev_clicks, prev_token
+    )
+
+    _write_game_xml_dual(ET.ElementTree(root_flat), "vmix_reintegro.xml")
+    _write_game_xml_dual(ET.ElementTree(root_seq), "vmix_reintegros.xml")
 
 
 def _ensure_extras_vmix_xmls():
@@ -10700,10 +10922,11 @@ def _ensure_extras_vmix_xmls():
             ET.SubElement(nums, f"n{i+1}").text = ""
         _write_game_xml_dual(ET.ElementTree(r), "vmix_bonus.xml")
     if not os.path.exists(VMIX_REINTEGRO_XML_GAME):
-        r = ET.Element("reintegro")
-        for t in ("nombre","valor","activo","click_count","click_token","updated_at","archivo","ruta","display"):
-            ET.SubElement(r, t).text = "0" if t in ("activo","click_count") else ""
+        r = _build_reintegro_root("", "", "", "", os.path.normpath(REINTEGRO_MEDIA_DIR) if str(REINTEGRO_MEDIA_DIR or "").strip() else "", False, 0, "")
         _write_game_xml_dual(ET.ElementTree(r), "vmix_reintegro.xml")
+    if not os.path.exists(VMIX_REINTEGROS_XML_GAME):
+        r = _build_reintegro_root("", "", "", "", os.path.normpath(REINTEGROS_MEDIA_DIR) if str(REINTEGROS_MEDIA_DIR or "").strip() else "", False, 0, "")
+        _write_game_xml_dual(ET.ElementTree(r), "vmix_reintegros.xml")
 
 def _agenda_paths():
     """figuras_por_fecha.xml (donde guardas las FIGURAS DEL DÍA con VALOR)."""
@@ -13461,6 +13684,7 @@ def juego_extras_dia():
         "reintegro_state": rstate,
         "bonus_xml": "/static/db/vmix_bonus.xml",
         "reintegro_xml": "/static/db/vmix_reintegro.xml",
+        "reintegros_xml": "/static/db/vmix_reintegros.xml",
     })
 
 @juego_bp.post("/bonus/click")
@@ -13515,6 +13739,7 @@ def juego_reintegro_click():
         "fecha": fecha,
         **st,
         "xml": "/static/db/vmix_reintegro.xml",
+        "xml_secundario": "/static/db/vmix_reintegros.xml",
     })
 
 @juego_bp.get("/tabla_ganadora_random")
