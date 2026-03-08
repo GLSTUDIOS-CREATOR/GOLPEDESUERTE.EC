@@ -251,9 +251,21 @@ def _mirror_db_to_public(persist_abs: str):
     try:
         if not persist_abs or not os.path.exists(persist_abs):
             return
+
         public_dir = os.path.join(BASE_DIR, "static", "db")
         os.makedirs(public_dir, exist_ok=True)
-        shutil.copy2(persist_abs, os.path.join(public_dir, os.path.basename(persist_abs)))
+
+        dst = os.path.join(public_dir, os.path.basename(persist_abs))
+
+        # Evita copiar un archivo sobre sí mismo si static/db ya apunta al persistente
+        try:
+            if os.path.exists(dst) and os.path.samefile(persist_abs, dst):
+                return
+        except Exception:
+            pass
+
+        shutil.copy2(persist_abs, dst)
+
     except Exception as e:
         print(f"[WARN] Mirror static/db falló para {persist_abs}: {e}")
 
@@ -300,7 +312,12 @@ def _bind_dir(repo_rel):
         print("Seed warning:", repo_rel, e)
 
     # Symlink seguro (solo POSIX). Se puede desactivar con ENABLE_SYMLINK_BIND=0
-    if os.name == "nt" or os.environ.get("ENABLE_SYMLINK_BIND", "1") == "0":
+    # En Render evitamos el swap por symlink porque puede lanzar cross-device link.
+    if (
+        os.name == "nt"
+        or os.environ.get("ENABLE_SYMLINK_BIND", "1") == "0"
+        or BASE_DIR.startswith("/opt/render/project/src")
+    ):
         return
 
     try:
