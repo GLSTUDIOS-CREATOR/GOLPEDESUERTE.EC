@@ -85,7 +85,7 @@
     .extras-body{display:grid;grid-template-columns:1.3fr .9fr;gap:10px}
     .bonus-box,.rein-box{background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:10px}
     .bonus-box h4,.rein-box h4{margin:0 0 8px;font-size:13px}
-    .bonus-grid{display:grid;grid-template-columns:repeat(5,minmax(58px,1fr));gap:8px}
+    .bonus-grid{display:grid;grid-template-columns:minmax(92px,140px);justify-content:start;gap:8px}
     .bonus-btn{position:relative;min-height:54px;border:1px solid rgba(255,255,255,.14);background:linear-gradient(180deg,#1b2b49,#16233d);color:#f3f6fb;font-weight:900;border-radius:12px;padding:0;cursor:pointer;box-shadow:var(--ring);display:flex;align-items:center;justify-content:center;overflow:hidden;transition:transform .12s ease,filter .15s ease,border-color .15s ease}
     .bonus-btn:hover{filter:brightness(1.08);transform:translateY(-1px)}
     .bonus-btn:active{transform:translateY(1px)}
@@ -1211,7 +1211,7 @@
           </div>
           <div class="extras-body">
             <div class="bonus-box">
-              <h4>🎲 5 números del Bonus</h4>
+              <h4>🎲 Bonus (1 dado)</h4>
               <div id="bonusGrid" class="bonus-grid"></div>
               <div class="extras-note" id="bonusNote">Cargando bonus…</div>
             </div>
@@ -1640,7 +1640,7 @@
 
     /* ========= Juego base ========= */
     let running=false, timer=null, secs=0, stack=[], histRev=0;
-    let bonusDia = [], bonusSelectedIndex = 0, reintegroDia = '', reintegroPulse = 0;
+    let bonusDia = [], bonusSelectedIndex = 0, bonusUltimo = 0, reintegroDia = '', reintegroPulse = 0;
     const seg=$('#seg'), tot=$('#tot'), last6El=$('#last6'), ultimoCircle=$('#ultimoCircle'),
           grid=$('#grid'), lockEl=$('#lock'), histEl=$('#hist'), histMiniEl=$('#histMini'), histMiniInfo=$('#histMiniInfo');
 
@@ -1907,54 +1907,50 @@ async function cargar(){
   if(!bonusGrid || !bonusNote || !btnRein || !reinNote) return;
 
   bonusGrid.innerHTML = '';
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.className = 'bonus-btn' + (bonusSelectedIndex > 0 ? ' active' : '');
+  b.innerHTML = '<span class="bonus-dice" aria-hidden="true">🎲</span>';
+
   if(Array.isArray(bonusDia) && bonusDia.length){
-    bonusDia.forEach((n, i)=>{
-      const b = document.createElement('button');
-      b.type = 'button';
-      b.className = 'bonus-btn' + ((i+1)===bonusSelectedIndex ? ' active' : '');
-      b.title = `Lanzar bonus #${i+1} (${n}) en vMix`;
-      b.setAttribute('aria-label', `Bonus ${i+1} número ${n}`);
-      b.innerHTML = '<span class="bonus-dice" aria-hidden="true">🎲</span>';
-      b.addEventListener('click', async ()=>{
-        if(b.disabled) return;
-        // animación visible antes de actualizar el XML / overlay
-        b.classList.add('rolling');
-        bonusNote.textContent = `🎲 Lanzando bonus #${i+1} (${n})...`;
-        try{
-          await new Promise(r=>setTimeout(r, 420));
-          const j = await safeFetch('/juego/bonus/click', {
-            method:'POST',
-            headers:{'Content-Type':'application/json'},
-            body: JSON.stringify({index:i+1})
-          });
-          if(!j || !j.ok){
-            bonusNote.textContent = 'No se pudo lanzar el bonus';
-            alert((j && j.error) || 'No se pudo lanzar el bonus');
-            return;
-          }
-          bonusSelectedIndex = Number(j.selected_index || (i+1));
-          bonusDia = Array.isArray(j.bonus_numbers) ? j.bonus_numbers : bonusDia;
-          bonusNote.textContent = `✅ Bonus lanzado: ${j.selected_number} · Clicks: ${j.click_count || 1} · [${bonusDia.join(' · ')}]`;
-          renderExtrasPanel();
-        } finally {
-          setTimeout(()=> b.classList.remove('rolling'), 80);
+    b.disabled = false;
+    b.title = `Lanzar bonus en vMix (${bonusDia.join(' · ')})`;
+    b.setAttribute('aria-label', 'Lanzar bonus en vMix');
+    b.addEventListener('click', async ()=>{
+      if(b.disabled) return;
+      b.classList.add('rolling');
+      bonusNote.textContent = '🎲 Lanzando bonus en vMix...';
+      try{
+        await new Promise(r=>setTimeout(r, 420));
+        const j = await safeFetch('/juego/bonus/click', {
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({mode:'next'})
+        });
+        if(!j || !j.ok){
+          bonusNote.textContent = 'No se pudo lanzar el bonus';
+          alert((j && j.error) || 'No se pudo lanzar el bonus');
+          return;
         }
-      });
-      bonusGrid.appendChild(b);
+        bonusSelectedIndex = Number(j.selected_index || 0);
+        bonusUltimo = Number(j.selected_number || 0);
+        bonusDia = Array.isArray(j.bonus_numbers) ? j.bonus_numbers : bonusDia;
+        bonusNote.textContent = `✅ Bonus lanzado: ${j.selected_number} · Turno: ${bonusSelectedIndex}/${bonusDia.length} · Clicks: ${j.click_count || 1}`;
+        renderExtrasPanel();
+      } finally {
+        setTimeout(()=> b.classList.remove('rolling'), 80);
+      }
     });
+    bonusGrid.appendChild(b);
     if(!bonusNote.textContent || /Cargando|No hay bonus|Lanzando/.test(bonusNote.textContent)){
-      bonusNote.textContent = `Bonus del día: ${bonusDia.join(' · ')} · (clic en un dado para lanzar)`;
+      const actual = bonusUltimo ? ` · Último: ${bonusUltimo}` : '';
+      bonusNote.textContent = `Bonus del día: ${bonusDia.join(' · ')}${actual} · (clic en el dado para lanzar)`;
     }
   }else{
-    for(let i=0;i<5;i++){
-      const b = document.createElement('button');
-      b.type='button';
-      b.className='bonus-btn';
-      b.disabled = true;
-      b.title = 'Bonus sin configurar';
-      b.innerHTML = '<span class="bonus-dice" aria-hidden="true">🎲</span>';
-      bonusGrid.appendChild(b);
-    }
+    b.disabled = true;
+    b.title = 'Bonus sin configurar';
+    b.setAttribute('aria-label', 'Bonus sin configurar');
+    bonusGrid.appendChild(b);
     bonusNote.textContent = 'No hay bonus configurado para este día';
   }
 
@@ -1975,20 +1971,22 @@ async function cargar(){
     async function loadExtrasPanel(){
       const j = await safeFetch('/juego/extras' + bust());
       if(!j || !j.ok){
-        bonusDia = []; bonusSelectedIndex = 0; reintegroDia = ''; reintegroPulse = 0;
+        bonusDia = []; bonusSelectedIndex = 0; bonusUltimo = 0; reintegroDia = ''; reintegroPulse = 0;
         renderExtrasPanel();
         return;
       }
       bonusDia = Array.isArray(j.bonus_numbers) ? j.bonus_numbers : [];
       reintegroDia = (j.reintegro || '').toString();
       bonusSelectedIndex = Number((j.bonus_state && j.bonus_state.selected_index) || 0);
+      bonusUltimo = Number((j.bonus_state && j.bonus_state.selected_number) || 0);
       reintegroPulse = Number((j.reintegro_state && j.reintegro_state.click_count) || 0);
       renderExtrasPanel();
       const bn = $('#bonusNote');
       if(bn && bonusDia.length){
         const code = (j.bonus_code || '').toString().trim();
         const fact = (j.bonus_feasible === true) ? 'Factible: Sí' : (j.bonus_feasible === false ? 'Factible: No' : '');
-        bn.textContent = `${code ? ('Código: ' + code + ' · ') : ''}${fact ? (fact + ' · ') : ''}Bonus del día: ${bonusDia.join(' · ')} · (clic en un dado para lanzar)`;
+        const actual = bonusUltimo ? (' · Último: ' + bonusUltimo) : '';
+        bn.textContent = `${code ? ('Código: ' + code + ' · ') : ''}${fact ? (fact + ' · ') : ''}Bonus del día: ${bonusDia.join(' · ')}${actual} · (clic en el dado para lanzar)`;
       }
     }
 
