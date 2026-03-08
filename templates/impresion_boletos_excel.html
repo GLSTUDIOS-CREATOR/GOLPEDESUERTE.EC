@@ -863,6 +863,45 @@
       showMsg('Eliminar', 'No se pudo contactar el servidor.');
     }
   };
+
+  // Historial / utilidades
+  const btnHistorial = $("#btnHistorial");
+  const btnHistCompleto = $("#btnHistCompleto");
+  const closeHist = $("#closeHist");
+  const btnRefresh = $("#btnRefresh");
+  const btnIrHoy = $("#btnIrHoy");
+  const btnUltimoImpreso = $("#btnUltimoImpreso");
+
+  async function openHistorialModal(){
+    await refreshAll();
+    showModal(modalHist);
+  }
+
+  if(btnHistorial){ btnHistorial.onclick = openHistorialModal; }
+  if(btnHistCompleto){ btnHistCompleto.onclick = openHistorialModal; }
+  if(closeHist){ closeHist.onclick = ()=> hideModal(modalHist); }
+  if(btnRefresh){ btnRefresh.onclick = ()=> refreshAll(true); }
+  if(btnIrHoy){
+    btnIrHoy.onclick = ()=>{
+      const hoy = fechaInp?.value || histFecha?.value || '';
+      if(hoy) histFecha.value = hoy;
+      histSerie.value = '';
+      refreshAll(true);
+    };
+  }
+  if(btnUltimoImpreso){
+    btnUltimoImpreso.onclick = async ()=>{
+      await refreshAll();
+      const firstRow = tblHistModal.querySelector('tr');
+      if(!firstRow){
+        showMsg('Historial', 'Aún no hay registros de impresión.');
+        return;
+      }
+      showModal(modalHist);
+      firstRow.scrollIntoView({behavior:'smooth', block:'center'});
+    };
+  }
+
   // BONUS: abre ventana flotante de configuración
   if(btnVerBonusDia){ btnVerBonusDia.onclick = ()=> showModal(modalBonus); }
 
