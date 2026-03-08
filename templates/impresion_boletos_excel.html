@@ -325,7 +325,7 @@
         <h3 style="margin:0"><i class="bi bi-calendar-day"></i> Ya impreso (día seleccionado)</h3>
         <div style="margin-left:auto;display:flex;gap:8px;align-items:center">
           <button class="btn btn-mini btn-ghost" id="btnIrHoy"><i class="bi bi-compass"></i> Ir a hoy</button>
-          <button class="btn btn-mini btn-ghost" type="button" id="btnHistCompleto"><i class="bi bi-window"></i> Historial completo</button>
+          <button class="btn btn-mini btn-ghost" id="btnHistCompleto"><i class="bi bi-window"></i> Historial completo</button>
         </div>
       </div>
       <div class="bd">
@@ -415,7 +415,7 @@
       <div style="margin-left:auto;display:flex;gap:8px">
         <a class="btn btn-mini btn-ghost" href="/logs-impresion" target="_blank"><i class="bi bi-box-arrow-up-right"></i> Abrir</a>
         <a class="btn btn-mini btn-accent" href="/logs-impresion.csv"><i class="bi bi-filetype-csv"></i> CSV</a>
-        <button class="btn btn-mini btn-danger" type="button" id="closeHist"><i class="bi bi-x-lg"></i> Cerrar</button>
+        <button class="btn btn-mini btn-danger" id="closeHist"><i class="bi bi-x-lg"></i> Cerrar</button>
       </div>
     </div>
     <div class="bd" style="padding:12px 16px">
@@ -562,14 +562,47 @@
   function showMsg(title, html){ msgTitle.textContent = title; msgBody.innerHTML = html; showModal(modalMsg); }
 
   const allowedLetters = new Set(['V','+','&','M']);
+
+  function inferSerieLetter(opt){
+    const current = (opt?.dataset?.letra || '').trim();
+    if(allowedLetters.has(current)) return current;
+
+    const value = String(opt?.value || '').toLowerCase().trim();
+    let inferred = '';
+    if(value.includes('manila')) inferred = 'M';
+    else if(value.includes('ib1')) inferred = 'V';
+    else if(value.includes('ib2')) inferred = '+';
+    else if(value.includes('ib3')) inferred = '&';
+
+    if(inferred){
+      opt.dataset.letra = inferred;
+      opt.textContent = `${inferred} — ${opt.value}`;
+      return inferred;
+    }
+    return current;
+  }
+
   function filterSeriesOptions(){
-    Array.from(serieSel.options).forEach(opt=>{
-      if(!allowedLetters.has((opt.dataset.letra||'').trim())) opt.remove();
+    const serieOptions = Array.from(serieSel.options || []);
+    const histOptions  = Array.from(histSerie.options || []).filter(opt => opt.value !== '');
+
+    let validMain = 0;
+    serieOptions.forEach(opt=>{
+      const letra = inferSerieLetter(opt);
+      if(allowedLetters.has(letra)) validMain += 1;
     });
-    Array.from(histSerie.options).forEach(opt=>{
-      const letra = opt.dataset?.letra;
-      if(letra && !allowedLetters.has(letra.trim())) opt.remove();
-    });
+    histOptions.forEach(opt=> inferSerieLetter(opt));
+
+    // Solo filtrar si realmente encontramos series válidas.
+    // Así evitamos dejar el selector vacío por una diferencia entre CSV/XLSX.
+    if(validMain > 0){
+      serieOptions.forEach(opt=>{
+        if(!allowedLetters.has((opt.dataset.letra || '').trim())) opt.remove();
+      });
+      histOptions.forEach(opt=>{
+        if(!allowedLetters.has((opt.dataset.letra || '').trim())) opt.remove();
+      });
+    }
   }
   filterSeriesOptions();
 
@@ -830,34 +863,6 @@
       showMsg('Eliminar', 'No se pudo contactar el servidor.');
     }
   };
-  // HISTORIAL: abre y cierra el modal completo sin recargar ni enviar formularios
-  const btnHistorial = $("#btnHistorial");
-  const btnHistCompleto = $("#btnHistCompleto");
-  const closeHist = $("#closeHist");
-
-  if(btnHistorial){
-    btnHistorial.onclick = async (e)=>{
-      e.preventDefault();
-      await refreshAll();
-      showModal(modalHist);
-    };
-  }
-
-  if(btnHistCompleto){
-    btnHistCompleto.onclick = async (e)=>{
-      e.preventDefault();
-      await refreshAll();
-      showModal(modalHist);
-    };
-  }
-
-  if(closeHist){
-    closeHist.onclick = (e)=>{
-      e.preventDefault();
-      hideModal(modalHist);
-    };
-  }
-
   // BONUS: abre ventana flotante de configuración
   if(btnVerBonusDia){ btnVerBonusDia.onclick = ()=> showModal(modalBonus); }
 
