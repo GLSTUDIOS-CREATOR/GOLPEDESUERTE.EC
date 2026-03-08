@@ -986,7 +986,7 @@ OFFSET_Y = 5
 # ─── RUTAS ────────────────────────────────────
 BASE_DIR       = os.path.dirname(os.path.abspath(__file__))
 STATIC_DIR     = os.path.join(BASE_DIR, "static")
-DATA_DIR       = os.path.join(BASE_DIR, "DATA")
+DATA_DIR       = globals().get("DATA_DIR") or os.path.join(BASE_DIR, "DATA")
 REINTEGROS_DIR = os.path.join(DATA_DIR, "REINTEGROS")
 os.makedirs(DATA_DIR, exist_ok=True)
 os.makedirs(REINTEGROS_DIR, exist_ok=True)
@@ -1052,15 +1052,75 @@ SERIE_MAP = {
 
 # ── OFFSETS EN CÓDIGO (boleto 0…7) ──
 per_cell_offsets = {
-    0: {"grid_x": -80, "grid_y": 20,  "info_x": 5,   "info_y": 25,  "rein_x": 225, "rein_y": 30},
-    1: {"grid_x": -155, "grid_y": 20,  "info_x": -60, "info_y": 25,  "rein_x": 170, "rein_y": 30},
-    2: {"grid_x": -80, "grid_y": 75,  "info_x": 5,   "info_y": 80,  "rein_x": 225, "rein_y": -25},
-    3: {"grid_x": -155, "grid_y": 75,  "info_x": -60, "info_y": 80,  "rein_x": 170, "rein_y": -25},
-    4: {"grid_x": -80, "grid_y": 133, "info_x": 5,   "info_y": 143, "rein_x": 225, "rein_y": -85},
-    5: {"grid_x": -155, "grid_y": 133, "info_x": -60, "info_y": 143, "rein_x": 170, "rein_y": -85},
-    6: {"grid_x": -80, "grid_y": 195, "info_x": 5,   "info_y": 200, "rein_x": 225, "rein_y": -145},
-    7: {"grid_x": -155, "grid_y": 195, "info_x": -60, "info_y": 200, "rein_x": 170, "rein_y": -145},
+    0: {"grid_x": -80, "grid_y": 20,  "info_x": 5,   "info_y": 25,  "rein_x":  225, "rein_y": 30},
+    1: {"grid_x": -155, "grid_y": 20,  "info_x": -60, "info_y": 25,  "rein_x": 140, "rein_y": 30},
+    2: {"grid_x": -80, "grid_y": 75,  "info_x": 5,   "info_y": 80,  "rein_x":  225, "rein_y":-25},
+    3: {"grid_x": -155, "grid_y": 75,  "info_x": -60, "info_y": 80,  "rein_x": 140, "rein_y":-25},
+    4: {"grid_x": -80, "grid_y": 133, "info_x": 5,   "info_y": 143, "rein_x":  225, "rein_y":-85},
+    5: {"grid_x": -155, "grid_y": 133, "info_x": -60, "info_y": 143, "rein_x": 140, "rein_y":-85},
+    6: {"grid_x": -80, "grid_y": 195, "info_x": 5,   "info_y": 200, "rein_x":  225, "rein_y":-145},
+    7: {"grid_x": -155, "grid_y": 195, "info_x": -60, "info_y": 200, "rein_x": 140, "rein_y":-145},
 }
+
+
+
+bonus_cell_offsets = {
+    0: {"offset_x": -10, "offset_y": -20, "scale": 150, "font_size": 9.0, "gap": 5, "slot_w": 10},
+    1: {"offset_x": -5, "offset_y":  -20, "scale": 150, "font_size": 9.0, "gap": 5, "slot_w": 10},
+    2: {"offset_x": -10, "offset_y": -20, "scale": 150, "font_size": 9.0, "gap": 5, "slot_w": 10},
+    3: {"offset_x": -5, "offset_y":  -20, "scale": 150, "font_size": 9.0, "gap": 5, "slot_w": 10},
+    4: {"offset_x": -10, "offset_y": -20, "scale": 150, "font_size": 9.0, "gap": 5, "slot_w": 10},
+    5: {"offset_x": -5, "offset_y":  -20, "scale": 150, "font_size": 9.0, "gap": 5, "slot_w": 10},
+    6: {"offset_x": -10, "offset_y": -20, "scale": 150, "font_size": 9.0, "gap": 5, "slot_w": 10},
+    7: {"offset_x": -5, "offset_y":  -20, "scale": 150, "font_size": 9.0, "gap": 5, "slot_w": 10},
+}
+
+
+# ===== BONUS por boleto: usa SIEMPRE los offsets definidos en código =====
+def _bonus_style_for_ticket(ticket_pos: int, ui_style: dict | None = None):
+    """
+    Combina el layout fijo por boleto (bonus_cell_offsets) con los ajustes globales
+    que vengan del formulario.
+
+    - bonus_cell_offsets manda por boleto y ya no queda "muerto".
+    - scale (%) del diccionario en código sí afecta tamaño real del bonus.
+    - Los valores del formulario se aplican como ajuste fino sin romper el layout.
+    """
+    ui_style = ui_style or {}
+    base = bonus_cell_offsets.get(ticket_pos, {}) or {}
+
+    def _clamp(v, lo, hi, default):
+        try:
+            v = float(v)
+        except Exception:
+            v = float(default)
+        return max(lo, min(hi, v))
+
+    scale_pct = _clamp(base.get('scale', 100.0), 10.0, 400.0, 100.0) / 100.0
+
+    # Base del código por boleto
+    code_offset_x = _clamp(base.get('offset_x', 0.0), -120.0, 120.0, 0.0)
+    code_offset_y = _clamp(base.get('offset_y', 0.0), -120.0, 120.0, 0.0)
+    code_font     = _clamp(base.get('font_size', 9.0), 6.0, 24.0, 9.0) * scale_pct
+    code_gap      = _clamp(base.get('gap', 3.5), 0.0, 25.0, 3.5) * scale_pct
+    code_slot_w   = _clamp(base.get('slot_w', 8.5), 4.0, 30.0, 8.5) * scale_pct
+
+    # Ajuste fino desde UI/formulario respecto a la base actual del sistema
+    ui_offset_x = _clamp(ui_style.get('offset_x', 0.0), -120.0, 120.0, 0.0)
+    ui_offset_y = _clamp(ui_style.get('offset_y', 0.0), -120.0, 120.0, 0.0)
+    ui_font_adj = _clamp(ui_style.get('font_size', 9.0), 6.0, 24.0, 9.0) - 9.0
+    ui_gap_adj  = _clamp(ui_style.get('gap', 3.5), 0.0, 25.0, 3.5) - 3.5
+    ui_slot_adj = _clamp(ui_style.get('slot_w', 8.5), 4.0, 30.0, 8.5) - 8.5
+
+    merged = {
+        'offset_x': _clamp(code_offset_x + ui_offset_x, -120.0, 120.0, 0.0),
+        'offset_y': _clamp(code_offset_y + ui_offset_y, -120.0, 120.0, 0.0),
+        'font_size': _clamp(code_font + ui_font_adj, 6.0, 24.0, code_font),
+        'gap': _clamp(code_gap + ui_gap_adj, 0.0, 25.0, code_gap),
+        'slot_w': _clamp(code_slot_w + ui_slot_adj, 4.0, 30.0, code_slot_w),
+        'scale': round(scale_pct * 100.0, 2),
+    }
+    return merged
 
 # ================== LOGS XML ==================
 _LOG_LOCK = RLock()  # RLock para evitar deadlocks
@@ -1301,6 +1361,49 @@ if os.getenv('GLBINGO_DEBUG_SUPER') == '1':
         session['usuario'] = u
         flash('Sesión marcada como SUPERADMIN (modo debug).', 'success')
         return redirect(url_for('impresion'))
+
+def _current_session_user_record():
+    usuario = (session.get('usuario') or '').strip()
+    if not usuario:
+        return None
+    usuario_n = _normalize(usuario)
+    try:
+        for u in leer_usuarios():
+            nombre_u = (u.get('nombre') or '').strip()
+            if nombre_u == usuario or _normalize(nombre_u) == usuario_n:
+                return u
+    except Exception:
+        return None
+    return None
+
+def _is_admin_like() -> bool:
+    rol_n = _normalize(session.get('rol') or '')
+    return rol_n in {'administrador', 'admin', 'super administrador', 'superadministrador', 'superadmin'}
+
+def _is_player_like() -> bool:
+    rol_n = _normalize(session.get('rol') or '')
+    return rol_n in {'jugador', 'player'}
+
+def _sorteo_scope_allowed(scope: str) -> bool:
+    scope = (scope or '').strip().lower()
+    if scope == 'bonus_history':
+        return _is_superadmin()
+    if scope == 'programar_tablas':
+        return _is_superadmin() or _is_admin_like() or _is_player_like()
+    return False
+
+def _verify_scope_password(scope: str, clave: str):
+    if not _sorteo_scope_allowed(scope):
+        return False, 'No tienes permiso para esta sección.'
+    user = _current_session_user_record()
+    if not user:
+        return False, 'No se pudo validar la sesión actual.'
+    clave_ok = str(user.get('clave') or '')
+    if not clave_ok:
+        return False, 'Tu usuario no tiene clave registrada.'
+    if str(clave or '').strip() != str(clave_ok).strip():
+        return False, 'Clave incorrecta.'
+    return True, ''
 
 def _backup_diario():
     try:
@@ -1631,7 +1734,8 @@ def generar_pdf_boletos_excel(
             elif bonus_numbers_global:
                 bn = bonus_numbers_global
             if bn:
-                _draw_bonus_franja(c, rein_x, rein_y_top, bn, style=bonus_style)
+                ticket_bonus_style = _bonus_style_for_ticket(i, bonus_style)
+                _draw_bonus_franja(c, rein_x, rein_y_top, bn, style=ticket_bonus_style)
 
         c.showPage()
         c.translate(OFFSET_X, OFFSET_Y)
@@ -3020,9 +3124,18 @@ def impresion():
     fecha_hoy  = date.today().strftime('%Y-%m-%d')
 
     if request.method != 'POST':
+        bonus_base_default = {
+            'offset_x': 0.0,
+            'offset_y': 0.0,
+            'font_size': 9.0,
+            'gap': 3.5,
+            'slot_w': 8.5,
+        }
         return render_template(
             'impresion_boletos_excel.html',
             series=series, reintegros=reintegros, fecha_hoy=fecha_hoy,
+            bonus_defaults=bonus_cell_offsets,
+            bonus_base_default=bonus_base_default,
             username=session.get('usuario',''),
             usuario=session.get('usuario',''),
             rol=session.get('rol',''),
@@ -3744,7 +3857,13 @@ def vendedores():
 
     # GET: cargar y renderizar
     vendedores_list = cargar_vendedores_xml()
-    return render_template('vendedores.html', vendedores=vendedores_list)
+    return render_template(
+        'vendedores.html',
+        vendedores=vendedores_list,
+        usuario=session.get('usuario', ''),
+        rol=session.get('rol', ''),
+        avatar=session.get('avatar', 'avatar-male.png')
+    )
 
 
 
@@ -5400,11 +5519,14 @@ def figuras_crear():
 def crear_figuras_alias():
     return figuras_crear()
 
-@app.route("/escoger-figuras", methods=["GET"])
+@app.route("/escoger-figuras-legacy", methods=["GET"])
 def escoger_figuras():
     if 'usuario' not in session and 'login' in current_app.view_functions:
         return redirect(_login_url())
-    return render_template("escoger_figuras.html")
+    try:
+        return redirect(url_for("escoger_figuras_view", **request.args.to_dict(flat=True)))
+    except Exception:
+        return render_template("escoger_figuras.html")
 
 @app.route("/figuras/seleccion", methods=["POST"])
 def figuras_seleccion():
@@ -7357,7 +7479,7 @@ app.secret_key = "glbingo"
 # -------------------- Paths base --------------------
 BASE_DIR    = os.path.dirname(os.path.abspath(__file__))
 STATIC_DIR  = os.path.join(BASE_DIR, "static")
-DATA_DIR    = os.path.join(BASE_DIR, "DATA")                 # carpeta de datos viva
+DATA_DIR    = globals().get("DATA_DIR") or os.path.join(BASE_DIR, "DATA")                 # carpeta de datos viva
 DB_STATIC   = os.path.join(STATIC_DIR, "db")                 # espejo servible por /static/db/...
 DB_DATA     = os.path.join(DATA_DIR, "static", "db")         # **principal** para Juego
 
@@ -8675,6 +8797,58 @@ def api_vend_boleto():
         fecha  = request.args.get("fecha",""); boleto = request.args.get("boleto","")
     vendedor = buscar_vendedor_por_boleto(fecha, boleto)
     return jsonify(ok=True, vendedor=vendedor)
+
+@app.post("/api/sorteo/secure-access")
+def api_sorteo_secure_access():
+    data = request.get_json(silent=True) or {}
+    scope = (data.get('scope') or '').strip()
+    password = data.get('password') or ''
+    ok, msg = _verify_scope_password(scope, password)
+    if not ok:
+        return jsonify(ok=False, mensaje=msg), 403
+    return jsonify(ok=True, mensaje='Acceso concedido')
+
+
+def _bonus_history_items_for_date(fecha_iso: str):
+    items = []
+    try:
+        if not os.path.isdir(LOGS_DIR):
+            return items
+        for name in sorted(os.listdir(LOGS_DIR), reverse=True):
+            if not (name.startswith('bonus_') and name.endswith('.json')):
+                continue
+            path = os.path.join(LOGS_DIR, name)
+            try:
+                with open(path, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+            except Exception:
+                continue
+            fecha_item = str(data.get('fecha_sorteo') or data.get('fecha') or '').strip()
+            if fecha_item != str(fecha_iso or '').strip():
+                continue
+            req = data.get('requested') or {}
+            win = data.get('winners') or {}
+            items.append({
+                'log_id': data.get('log_id') or (name.replace('bonus_', '').replace('.json', '')),
+                'serie_archivo': data.get('serie_archivo') or '',
+                'desde': data.get('desde') or '',
+                'hasta': data.get('hasta') or '',
+                'numbers': data.get('numbers') or data.get('bonus_numbers') or [],
+                'requested': {str(k): int(req.get(str(k), 0) or 0) for k in [5,4,3,2,1]},
+                'winners': {str(k): len(win.get(str(k), []) or []) if isinstance(win.get(str(k), []), list) else int(win.get(str(k), 0) or 0) for k in [5,4,3,2,1]},
+                'url_html': url_for('bonus_informe_html', log_id=int(data.get('log_id') or 0)) if str(data.get('log_id') or '').isdigit() else '#',
+            })
+    except Exception:
+        return items
+    return items
+
+
+@app.get("/api/sorteo/bonus-historial")
+def api_sorteo_bonus_historial():
+    fecha = (request.args.get('fecha') or date.today().isoformat()).strip()
+    if not _sorteo_scope_allowed('bonus_history'):
+        return jsonify(ok=False, mensaje='No tienes permiso para esta sección.'), 403
+    return jsonify(ok=True, items=_bonus_history_items_for_date(fecha))
 
 @app.post("/api/sorteo/guardar")
 def api_sorteo_guardar():
@@ -14057,7 +14231,7 @@ def _mirror_to_vmix(spinners, overlay_state=None):
     t.write(VMIX_SPINNERS_XML, encoding="utf-8", xml_declaration=True)
 
 # ---------- vMix API (opcional) ----------
-def _vmix_call(function_name, **params):
+def _vmix_call_api(function_name, **params):
     """
     Llama al API HTTP de vMix si VMIX_API_URL está definido.
     Ej: _vmix_call("OverlayInput1On")
@@ -14155,7 +14329,7 @@ def post_spinner_lanzar():
     vmix_api = None
     if overlay_on:
         # Ej.: OverlayInput1On, OverlayInput1Off  (vMix es 1-indexed)
-        vmix_api = _vmix_call(f"OverlayInput{VMIX_OVERLAY_INDEX}On")
+        vmix_api = _vmix_call_api(f"OverlayInput{VMIX_OVERLAY_INDEX}On")
 
     return jsonify({"ok": True, "index": index, "value": target, "vmix_api": vmix_api})
 
@@ -14233,7 +14407,7 @@ def spinner_overlay_page():
 def vmix_overlay_off():
     sp = _read_spinners()
     _mirror_to_vmix(sp, overlay_state="off")
-    vmix_api = _vmix_call(f"OverlayInput{VMIX_OVERLAY_INDEX}Off")
+    vmix_api = _vmix_call_api(f"OverlayInput{VMIX_OVERLAY_INDEX}Off")
     return jsonify({"ok": True, "vmix_api": vmix_api})
 # ==== [ FIN SPINNERS ] ========================================================
 
@@ -15497,6 +15671,10 @@ if __name__ == "__main__":
     import os
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
+
+
+
+
 
 
 
