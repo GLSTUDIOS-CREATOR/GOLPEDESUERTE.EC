@@ -941,11 +941,9 @@ def _to_float(v, default=0.0):
         return default
 
 def _read_df_for_series(archivo: str) -> pd.DataFrame:
-    """Lee XLSX o CSV como texto; lanza FileNotFoundError si no existe."""
-    path = os.path.join(DATA_DIR, archivo)
-    if not os.path.exists(path):
-        raise FileNotFoundError(f"No existe el archivo de serie: {archivo}")
-    if archivo.lower().endswith(".csv"):
+    """Lee XLSX o CSV como texto; busca la serie en rutas robustas."""
+    path = _resolve_series_path(archivo)
+    if path.lower().endswith(".csv"):
         return pd.read_csv(path, dtype=str, keep_default_na=False).fillna("")
     return pd.read_excel(path, dtype=str).fillna("")
 
@@ -1053,6 +1051,102 @@ SERIE_MAP = {
     "Srs_ib3.csv":     "&",
     "Srs_Manila.csv":  "M",
 }
+
+
+SERIE_MAP_CANON = {str(k).strip().lower(): v for k, v in SERIE_MAP.items()}
+
+def _serie_key(nombre: str) -> str:
+    try:
+        return os.path.basename(str(nombre or "")).strip().lower()
+    except Exception:
+        return str(nombre or "").strip().lower()
+
+def _serie_label(nombre: str) -> str:
+    base = os.path.basename(str(nombre or "")).strip()
+    return SERIE_MAP_CANON.get(_serie_key(base), base or str(nombre or "").strip())
+
+def _series_search_dirs():
+    dirs = []
+    candidatos = [
+        DATA_DIR,
+        os.path.join(DATA_DIR, "data"),
+        os.path.join(DATA_DIR, "DATA"),
+        os.path.join(DATA_DIR, "static", "data"),
+        os.path.join(BASE_DIR, "DATA"),
+        os.path.join(BASE_DIR, "data"),
+        os.path.join(BASE_DIR, "static", "data"),
+    ]
+    for d in candidatos:
+        try:
+            if d and os.path.isdir(d) and d not in dirs:
+                dirs.append(d)
+        except Exception:
+            pass
+    return dirs
+
+def _list_series_files():
+    permitidas = (".xlsx", ".csv")
+    encontrados = {}
+
+    for carpeta in _series_search_dirs():
+        try:
+            for nombre in os.listdir(carpeta):
+                full = os.path.join(carpeta, nombre)
+                if not os.path.isfile(full):
+                    continue
+                if not nombre.lower().endswith(permitidas):
+                    continue
+
+                key = _serie_key(nombre)
+                if key not in encontrados:
+                    encontrados[key] = os.path.basename(nombre)
+        except Exception:
+            continue
+
+    orden = {
+        "srs_ib1.xlsx": 1, "srs_ib1.csv": 1,
+        "srs_ib2.xlsx": 2, "srs_ib2.csv": 2,
+        "srs_ib3.xlsx": 3, "srs_ib3.csv": 3,
+        "srs_manila.xlsx": 4, "srs_manila.csv": 4,
+    }
+
+    return sorted(
+        encontrados.values(),
+        key=lambda n: (orden.get(_serie_key(n), 999), _serie_key(n))
+    )
+
+def _resolve_series_path(archivo: str) -> str:
+    raw = str(archivo or "").strip()
+    if not raw:
+        raise FileNotFoundError("Nombre de serie vacío")
+
+    if os.path.isabs(raw) and os.path.isfile(raw):
+        return raw
+
+    basename = os.path.basename(raw)
+
+    # 1) exacto en directorios candidatos
+    for carpeta in _series_search_dirs():
+        for nombre in (raw, basename):
+            try:
+                ruta = os.path.join(carpeta, nombre)
+            except Exception:
+                continue
+            if os.path.isfile(ruta):
+                return ruta
+
+    # 2) búsqueda case-insensitive por basename
+    lower = basename.lower()
+    for carpeta in _series_search_dirs():
+        try:
+            for nombre in os.listdir(carpeta):
+                if nombre.lower() == lower and os.path.isfile(os.path.join(carpeta, nombre)):
+                    return os.path.join(carpeta, nombre)
+        except Exception:
+            continue
+
+    buscadas = ", ".join(_series_search_dirs()) or "(sin carpetas candidatas)"
+    raise FileNotFoundError(f"No existe el archivo de serie: {archivo}. Busqué en: {buscadas}")
 
 # ── OFFSETS EN CÓDIGO (boleto 0…7) ──
 per_cell_offsets = {
@@ -1981,30 +2075,36 @@ def _qr_fecha_expandida(fecha_compacta: str) -> str:
 
 
 def _qr_serie_token(serie_archivo: str) -> str:
-    serie = str(serie_archivo or "").strip()
+    serie = _serie_key(serie_archivo)
     mapa = {
-        "Srs_ib1.xlsx": "1",
-        "Srs_ib2.xlsx": "2",
-        "Srs_ib3.xlsx": "3",
-        "Srs_Manila.xlsx": "M",
-        "Srs_ib1.csv": "1",
-        "Srs_ib2.csv": "2",
-        "Srs_ib3.csv": "3",
-        "Srs_Manila.csv": "M",
+        "srs_ib1.xlsx": "1",
+        "srs_ib2.xlsx": "2",
+        "srs_ib3.xlsx": "3",
+        "srs_manila.xlsx": "M",
+        "srs_ib1.csv": "1",
+        "srs_ib2.csv": "2",
+        "srs_ib3.csv": "3",
+        "srs_manila.csv": "M",
     }
-    return mapa.get(serie, serie)
+    return mapa.get(serie, os.path.basename(str(serie_archivo or "")).strip() or str(serie_archivo or "").strip())
 
 
 def _qr_serie_from_token(token: str) -> str:
     tk = str(token or "").strip()
-    mapa = {
-        "1": "Srs_ib1.xlsx",
-        "2": "Srs_ib2.xlsx",
-        "3": "Srs_ib3.xlsx",
-        "M": "Srs_Manila.xlsx",
+    candidatos = {
+        "1": ["Srs_ib1.xlsx", "Srs_ib1.csv"],
+        "2": ["Srs_ib2.xlsx", "Srs_ib2.csv"],
+        "3": ["Srs_ib3.xlsx", "Srs_ib3.csv"],
+        "M": ["Srs_Manila.xlsx", "Srs_Manila.csv"],
     }
-    if tk in mapa:
-        return mapa[tk]
+    if tk in candidatos:
+        for nombre in candidatos[tk]:
+            try:
+                _resolve_series_path(nombre)
+                return nombre
+            except Exception:
+                continue
+        return candidatos[tk][0]
     return tk
 
 
@@ -3120,9 +3220,8 @@ def _bonus_build_ticket_history(ids: list[str], per_ticket: list[list[int]] | No
 @app.route('/impresion', methods=['GET', 'POST'])
 @require_session
 def impresion():
-    files = sorted(f for f in os.listdir(DATA_DIR)
-                   if f.lower().endswith(('.xlsx', '.csv')))
-    series     = [(f, SERIE_MAP.get(f, f)) for f in files]
+    files = _list_series_files()
+    series     = [(f, _serie_label(f)) for f in files]
     reintegros = sorted(f for f in os.listdir(REINTEGROS_DIR)
                         if f.lower().endswith('.png')) if os.path.exists(REINTEGROS_DIR) else []
     fecha_hoy  = date.today().strftime('%Y-%m-%d')
@@ -11794,9 +11893,7 @@ except NameError:
 
 def _get_series_meta_cached(archivo: str):
     """Devuelve (df, id_col, ids, id_to_idx, mtime) con caché por mtime del archivo."""
-    path = os.path.join(DATA_DIR, archivo)
-    if not os.path.exists(path):
-        raise FileNotFoundError(f"No existe el archivo de serie: {archivo}")
+    path = _resolve_series_path(archivo)
     try:
         mtime = os.path.getmtime(path)
     except Exception:
