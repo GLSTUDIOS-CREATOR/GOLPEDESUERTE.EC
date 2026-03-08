@@ -251,21 +251,9 @@ def _mirror_db_to_public(persist_abs: str):
     try:
         if not persist_abs or not os.path.exists(persist_abs):
             return
-
         public_dir = os.path.join(BASE_DIR, "static", "db")
         os.makedirs(public_dir, exist_ok=True)
-
-        dst = os.path.join(public_dir, os.path.basename(persist_abs))
-
-        # Evita copiar un archivo sobre sí mismo si static/db ya apunta al persistente
-        try:
-            if os.path.exists(dst) and os.path.samefile(persist_abs, dst):
-                return
-        except Exception:
-            pass
-
-        shutil.copy2(persist_abs, dst)
-
+        shutil.copy2(persist_abs, os.path.join(public_dir, os.path.basename(persist_abs)))
     except Exception as e:
         print(f"[WARN] Mirror static/db falló para {persist_abs}: {e}")
 
@@ -312,12 +300,7 @@ def _bind_dir(repo_rel):
         print("Seed warning:", repo_rel, e)
 
     # Symlink seguro (solo POSIX). Se puede desactivar con ENABLE_SYMLINK_BIND=0
-    # En Render evitamos el swap por symlink porque puede lanzar cross-device link.
-    if (
-        os.name == "nt"
-        or os.environ.get("ENABLE_SYMLINK_BIND", "1") == "0"
-        or BASE_DIR.startswith("/opt/render/project/src")
-    ):
+    if os.name == "nt" or os.environ.get("ENABLE_SYMLINK_BIND", "1") == "0":
         return
 
     try:
@@ -1061,10 +1044,14 @@ DELTA_Y_FILA_3 = 2
 DELTA_Y_FILA_4 = 5
 
 SERIE_MAP = {
-    "Srs_ib1.xlsx":   "V",
-    "Srs_ib2.xlsx":   "+",
-    "Srs_ib3.xlsx":   "&",
-    "Srs_Manila.xlsx":"M"
+    "Srs_ib1.xlsx":    "V",
+    "Srs_ib2.xlsx":    "+",
+    "Srs_ib3.xlsx":    "&",
+    "Srs_Manila.xlsx": "M",
+    "Srs_ib1.csv":     "V",
+    "Srs_ib2.csv":     "+",
+    "Srs_ib3.csv":     "&",
+    "Srs_Manila.csv":  "M",
 }
 
 # ── OFFSETS EN CÓDIGO (boleto 0…7) ──
