@@ -989,16 +989,19 @@ REINTEGROS_DIR = os.path.join(DATA_DIR, "REINTEGROS")
 os.makedirs(DATA_DIR, exist_ok=True)
 os.makedirs(REINTEGROS_DIR, exist_ok=True)
 
-# Persistencia en instance/ (o variable de entorno)
-os.makedirs(app.instance_path, exist_ok=True)
-STORAGE_ROOT = os.getenv("GLBINGO_STORAGE") or os.path.join(app.instance_path, "gl_bingo")
-LOGS_DIR     = os.path.join(STORAGE_ROOT, "logs")
+# Persistencia REAL en DATA_DIR/static/LOGS
+LOGS_DIR = os.path.join(DATA_DIR, "static", "LOGS")
 os.makedirs(LOGS_DIR, exist_ok=True)
 
-# Migración de logs antiguos
-OLD_LOGS_DIR    = os.path.join(STATIC_DIR, "LOGS")
-old_xml         = os.path.join(OLD_LOGS_DIR, "impresiones.xml")
-IMPRESIONES_XML = os.path.join(LOGS_DIR, "impresiones.xml")
+# Migración inicial desde rutas antiguas
+OLD_LOGS_DIR = os.path.join(STATIC_DIR, "LOGS")
+old_xml = os.path.join(OLD_LOGS_DIR, "impresiones.xml")
+
+IMPRESIONES_XML = globals().get(
+    "LOGS_IMPRESIONES_XML",
+    os.path.join(LOGS_DIR, "impresiones.xml")
+)
+
 if os.path.exists(old_xml) and not os.path.exists(IMPRESIONES_XML):
     try:
         shutil.copy2(old_xml, IMPRESIONES_XML)
@@ -5859,21 +5862,22 @@ LOGO_SCALE_DEFAULT    = 1.30  # escala del logo (1.0 = normal)
 # ------------------ Paths ------------------
 BASE_DIR   = os.path.dirname(os.path.abspath(__file__))
 STATIC_DIR = os.path.join(BASE_DIR, "static")
-DB_DIR     = os.path.join(STATIC_DIR, "db")
+DATA_DIR   = globals().get("DATA_DIR") or os.path.join(BASE_DIR, "DATA")
+DB_DIR     = globals().get("DB_DIR_PERSIST") or os.path.join(DATA_DIR, "static", "db")
 IMG_DIR    = os.path.join(STATIC_DIR, "img")
 FONTS_DIR  = os.path.join(STATIC_DIR, "fonts")
-LOGS_DIR   = os.path.join(STATIC_DIR, "LOGS")
+LOGS_DIR   = globals().get("LOGS_DIR") or os.path.join(DATA_DIR, "static", "LOGS")
 
-for p in (DB_DIR, IMG_DIR, FONTS_DIR):
+for p in (DB_DIR, IMG_DIR, FONTS_DIR, LOGS_DIR):
     os.makedirs(p, exist_ok=True)
 
 # XMLs base
-FIGURAS_FECHA_XML  = os.path.join(DB_DIR, "figuras_por_fecha.xml")
-DATOS_FIGURAS_XML  = os.path.join(DB_DIR, "datos_figuras.xml")
-RESULTADOS_XML     = os.path.join(DB_DIR, "resultados_sorteo.xml")
+FIGURAS_FECHA_XML  = globals().get("FIGURAS_FECHA_XML", os.path.join(DB_DIR, "figuras_por_fecha.xml"))
+DATOS_FIGURAS_XML  = globals().get("DATOS_FIGURAS_XML", os.path.join(DB_DIR, "datos_figuras.xml"))
+RESULTADOS_XML     = globals().get("RESULTADOS_SORTEO_XML", os.path.join(DB_DIR, "resultados_sorteo.xml"))
 
 # Layout JSON (diseñador)
-LAYOUT_JSON = os.path.join(DB_DIR, "boletin_layout.json")
+LAYOUT_JSON = globals().get("BOLETIN_LAYOUT_JSON", _persist("static", "db", "boletin_layout.json"))
 
 # ------------------ Helpers ------------------
 def _is_fecha_iso(s: str) -> bool:
@@ -7154,10 +7158,13 @@ from reportlab.pdfbase.pdfmetrics import stringWidth
 # ---- Rutas base / compatibilidad con tu app principal ----
 BASE_DIR   = os.path.dirname(os.path.abspath(__file__))
 STATIC_DIR = os.path.join(BASE_DIR, "static")
-DB_DIR     = os.path.join(STATIC_DIR, "db")
+DATA_DIR   = globals().get("DATA_DIR") or os.path.join(BASE_DIR, "DATA")
+DB_DIR     = globals().get("DB_DIR_PERSIST") or os.path.join(DATA_DIR, "static", "db")
 IMG_DIR    = os.path.join(STATIC_DIR, "img")
 
-RESULTADOS_XML = os.path.join(DB_DIR, "resultados_sorteo.xml")
+os.makedirs(DB_DIR, exist_ok=True)
+
+RESULTADOS_XML = globals().get("RESULTADOS_SORTEO_XML", os.path.join(DB_DIR, "resultados_sorteo.xml"))
 
 def _pp_is_fecha_iso(s):
     try:
@@ -7203,9 +7210,17 @@ _PPBOLDFONT = "Helvetica-Bold"
 _ppT        = lambda s: "" if s is None else str(s)
 
 # ---- Archivos del módulo ----
-PAGOS_XML   = os.path.join(DB_DIR, "pagos_premios.xml")
-RECIBOS_DIR = os.path.join(STATIC_DIR, "tmp", "recibos")
-CFG_JSON    = os.path.join(DB_DIR, "pagos_config.json")
+PAGOS_XML = globals().get(
+    "PAGOS_PREMIOS_XML",
+    os.path.join(DB_DIR, "pagos_premios.xml")
+)
+RECIBOS_DIR = os.path.join(
+    globals().get("DATA_DIR", os.path.join(BASE_DIR, "DATA")),
+    "static",
+    "tmp",
+    "recibos"
+)
+CFG_JSON = globals().get("PAGOS_CONFIG_JSON", _persist("static", "db", "pagos_config.json"))
 
 os.makedirs(RECIBOS_DIR, exist_ok=True)
 _ensure_xml(PAGOS_XML, "pagos")
@@ -7586,11 +7601,21 @@ DATA_DIR    = globals().get("DATA_DIR") or os.path.join(BASE_DIR, "DATA")       
 DB_STATIC   = os.path.join(STATIC_DIR, "db")                 # espejo servible por /static/db/...
 DB_DATA     = os.path.join(DATA_DIR, "static", "db")         # **principal** para Juego
 
+LOGS_DATA = os.path.join(DATA_DIR, "static", "LOGS")
+
 # asegurar directorios
-for d in (STATIC_DIR, DB_STATIC, DATA_DIR, DB_DATA, os.path.join(DB_DATA, "spinners"), os.path.join(STATIC_DIR, "LOGS")):
+for d in (
+    STATIC_DIR,
+    DB_STATIC,
+    DATA_DIR,
+    DB_DATA,
+    os.path.join(DB_DATA, "spinners"),
+    LOGS_DATA,
+    os.path.join(STATIC_DIR, "LOGS"),
+):
     os.makedirs(d, exist_ok=True)
 
-LOGS_DIR = os.path.join(STATIC_DIR, "LOGS")  # tus logs ya están bajo static
+LOGS_DIR = LOGS_DATA
 
 # --------------- Helpers de escritura ---------------
 def _write_xml_both(tree: ET.ElementTree, relpath: str):
@@ -7618,7 +7643,11 @@ def _write_text_both(text: str, relpath: str):
 # Entradas
 FIGS_XML_REL        = "figuras_por_fecha.xml"
 ASIG_XML_REL        = "asignaciones.xml"
-IMP_XML_PATH        = os.path.join(LOGS_DIR, "impresiones.xml")  # ya estabas en static/LOGS
+IMP_XML_PATH = (
+    globals().get("IMPRESIONES_XML")
+    or globals().get("LOGS_IMPRESIONES_XML")
+    or os.path.join(LOGS_DIR, "impresiones.xml")
+)
 CATALOGO_FIGXML_REL = "datos_figuras.xml"                        # opcional
 
 # Salidas vMix (todas en /db)
@@ -10796,10 +10825,36 @@ DATA_DIR = globals().get("DATA_DIR") or os.getenv("DATA_DIR") or _BASE_DIR
 # DB pública (para el navegador /static/*) y DB persistente (Render: DATA_DIR/static/db)
 DB_DIR_PUBLIC = os.path.join(_BASE_DIR, "static", "db")
 DB_DIR_PERSIST = os.path.join(DATA_DIR, "static", "db")
-# Preferimos la pública en local si existe, si no usamos la persistente
-DB_DIR = DB_DIR_PUBLIC if os.path.exists(DB_DIR_PUBLIC) else DB_DIR_PERSIST
 os.makedirs(DB_DIR_PUBLIC, exist_ok=True)
 os.makedirs(DB_DIR_PERSIST, exist_ok=True)
+
+# Sembrar archivos del repo hacia el disco persistente si aún no existen
+for _rel in (
+    "datos_bingo.xml",
+    "historial.json",
+    "vmix_spinners.xml",
+    "spinners.xml",
+    "vmix_bonus.xml",
+    "vmix_reintegro.xml",
+    "vmix_reintegros.xml",
+    "sorteos.xml",
+    "figuras_del_dia.xml",
+    "datos_figuras.xml",
+    "figuras_estado.json",
+    "ganadores.xml",
+    "ganadores.json",
+    "ganadores_state.json",
+    "spinners_state.json",
+    "config_sorteo.json",
+    "sorteo.json",
+):
+    try:
+        _seed(os.path.join("static", "db", _rel), os.path.join(DB_DIR_PERSIST, _rel))
+    except Exception:
+        pass
+
+# La base viva siempre se trabaja desde el disco persistente
+DB_DIR = DB_DIR_PERSIST
 # Archivos core
 BINGO_XML     = os.path.join(DB_DIR, "datos_bingo.xml")
 HIST_JSON     = os.path.join(DB_DIR, "historial.json")
