@@ -359,15 +359,39 @@
   });
 
   // Cambios de fecha/serie en la vista ⇒ recargar con QS
-  document.getElementById('fecha-select').addEventListener('change', ()=>{
+  function recargarVista(fecha, serie=''){
+    if(!fecha) return;
+    const qs = new URLSearchParams();
+    qs.set('fecha', fecha);
+    if(serie) qs.set('serie', serie);
+    location.href = `?${qs.toString()}`;
+  }
+
+  // Selector inferior "Ver día"
+  document.getElementById('fecha-select')?.addEventListener('change', ()=>{
     const f = document.getElementById('fecha-select').value;
     const s = document.getElementById('serie-select-view').value;
-    location.href = `?fecha=${encodeURIComponent(f)}&serie=${encodeURIComponent(s)}`;
+    recargarVista(f, s);
   });
-  document.getElementById('serie-select-view').addEventListener('change', ()=>{
+
+  document.getElementById('serie-select-view')?.addEventListener('change', ()=>{
     const f = document.getElementById('fecha-select').value;
     const s = document.getElementById('serie-select-view').value;
-    location.href = `?fecha=${encodeURIComponent(f)}&serie=${encodeURIComponent(s)}`;
+    recargarVista(f, s);
+  });
+
+  // Fecha principal de arriba
+  document.getElementById('fecha-input')?.addEventListener('change', ()=>{
+    const f = document.getElementById('fecha-input').value;
+    const s = document.getElementById('serie-select')?.value || '';
+    recargarVista(f, s);
+  });
+
+  // Serie principal de arriba
+  document.getElementById('serie-select')?.addEventListener('change', ()=>{
+    const f = document.getElementById('fecha-input')?.value || '';
+    const s = document.getElementById('serie-select').value;
+    recargarVista(f, s);
   });
 
   // Acciones rápidas: elegir vendedor / agregar planillas disponibles
