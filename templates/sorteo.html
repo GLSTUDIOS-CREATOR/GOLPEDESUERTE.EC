@@ -204,30 +204,32 @@
             </div>
             <div class="row g-2 mt-3">
               <div class="col-12">
-                <div class="form-check form-switch">
-                  <input class="form-check-input" type="checkbox" id="tl_programadas_activas" {{ 'checked' if (tl_programadas_activas|string) in ['1','true','True','si','SI','sí','Sí'] else '' }}>
-                  <label class="form-check-label fw-semibold" for="tl_programadas_activas">Programar figuras automáticas</label>
+                <div class="soft-card">
+                  <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+                    <div>
+                      <div class="fw-bold">Generación protegida de Tablas Llenas</div>
+                      <div class="text-secondary small">Acceso con clave para <b>Super Administrador</b>, <b>Administrador</b> y <b>Jugador</b>.</div>
+                    </div>
+                    <div class="d-flex gap-2 flex-wrap">
+                      <button class="btn btn-outline-primary btn-sm" id="btn-open-tl-programadas"><i class="bi bi-shield-lock me-1"></i>Generar</button>
+                      <button class="btn btn-outline-dark btn-sm" id="btn-open-bonus-history"><i class="bi bi-clock-history me-1"></i>Opciones</button>
+                    </div>
+                  </div>
+                  <div class="row g-2 small">
+                    <div class="col-md-3"><span class="text-secondary">Estado</span><br><b id="tl-prog-estado">{{ 'ACTIVO' if (tl_programadas_activas|string) in ['1','true','True','si','SI','sí','Sí'] else 'INACTIVO' }}</b></div>
+                    <div class="col-md-3"><span class="text-secondary">LLENA</span><br><b id="tl-prog-resumen-llena">{{ tl_programada_llena or '—' }}</b></div>
+                    <div class="col-md-3"><span class="text-secondary">RELLENA</span><br><b id="tl-prog-resumen-rellena">{{ tl_programada_rellena or '—' }}</b></div>
+                    <div class="col-md-3"><span class="text-secondary">YAPA</span><br><b id="tl-prog-resumen-yapa">{{ tl_programada_yapa or '—' }}</b></div>
+                  </div>
                 </div>
-                <div class="form-text">Si activas esta opción, el juego podrá disparar <b>LLENA</b>, <b>RELLENA</b> y <b>YAPA</b> para los cartones que programes aquí, aunque los números originales no hayan salido.</div>
+                <input type="hidden" id="tl_programadas_activas" {{ 'checked' if (tl_programadas_activas|string) in ['1','true','True','si','SI','sí','Sí'] else '' }}>
+                <input type="hidden" id="tl_programada_llena" value="{{ tl_programada_llena }}">
+                <input type="hidden" id="tl_programada_rellena" value="{{ tl_programada_rellena }}">
+                <input type="hidden" id="tl_programada_yapa" value="{{ tl_programada_yapa }}">
+                <input type="hidden" id="tl_programadas_cartones" value="{{ tl_programadas_cartones }}">
               </div>
-              <div class="col-12">
-                <label class="small-label">LLENA programada</label>
-                <input id="tl_programada_llena" class="form-control mono" value="{{ tl_programada_llena }}" placeholder="Ej. 45">
-                <div class="form-text">Número de cartón para <b>Tabla Llena</b>.</div>
-              </div>
-              <div class="col-12">
-                <label class="small-label">RELLENA programada</label>
-                <input id="tl_programada_rellena" class="form-control mono" value="{{ tl_programada_rellena }}" placeholder="Ej. 52">
-                <div class="form-text">Número de cartón para <b>Rellena</b>.</div>
-              </div>
-              <div class="col-12">
-                <label class="small-label">YAPA programada</label>
-                <input id="tl_programada_yapa" class="form-control mono" value="{{ tl_programada_yapa }}" placeholder="Ej. 60">
-                <div class="form-text">Número de cartón para <b>Yapa</b>.</div>
-              </div>
-              <input type="hidden" id="tl_programadas_cartones" value="{{ tl_programadas_cartones }}">
             </div>
-            <div class="form-text mt-2">Se guardan como líneas separadas, pero por compatibilidad también se sincronizan internamente al orden: <b>LLENA → RELLENA → YAPA</b>.</div>
+            <div class="form-text mt-2">Las tablas llenas programadas se siguen guardando en el sorteo. Ahora se editan desde una ventana flotante protegida con clave.</div>
           </div>
         </div>
 
@@ -364,6 +366,86 @@
   </main>
 </div>
 
+<!-- Modal de acceso protegido -->
+<div class="modal fade" id="modalProtectedAccess" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content border-0 shadow-lg">
+      <div class="modal-header bg-dark text-white">
+        <h5 class="modal-title"><i class="bi bi-shield-lock me-2"></i>Acceso protegido</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="alert alert-primary py-2 mb-3" id="protected-access-msg">Ingresa tu clave para continuar.</div>
+        <label class="small-label">Clave de acceso</label>
+        <input type="password" id="protected-access-password" class="form-control" placeholder="Escribe tu clave">
+        <div class="form-text">La validación se hace según tu rol y la sección solicitada.</div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancelar</button>
+        <button type="button" class="btn btn-primary" id="btn-protected-access-confirm">Ingresar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Tablas Llenas Programadas -->
+<div class="modal fade" id="modalTLProgramadas" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-lg">
+    <div class="modal-content border-0 shadow-lg">
+      <div class="modal-header bg-primary text-white">
+        <h5 class="modal-title"><i class="bi bi-grid-3x3-gap-fill me-2"></i>Programar Tablas Llenas</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="form-check form-switch mb-3">
+          <input class="form-check-input" type="checkbox" id="tl_programadas_activas_modal" {{ 'checked' if (tl_programadas_activas|string) in ['1','true','True','si','SI','sí','Sí'] else '' }}>
+          <label class="form-check-label fw-semibold" for="tl_programadas_activas_modal">Programar figuras automáticas</label>
+        </div>
+        <div class="form-text mb-3">Si activas esta opción, el juego podrá disparar <b>LLENA</b>, <b>RELLENA</b> y <b>YAPA</b> para los cartones que programes aquí.</div>
+        <div class="row g-3">
+          <div class="col-md-4">
+            <label class="small-label">LLENA programada</label>
+            <input id="tl_programada_llena_modal" class="form-control mono" value="{{ tl_programada_llena }}" placeholder="Ej. 45">
+          </div>
+          <div class="col-md-4">
+            <label class="small-label">RELLENA programada</label>
+            <input id="tl_programada_rellena_modal" class="form-control mono" value="{{ tl_programada_rellena }}" placeholder="Ej. 52">
+          </div>
+          <div class="col-md-4">
+            <label class="small-label">YAPA programada</label>
+            <input id="tl_programada_yapa_modal" class="form-control mono" value="{{ tl_programada_yapa }}" placeholder="Ej. 60">
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cerrar</button>
+        <button type="button" class="btn btn-primary" id="btn-save-tl-modal"><i class="bi bi-check2-circle me-1"></i>Guardar en el formulario</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Opciones -->
+<div class="modal fade" id="modalBonusHistory" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-xl">
+    <div class="modal-content border-0 shadow-lg">
+      <div class="modal-header bg-dark text-white">
+        <h5 class="modal-title"><i class="bi bi-clock-history me-2"></i>Opciones del sorteo</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+          <div class="text-secondary small">Solo el <b>Super Administrador</b> puede ver este historial.</div>
+          <button class="btn btn-outline-secondary btn-sm" id="btn-refresh-bonus-history"><i class="bi bi-arrow-clockwise me-1"></i>Actualizar</button>
+        </div>
+        <div id="bonus-history-wrap">
+          <div class="text-secondary">No hay datos cargados todavía.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div class="position-fixed bottom-0 end-0 p-3" style="z-index:1080">
   <div id="toast" class="toast align-items-center text-bg-dark border-0" role="alert">
     <div class="d-flex">
@@ -413,13 +495,28 @@
     if(!$('#tl_programada_yapa').value && parts[2]) $('#tl_programada_yapa').value = parts[2];
   }
 
+  function updateTLProgramadasSummary(){
+    $('#tl-prog-estado').textContent = $('#tl_programadas_activas').checked ? 'ACTIVO' : 'INACTIVO';
+    $('#tl-prog-resumen-llena').textContent = ($('#tl_programada_llena').value||'').trim() || '—';
+    $('#tl-prog-resumen-rellena').textContent = ($('#tl_programada_rellena').value||'').trim() || '—';
+    $('#tl-prog-resumen-yapa').textContent = ($('#tl_programada_yapa').value||'').trim() || '—';
+  }
+
   function syncTLProgramadasUI(){
     const on = $('#tl_programadas_activas').checked;
+    const modalCheck = $('#tl_programadas_activas_modal');
+    if(modalCheck) modalCheck.checked = on;
     ['#tl_programada_llena','#tl_programada_rellena','#tl_programada_yapa'].forEach(id => {
-      $(id).disabled = !on;
-      $(id).classList.toggle('readonly', !on);
+      if($(id)) $(id).disabled = !on;
+    });
+    ['#tl_programada_llena_modal','#tl_programada_rellena_modal','#tl_programada_yapa_modal'].forEach(id => {
+      if($(id)){
+        $(id).disabled = !on;
+        $(id).classList.toggle('readonly', !on);
+      }
     });
     syncTLProgramadasCombinedFromLines();
+    updateTLProgramadasSummary();
   }
 
   function calcTLTotals(){
@@ -480,6 +577,120 @@
     if(!r.ok || j.ok===false) throw new Error(j.mensaje || 'Error');
     return j;
   }
+
+  let secureScopePending = '';
+  let secureTargetPending = '';
+
+  function getModalInstance(id){
+    const el = document.getElementById(id);
+    return el ? bootstrap.Modal.getOrCreateInstance(el) : null;
+  }
+
+  function openProtectedModal(scope, target){
+    secureScopePending = scope;
+    secureTargetPending = target;
+    const msg = $('#protected-access-msg');
+    if(scope === 'bonus_history'){
+      msg.innerHTML = 'Ingresa la <b>clave del Super Administrador</b> para ver las opciones.';
+    }else{
+      msg.innerHTML = 'Ingresa la clave permitida para abrir la ventana de <b>Generar</b>.';
+    }
+    $('#protected-access-password').value = '';
+    getModalInstance('modalProtectedAccess')?.show();
+    setTimeout(()=> $('#protected-access-password')?.focus(), 200);
+  }
+
+  async function loadBonusHistory(){
+    const f = ($('#fecha').value||'').trim();
+    const wrap = $('#bonus-history-wrap');
+    wrap.innerHTML = '<div class="text-secondary">Cargando historial BONUS...</div>';
+    try{
+      const r = await fetch(`/api/sorteo/bonus-historial?fecha=${encodeURIComponent(f)}`);
+      const j = await r.json();
+      if(!r.ok || j.ok === false) throw new Error(j.mensaje || 'No se pudo cargar el historial BONUS');
+      const items = Array.isArray(j.items) ? j.items : [];
+      if(!items.length){
+        wrap.innerHTML = '<div class="alert alert-light border">No existe historial BONUS para esta fecha.</div>';
+        return;
+      }
+      wrap.innerHTML = items.map(it => {
+        const nums = (it.numbers || []).join(' - ') || '—';
+        const req = it.requested || {};
+        const win = it.winners || {};
+        return `
+          <div class="soft-card mb-2">
+            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
+              <div><b>Log #${it.log_id || '—'}</b> · ${it.serie_archivo || 'Serie'} · rango ${it.desde || '—'} a ${it.hasta || '—'}</div>
+              <a class="btn btn-sm btn-outline-primary" href="${it.url_html}" target="_blank">Ver informe</a>
+            </div>
+            <div class="small text-secondary mb-1">BONUS del día: <b>${nums}</b></div>
+            <div class="small text-secondary">Solicitado: 5=${req['5']||0}, 4=${req['4']||0}, 3=${req['3']||0}, 2=${req['2']||0}, 1=${req['1']||0}</div>
+            <div class="small text-secondary">Logrado: 5=${win['5']||0}, 4=${win['4']||0}, 3=${win['3']||0}, 2=${win['2']||0}, 1=${win['1']||0}</div>
+          </div>`;
+      }).join('');
+    }catch(e){
+      wrap.innerHTML = `<div class="alert alert-danger">${e.message || 'No se pudo cargar el historial BONUS.'}</div>`;
+    }
+  }
+
+  function syncTLModalFromHidden(){
+    $('#tl_programadas_activas_modal').checked = $('#tl_programadas_activas').checked;
+    $('#tl_programada_llena_modal').value = $('#tl_programada_llena').value || '';
+    $('#tl_programada_rellena_modal').value = $('#tl_programada_rellena').value || '';
+    $('#tl_programada_yapa_modal').value = $('#tl_programada_yapa').value || '';
+    syncTLProgramadasUI();
+  }
+
+  function syncTLHiddenFromModal(){
+    $('#tl_programadas_activas').checked = $('#tl_programadas_activas_modal').checked;
+    $('#tl_programada_llena').value = ($('#tl_programada_llena_modal').value||'').trim();
+    $('#tl_programada_rellena').value = ($('#tl_programada_rellena_modal').value||'').trim();
+    $('#tl_programada_yapa').value = ($('#tl_programada_yapa_modal').value||'').trim();
+    syncTLProgramadasCombinedFromLines();
+    syncTLProgramadasUI();
+  }
+
+  $('#btn-open-tl-programadas').addEventListener('click', ()=> openProtectedModal('programar_tablas', 'modalTLProgramadas'));
+  $('#btn-open-bonus-history').addEventListener('click', ()=> openProtectedModal('bonus_history', 'modalBonusHistory'));
+  $('#btn-refresh-bonus-history').addEventListener('click', loadBonusHistory);
+
+  $('#btn-protected-access-confirm').addEventListener('click', async ()=>{
+    const password = $('#protected-access-password').value || '';
+    try{
+      const j = await postJSON('/api/sorteo/secure-access', {scope: secureScopePending, password});
+      getModalInstance('modalProtectedAccess')?.hide();
+      if(secureTargetPending === 'modalTLProgramadas'){
+        syncTLModalFromHidden();
+        getModalInstance('modalTLProgramadas')?.show();
+      }else if(secureTargetPending === 'modalBonusHistory'){
+        getModalInstance('modalBonusHistory')?.show();
+        await loadBonusHistory();
+      }
+      toast(j.mensaje || 'Acceso concedido');
+    }catch(e){
+      toast(e.message || 'Clave incorrecta');
+    }
+  });
+
+  $('#btn-save-tl-modal').addEventListener('click', ()=>{
+    syncTLHiddenFromModal();
+    getModalInstance('modalTLProgramadas')?.hide();
+    toast('Programación de tablas cargada en el formulario');
+  });
+
+  $('#tl_programadas_activas_modal').addEventListener('change', ()=>{
+    $('#tl_programadas_activas').checked = $('#tl_programadas_activas_modal').checked;
+    syncTLProgramadasUI();
+  });
+  ['#tl_programada_llena_modal','#tl_programada_rellena_modal','#tl_programada_yapa_modal'].forEach(id => {
+    $(id).addEventListener('input', ()=>{
+      $('#tl_programada_llena').value = ($('#tl_programada_llena_modal').value||'').trim();
+      $('#tl_programada_rellena').value = ($('#tl_programada_rellena_modal').value||'').trim();
+      $('#tl_programada_yapa').value = ($('#tl_programada_yapa_modal').value||'').trim();
+      syncTLProgramadasCombinedFromLines();
+      updateTLProgramadasSummary();
+    });
+  });
 
   $('#btn-cargar').addEventListener('click', ()=>{
     const f = $('#fecha').value || '';
@@ -546,10 +757,6 @@
     calcTLTotals();
   }));
 
-  $('#tl_programadas_activas').addEventListener('change', syncTLProgramadasUI);
-  ['#tl_programada_llena','#tl_programada_rellena','#tl_programada_yapa'].forEach(id => {
-    $(id).addEventListener('input', syncTLProgramadasCombinedFromLines);
-  });
 
   (function init(){
     const f = ($('#fecha').value||'').trim();
@@ -560,6 +767,7 @@
     calcPremiosUI();
     calcTLTotals();
     syncTLProgramadasUI();
+    updateTLProgramadasSummary();
   })();
 </script>
 </body>
