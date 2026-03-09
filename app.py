@@ -1227,12 +1227,44 @@ def _bonus_style_for_ticket(ticket_pos: int, ui_style: dict | None = None):
 _LOG_LOCK = RLock()  # RLock para evitar deadlocks
 
 def _ensure_logs_file():
-    if not os.path.exists(IMPRESIONES_XML):
-        root = ET.Element('impresiones')
-        tree = ET.ElementTree(root)
-        tmp_path = IMPRESIONES_XML + ".tmp"
-        tree.write(tmp_path, encoding='utf-8', xml_declaration=True)
-        os.replace(tmp_path, IMPRESIONES_XML)
+    canon = globals().get("IMPRESIONES_XML") or _persist("static", "LOGS", "impresiones.xml")
+    os.makedirs(os.path.dirname(canon), exist_ok=True)
+
+    if os.path.exists(canon) and os.path.getsize(canon) > 32:
+        return
+
+    candidatos = [
+        canon,
+        os.path.join(globals().get("DATA_DIR", os.path.join(BASE_DIR, "DATA")), "logs", "impresiones.xml"),
+        os.path.join(globals().get("DATA_DIR", os.path.join(BASE_DIR, "DATA")), "static", "db", "impresiones.xml"),
+        os.path.join(globals().get("DATA_DIR", os.path.join(BASE_DIR, "DATA")), "DB", "impresiones.xml"),
+        os.path.join(BASE_DIR, "static", "LOGS", "impresiones.xml"),
+        os.path.join(BASE_DIR, "static", "db", "impresiones.xml"),
+    ]
+
+    mejor = None
+    mejor_size = -1
+    for p in candidatos:
+        try:
+            if p and os.path.exists(p):
+                sz = os.path.getsize(p)
+                if sz > mejor_size:
+                    mejor = p
+                    mejor_size = sz
+        except Exception:
+            pass
+
+    if mejor and os.path.abspath(mejor) != os.path.abspath(canon) and mejor_size > 32:
+        import shutil
+        shutil.copy2(mejor, canon)
+        return
+
+    root = ET.Element('impresiones')
+    tree = ET.ElementTree(root)
+    tmp_path = canon + ".tmp"
+    tree.write(tmp_path, encoding='utf-8', xml_declaration=True)
+    os.replace(tmp_path, canon)
+
 
 def _read_logs_root():
     _ensure_logs_file()
@@ -1240,13 +1272,34 @@ def _read_logs_root():
     return tree, tree.getroot()
 
 def _write_logs_tree(tree):
+    canon = globals().get("IMPRESIONES_XML") or _persist("static", "LOGS", "impresiones.xml")
+    os.makedirs(os.path.dirname(canon), exist_ok=True)
+
     try:
         ET.indent(tree, space="  ", level=0)
     except Exception:
         pass
-    tmp_path = IMPRESIONES_XML + ".tmp"
+
+    tmp_path = canon + ".tmp"
     tree.write(tmp_path, encoding='utf-8', xml_declaration=True)
-    os.replace(tmp_path, IMPRESIONES_XML)
+    os.replace(tmp_path, canon)
+
+    mirrors = [
+        os.path.join(globals().get("DATA_DIR", os.path.join(BASE_DIR, "DATA")), "logs", "impresiones.xml"),
+        os.path.join(globals().get("DATA_DIR", os.path.join(BASE_DIR, "DATA")), "static", "db", "impresiones.xml"),
+        os.path.join(globals().get("DATA_DIR", os.path.join(BASE_DIR, "DATA")), "DB", "impresiones.xml"),
+    ]
+
+    import shutil
+    for p in mirrors:
+        try:
+            if os.path.abspath(p) == os.path.abspath(canon):
+                continue
+            os.makedirs(os.path.dirname(p), exist_ok=True)
+            shutil.copy2(canon, p)
+        except Exception:
+            pass
+
 
 def _get_next_id(root):
     mx = 0
@@ -14965,47 +15018,34 @@ def _hf_copy_file(src_path, dst_path):
 
 def _hf_sync_logs_startup():
     try:
-        cands = _hf_all_logs_candidates()
-        srcp = _hf_pick_newest_file(cands)
-        if srcp is None:
-            root = ET.Element("impresiones")
-            tmp = _hf_abs(BASE_DIR, "DATA", "static", "LOGS", "impresiones.xml")
-            os.makedirs(os.path.dirname(tmp), exist_ok=True)
-            ET.ElementTree(root).write(tmp, encoding="utf-8", xml_declaration=True)
-            srcp = tmp
-        for p in cands:
-            _hf_copy_file(srcp, p)
-        globals()["LOGS_IMPRESIONES_XML"] = srcp if srcp else globals().get("LOGS_IMPRESIONES_XML")
-        globals()["IMPRESIONES_XML"] = srcp if srcp else globals().get("IMPRESIONES_XML")
-        globals()["IMP_XML_PATH"] = srcp if srcp else globals().get("IMP_XML_PATH")
-        globals()["LOGS_DIR"] = os.path.dirname(_hf_all_logs_candidates()[1]) if len(_hf_all_logs_candidates()) > 1 else os.path.dirname(srcp)
+        canon = _persist("static", "LOGS", "impresiones.xml")
+        globals()["LOGS_IMPRESIONES_XML"] = canon
+        globals()["IMPRESIONES_XML"] = canon
+        globals()["IMP_XML_PATH"] = canon
+        globals()["LOGS_DIR"] = os.path.dirname(canon)
+
+        _ensure_logs_file()
+
+        import shutil
+        mirrors = [
+            os.path.join(globals().get("DATA_DIR", os.path.join(BASE_DIR, "DATA")), "logs", "impresiones.xml"),
+            os.path.join(globals().get("DATA_DIR", os.path.join(BASE_DIR, "DATA")), "static", "db", "impresiones.xml"),
+            os.path.join(globals().get("DATA_DIR", os.path.join(BASE_DIR, "DATA")), "DB", "impresiones.xml"),
+        ]
+
+        for p in mirrors:
+            try:
+                if os.path.abspath(p) == os.path.abspath(canon):
+                    continue
+                os.makedirs(os.path.dirname(p), exist_ok=True)
+                shutil.copy2(canon, p)
+            except Exception:
+                pass
     except Exception as _e:
         print("[HOTFIX LOGS] sync startup:", _e)
 
 _hf_sync_logs_startup()
 
-try:
-    _orig_write_logs_tree = _write_logs_tree
-    def _write_logs_tree(tree):
-        try:
-            cands = _hf_all_logs_candidates()
-            can = _hf_pick_newest_file(cands) or (cands[0] if cands else None)
-            if can:
-                os.makedirs(os.path.dirname(can), exist_ok=True)
-                tree.write(can, encoding='utf-8', xml_declaration=True)
-            for p in cands:
-                try:
-                    if can and os.path.abspath(p) == os.path.abspath(can):
-                        continue
-                    os.makedirs(os.path.dirname(p), exist_ok=True)
-                    tree.write(p, encoding='utf-8', xml_declaration=True)
-                except Exception:
-                    pass
-            return
-        except Exception:
-            return _orig_write_logs_tree(tree)
-except Exception as _e:
-    print("[HOTFIX LOGS] wrap _write_logs_tree:", _e)
 
 def _hf_db_file_candidates(path):
     try:
