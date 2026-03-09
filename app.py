@@ -4151,6 +4151,17 @@ def series_impresas_en_fecha(fecha_iso):
             s.add(serie)
     return sorted(s)
 
+def fechas_impresas_disponibles():
+    _, r = _imp_root()
+    fechas = set()
+    for n in r.findall('impresion'):
+        if (n.get('tipo') or '').lower() != 'boletos':
+            continue
+        f = (n.findtext('fecha_sorteo') or '').strip()
+        if f:
+            fechas.add(f)
+    return sorted(fechas)
+
 def total_boletos_impresos_por_serie_fecha(serie_archivo, fecha_iso):
     """Suma lógicamente todos los 'total_boletos' para esa serie y fecha."""
     _, r = _imp_root()
@@ -4447,7 +4458,11 @@ def asignar_planillas():
         'asignar_planillas.html',
         vendedores=vendedores,
         fecha_hoy=fecha_hoy,
-        fechas_disponibles=sorted([d.attrib['fecha'] for d in root.findall('dia')] + [fecha_hoy]),
+        fechas_disponibles=sorted(set(
+            [d.attrib['fecha'] for d in root.findall('dia')]
+            + fechas_impresas_disponibles()
+            + [fecha_hoy, fecha_seleccionada]
+        )),
         fecha_seleccionada=fecha_seleccionada,
         series_impresas=series_dia,           # ← para el combo de serie
         serie_seleccionada=serie_param,
