@@ -7887,6 +7887,8 @@ def code_for(name: str) -> str:
     Importante:
     - Conserva TL1..TL4 para la lógica histórica.
     - Conserva códigos semánticos legacy para LLENA / RELLENA / COMPLETA.
+    - Normaliza variantes del usuario como "LLENA 1" / "LLENA 2"
+      a sus semánticas reales: LLENA / RELLENA.
     - Evita choques reales como:
         MINI K  -> MINIK
         MINI Y  -> MINIY
@@ -7904,6 +7906,13 @@ def code_for(name: str) -> str:
     if n.startswith("TABLA LLENA 3"): return "TL3"
     if n.startswith("TABLA LLENA 4"): return "TL4"
 
+    # Variantes semánticas usadas por el usuario en figuras del día.
+    # Ojo: esto NO significa "tabla programada"; solo normaliza el nombre.
+    if re.fullmatch(r"LLENA\s*1", n): return "LLEN"
+    if re.fullmatch(r"LLENA\s*2", n): return "RELL"
+    if re.fullmatch(r"LLENA\s*3", n): return "YAPA"
+    if re.fullmatch(r"LLENA\s*4", n): return "COMP"
+
     # Compatibilidad semántica legacy
     if "RELLENA" in n:
         return "RELL"
@@ -7911,6 +7920,8 @@ def code_for(name: str) -> str:
         return "LLEN"
     if "COMPLETA" in n or "COMPLETO" in n:
         return "COMP"
+    if n == "YAPA":
+        return "YAPA"
 
     # Casos comunes con número explícito
     m_num = re.match(r"^(?:NUMERO|N)\s*(\d{1,2})$", n)
@@ -7933,6 +7944,21 @@ def code_for(name: str) -> str:
     import zlib
     crc = zlib.crc32(base.encode("utf-8")) % 10000
     return f"{base[:8]}{crc:04d}"
+
+def _tl_semantic_name(nombre: str, code: str = "") -> str:
+    """Convierte códigos/nombres internos a nombres semánticos visibles."""
+    raw = str(nombre or "").strip()
+    c = str(code or code_for(raw)).strip().upper()
+    return {
+        "TL1": "LLENA",
+        "TL2": "RELLENA",
+        "TL3": "YAPA",
+        "TL4": "SUPER YAPA",
+        "LLEN": "LLENA",
+        "RELL": "RELLENA",
+        "YAPA": "YAPA",
+        "COMP": "COMPLETA",
+    }.get(c, raw)
 
 def _san4(v: str) -> str:
     """Normaliza string a 4 dígitos (0-9). Vacío => ''."""
@@ -8278,13 +8304,7 @@ XML_FIG_PANEL_REL  = "xml_figuras_panel.xml"
 VMIX_ESTADOS_BASE  = (os.getenv("VMIX_ESTADOS_BASE") or r"E:\MEDIA\ESTADOS").strip() or r"E:\MEDIA\ESTADOS"
 
 def _panel_name_display(nombre: str) -> str:
-    code = code_for(str(nombre or ""))
-    return {
-        "TL1": "LLENA",
-        "TL2": "RELLENA",
-        "TL3": "YAPA",
-        "TL4": "SUPER YAPA",
-    }.get(code, str(nombre or "").strip())
+    return _tl_semantic_name(str(nombre or ""), code_for(str(nombre or "")))
 
 def _panel_state_norm(estado: str) -> str:
     s = re.sub(r"\s+", " ", str(estado or "INACTIVO").strip().upper())
@@ -12206,11 +12226,6 @@ def _detectar_ganadores(fecha_iso: str, stack: list, ultimo_marcado: int, recalc
     # Figuras que ya tuvieron ganador en bolas anteriores (se cierran para próximos clicks)
     figuras_cerradas_prev = set()
     tl_codes_closed_prev = set()
-    full_stage_closed_prev = {
-        "LLENA": False,
-        "RELLENA": False,
-        "COMPLETA": False,
-    }
     if not recalc:
         for g in (ganadores or []):
             fk = _norm_fig_name((g or {}).get("figura") or (g or {}).get("nombre_figura") or "")
@@ -12220,12 +12235,6 @@ def _detectar_ganadores(fecha_iso: str, stack: list, ultimo_marcado: int, recalc
                 gc = str((g or {}).get("fig_code") or "").strip().upper()
                 if gc in ("TL1", "TL2", "TL3", "TL4"):
                     tl_codes_closed_prev.add(gc)
-                if gc in ("TL1", "LLEN"):
-                    full_stage_closed_prev["LLENA"] = True
-                elif gc in ("TL2", "RELL"):
-                    full_stage_closed_prev["RELLENA"] = True
-                elif gc in ("TL4", "COMP"):
-                    full_stage_closed_prev["COMPLETA"] = True
             except Exception:
                 pass
 
@@ -12286,7 +12295,7 @@ def _detectar_ganadores(fecha_iso: str, stack: list, ultimo_marcado: int, recalc
             continue
 
         code = globals().get("code_for")(nombre_src) if callable(globals().get("code_for")) else re.sub(r"[^A-Z0-9]", "", nombre_src.upper())[:4] or "FIG"
-        nombre = _TL_DISPLAY_NAME.get(code, nombre_src)
+        nombre = _tl_semantic_name(nombre_src, code)
         required_pos, cmap = _required_positions_for_fig(code, catalogo)
 
         if not required_pos and not (code in ("TL1", "TL2", "TL3", "TL4")):
@@ -12314,7 +12323,11 @@ def _detectar_ganadores(fecha_iso: str, stack: list, ultimo_marcado: int, recalc
             _valor_tl = float(str((sorteo_cfg or {}).get(f"tl{_slot}") or "0").replace(",", "."))
         except Exception:
             _valor_tl = 0.0
-        _debe_jugar = (_valor_tl > 0.0) or (_slot <= int(tl_prog_slots or 0))
+        # IMPORTANTE:
+        #   El valor tl1/tl2/tl3/tl4 solo define el PREMIO configurado.
+        #   NO debe inyectar una "tabla programada" por sí solo.
+        #   Solo jugamos TL1..TL4 cuando realmente están programadas/activas.
+        _debe_jugar = (_slot <= int(tl_prog_slots or 0))
         if not _debe_jugar:
             continue
         _req_tl, _cmap_tl = _required_positions_for_fig(_code, catalogo)
@@ -12331,9 +12344,6 @@ def _detectar_ganadores(fecha_iso: str, stack: list, ultimo_marcado: int, recalc
 
     if not patrones:
         return ganadores, nuevos, sorted(known)
-
-    has_llena_stage = any(str((p or {}).get("code") or "").strip().upper() in ("LLEN", "TL1") for p in (patrones or []))
-    has_rellena_stage = any(str((p or {}).get("code") or "").strip().upper() in ("RELL", "TL2") for p in (patrones or []))
 
     non_tl_fig_keys = {
         p.get("fig_key") for p in (patrones or [])
@@ -12380,6 +12390,13 @@ def _detectar_ganadores(fecha_iso: str, stack: list, ultimo_marcado: int, recalc
         if _TL_NORMAL_CODE.get(_slot)
     }
     if _normal_codes_bloqueados:
+        # Si existe una TL programada activa, la versión semántica normal
+        # (LLENA / RELLENA / YAPA / COMPLETA) NO debe jugar ese mismo día,
+        # porque el premio lo debe resolver únicamente la programada.
+        patrones = [
+            p for p in (patrones or [])
+            if p.get("code") not in _normal_codes_bloqueados
+        ]
         non_tl_fig_keys = {
             p.get("fig_key") for p in (patrones or [])
             if p.get("fig_key")
@@ -12467,15 +12484,6 @@ def _detectar_ganadores(fecha_iso: str, stack: list, ultimo_marcado: int, recalc
                 if key in known:
                     continue
 
-                # LLENA / RELLENA / COMPLETA deben jugar por etapas separadas.
-                # RELLENA no puede salir hasta que LLENA ya exista desde una jugada previa,
-                # y COMPLETA no puede salir hasta que RELLENA ya exista desde una jugada previa.
-                # OJO: aquí usamos SOLO el estado previo, no lo que se detecte en este mismo clic.
-                if fig_code == "RELL" and has_llena_stage and not full_stage_closed_prev.get("LLENA"):
-                    continue
-                if fig_code == "COMP" and has_rellena_stage and not full_stage_closed_prev.get("RELLENA"):
-                    continue
-
                 # Si existe una TL programada para esta semántica, la figura normal queda bloqueada
                 # hasta que la TL correspondiente ya haya caído. Esto evita que LLENA/RELLENA normales
                 # se adelanten a TABLA LLENA 1/2/3/4.
@@ -12524,14 +12532,11 @@ def _detectar_ganadores(fecha_iso: str, stack: list, ultimo_marcado: int, recalc
 
                     slot_num = int(fig_code[-1]) if fig_code[-1:].isdigit() else 1
                     prev_tl_ok = True
-                    # IMPORTANTE:
-                    #   TL2/TL3/TL4 solo pueden habilitarse si la TL previa ya estaba cerrada
-                    #   DESDE ANTES de este clic. Así evitamos que LLENA y RELLENA caigan juntas.
-                    if slot_num >= 2 and "TL1" not in tl_codes_closed_prev:
+                    if slot_num >= 2 and "TL1" not in closed_tl_codes_now:
                         prev_tl_ok = False
-                    if slot_num >= 3 and "TL2" not in tl_codes_closed_prev:
+                    if slot_num >= 3 and "TL2" not in closed_tl_codes_now:
                         prev_tl_ok = False
-                    if slot_num >= 4 and "TL3" not in tl_codes_closed_prev:
+                    if slot_num >= 4 and "TL3" not in closed_tl_codes_now:
                         prev_tl_ok = False
 
                     all_non_tl_closed_now = non_tl_fig_keys.issubset(closed_fig_keys_now)
