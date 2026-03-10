@@ -7881,14 +7881,30 @@ def _fmt_int(x):
         return "0"
 
 def code_for(name: str) -> str:
-    n = (name or "").strip().upper()
-    # Prioridad: tablas llenas numeradas
+    """
+    Genera un código ESTABLE y sin colisiones para las figuras.
+
+    Importante:
+    - Conserva TL1..TL4 para la lógica histórica.
+    - Conserva códigos semánticos legacy para LLENA / RELLENA / COMPLETA.
+    - Evita choques reales como:
+        MINI K  -> MINIK
+        MINI Y  -> MINIY
+        NUMERO 4 -> NUM04
+        NUMERO 12 -> NUM12
+      que antes colisionaban por usar solo los primeros 4 caracteres.
+    """
+    raw = "" if name is None else str(name)
+    n = unicodedata.normalize("NFKD", raw).encode("ascii", "ignore").decode("ascii")
+    n = re.sub(r"\s+", " ", n).strip().upper()
+
+    # Prioridad: tablas llenas numeradas / programadas
     if n.startswith("TABLA LLENA 1"): return "TL1"
     if n.startswith("TABLA LLENA 2"): return "TL2"
     if n.startswith("TABLA LLENA 3"): return "TL3"
     if n.startswith("TABLA LLENA 4"): return "TL4"
 
-    # Evita colisiones comunes (p.ej. "TABLA LLENA" y "TABLA RELLENA" antes daban "TABL")
+    # Compatibilidad semántica legacy
     if "RELLENA" in n:
         return "RELL"
     if ("TABLA LLENA" in n) or (n == "LLENA") or n.endswith(" LLENA"):
@@ -7896,7 +7912,27 @@ def code_for(name: str) -> str:
     if "COMPLETA" in n or "COMPLETO" in n:
         return "COMP"
 
-    return re.sub(r"[^A-Z0-9]", "", n)[:4] or "FIG"
+    # Casos comunes con número explícito
+    m_num = re.match(r"^(?:NUMERO|N)\s*(\d{1,2})$", n)
+    if m_num:
+        try:
+            return f"NUM{int(m_num.group(1)):02d}"
+        except Exception:
+            pass
+
+    # Código legible y suficientemente largo para no chocar entre figuras parecidas
+    base = re.sub(r"[^A-Z0-9]", "", n)
+    if not base:
+        return "FIG"
+
+    # Nombres cortos quedan casi idénticos al nombre real
+    if len(base) <= 8:
+        return base
+
+    # Nombres largos: prefijo + hash corto estable
+    import zlib
+    crc = zlib.crc32(base.encode("utf-8")) % 10000
+    return f"{base[:8]}{crc:04d}"
 
 def _san4(v: str) -> str:
     """Normaliza string a 4 dígitos (0-9). Vacío => ''."""
@@ -14943,10 +14979,13 @@ def _guardar_figuras_para_fecha_hotfix():
     return redirect(url_for("escoger_figuras"))
 
 try:
+    if "escoger_figuras_guardar" in app.view_functions:
+        app.view_functions["escoger_figuras_guardar"] = _guardar_figuras_para_fecha_hotfix
+    # Compatibilidad extra por si en otra versión el endpoint cambió de nombre
     if "guardar_figuras_para_fecha" in app.view_functions:
         app.view_functions["guardar_figuras_para_fecha"] = _guardar_figuras_para_fecha_hotfix
 except Exception as e:
-    print("[GLBINGO HOTFIX] No se pudo parchear guardar_figuras_para_fecha:", e)
+    print("[GLBINGO HOTFIX] No se pudo parchear escoger_figuras_guardar:", e)
 
 # 4) imprime rutas en consola al iniciar
 try:
@@ -15268,34 +15307,131 @@ def _juego_series_en_juego(fecha):
             pass
     return out
 
-def _juego_ticket_info(fecha, serie_archivo, carton_id):
-    df = _read_df_for_series(serie_archivo)
-    if df is None or getattr(df, "empty", True):
-        return None, "No se pudo leer la serie"
+def _ticket_en_rangos_impresos(fecha_iso, serie_archivo, carton_id) -> bool:
+    """Valida que el boleto pertenezca realmente a los rangos impresos de ESA fecha."""
+    cid = str(carton_id or "").strip()
+    if not cid:
+        return False
     try:
-        idcol = str(df.columns[0])
+        cid_num = int(re.sub(r"\D", "", cid) or 0)
     except Exception:
-        return None, "Serie inválida"
+        cid_num = None
+
+    for rg in (_get_rangos_en_juego(str(fecha_iso)) or []):
+        s = str((rg or {}).get("serie_archivo") or "").strip()
+        if s and serie_archivo and not _serie_equal(s, serie_archivo):
+            continue
+        try:
+            a = int(re.sub(r"\D", "", str((rg or {}).get("desde") or "")) or 0)
+            b = int(re.sub(r"\D", "", str((rg or {}).get("hasta") or "")) or 0)
+        except Exception:
+            continue
+        if cid_num is not None and a <= cid_num <= b:
+            return True
+    return False
+
+def _rangos_merge_para_serie(fecha_iso, serie_archivo, total_ids):
+    rangos = []
+    for rg in (_get_rangos_en_juego(str(fecha_iso)) or []):
+        s = str((rg or {}).get("serie_archivo") or "").strip()
+        if s and serie_archivo and not _serie_equal(s, serie_archivo):
+            continue
+        try:
+            a = int((rg or {}).get("desde") or 0)
+            b = int((rg or {}).get("hasta") or 0)
+        except Exception:
+            continue
+        if a <= 0 or b <= 0:
+            continue
+        # índices 0-based, fin exclusivo
+        s0 = max(0, min(total_ids, a - 1))
+        e0 = max(0, min(total_ids, b))
+        if e0 <= s0:
+            continue
+        rangos.append((s0, e0))
+
+    if not rangos:
+        return []
+
+    rangos.sort(key=lambda x: (x[0], x[1]))
+    merged = []
+    cs, ce = rangos[0]
+    for s0, e0 in rangos[1:]:
+        if s0 <= ce:
+            ce = max(ce, e0)
+        else:
+            merged.append((cs, ce))
+            cs, ce = s0, e0
+    merged.append((cs, ce))
+    return merged
+
+def _juego_ticket_info(fecha, serie_archivo, carton_id):
     cid = str(carton_id).strip()
     if not cid:
         return None, "Cartón vacío"
+
+    # MUY IMPORTANTE: solo permitimos consultar/corregir boletos impresos para esa fecha.
+    if not _ticket_en_rangos_impresos(str(fecha), str(serie_archivo), cid):
+        return None, "Ese boleto no pertenece a los boletos impresos de esa fecha"
+
     try:
-        m = df[df[idcol].astype(str).str.strip() == cid]
+        df, idcol, ids, id_to_idx, mtime = _get_series_meta_cached(serie_archivo)
     except Exception:
-        m = None
-    if m is None or m.empty:
+        df = _read_df_for_series(serie_archivo)
+        if df is None or getattr(df, "empty", True):
+            return None, "No se pudo leer la serie"
         try:
-            n = int(re.sub(r"\D", "", cid) or 0)
-            m = df[pd.to_numeric(df[idcol], errors="coerce").fillna(-1).astype(int) == n]
+            idcol = str(df.columns[0])
         except Exception:
-            pass
-    if m is None or m.empty:
-        return None, "Boleto no encontrado en la serie"
-    row = m.iloc[0]
-    row_lower = {str(c).strip().lower(): row[c] for c in df.columns}
-    grid, pos_map = _build_grid_from_row(row_lower)
-    corr = _corr_get(fecha, serie_archivo, cid)
-    grid, pos_map = _corr_apply_to_grid(grid, pos_map, corr)
+            return None, "Serie inválida"
+        ids = df[idcol].astype(str).tolist()
+        mtime = 0.0
+
+    merged = _rangos_merge_para_serie(str(fecha), str(serie_archivo), len(ids))
+    if not merged:
+        return None, "No hay boletos impresos para esa fecha/serie"
+
+    found = None
+    try:
+        tickets, _ = _get_cartones_index_cached(str(fecha), str(serie_archivo), merged, df, idcol, mtime)
+        for t in (tickets or []):
+            tid = str(t.get("carton_id", "")).strip()
+            if tid == cid:
+                found = t
+                break
+            try:
+                if int(re.sub(r"\D", "", tid) or 0) == int(re.sub(r"\D", "", cid) or 0):
+                    found = t
+                    break
+            except Exception:
+                pass
+    except Exception:
+        found = None
+
+    if found is not None:
+        grid = _copy_mod.deepcopy(found.get("grid") or []) if _copy_mod else [list(r) for r in (found.get("grid") or [])]
+        pos_map = dict(found.get("pos_map") or {})
+        corr = _corr_get(fecha, serie_archivo, cid)
+        grid, pos_map = _corr_apply_to_grid(grid, pos_map, corr)
+    else:
+        # fallback ultra-seguro
+        try:
+            m = df[df[idcol].astype(str).str.strip() == cid]
+        except Exception:
+            m = None
+        if m is None or m.empty:
+            try:
+                n = int(re.sub(r"\D", "", cid) or 0)
+                m = df[pd.to_numeric(df[idcol], errors="coerce").fillna(-1).astype(int) == n]
+            except Exception:
+                pass
+        if m is None or m.empty:
+            return None, "Boleto no encontrado entre los impresos de esa fecha"
+        row = m.iloc[0]
+        row_lower = {str(c).strip().lower(): row[c] for c in df.columns}
+        grid, pos_map = _build_grid_from_row(row_lower)
+        corr = _corr_get(fecha, serie_archivo, cid)
+        grid, pos_map = _corr_apply_to_grid(grid, pos_map, corr)
 
     stack = _read_stack() or []
     marked = set()
@@ -15347,7 +15483,9 @@ def _hf_juego_figuras_shapes():
 
 @app.get("/juego/boletos/series")
 def _hf_juego_boletos_series():
-    fecha = _get_sorteo_fecha() if callable(globals().get("_get_sorteo_fecha")) else datetime.now().strftime("%Y-%m-%d")
+    fecha = str(request.args.get("fecha") or "").strip()
+    if not fecha:
+        fecha = _get_sorteo_fecha() if callable(globals().get("_get_sorteo_fecha")) else datetime.now().strftime("%Y-%m-%d")
     try:
         series = _juego_series_en_juego(fecha)
         return jsonify(ok=True, fecha=fecha, series=series)
@@ -15357,7 +15495,9 @@ def _hf_juego_boletos_series():
 @app.post("/juego/boletos/consultar")
 def _hf_juego_boletos_consultar():
     data = request.get_json(silent=True) or request.form or {}
-    fecha = _get_sorteo_fecha() if callable(globals().get("_get_sorteo_fecha")) else datetime.now().strftime("%Y-%m-%d")
+    fecha = str(data.get("fecha") or "").strip()
+    if not fecha:
+        fecha = _get_sorteo_fecha() if callable(globals().get("_get_sorteo_fecha")) else datetime.now().strftime("%Y-%m-%d")
     serie_archivo = str(data.get("serie_archivo") or data.get("serie") or "").strip()
     carton_id = str(data.get("carton_id") or data.get("boleto") or data.get("tabla") or "").strip()
     if not serie_archivo:
@@ -15383,7 +15523,9 @@ def _hf_admin_boletos_meta():
     key = data.get("key")
     if not _hf_admin_check_key(key):
         return jsonify(ok=False, error="Clave inválida"), 403
-    fecha = _get_sorteo_fecha() if callable(globals().get("_get_sorteo_fecha")) else datetime.now().strftime("%Y-%m-%d")
+    fecha = str(data.get("fecha") or "").strip()
+    if not fecha:
+        fecha = _get_sorteo_fecha() if callable(globals().get("_get_sorteo_fecha")) else datetime.now().strftime("%Y-%m-%d")
     series = _juego_series_en_juego(fecha)
     return jsonify(ok=True, fecha=fecha, series=series)
 
@@ -15393,7 +15535,9 @@ def _hf_admin_boletos_get():
     key = data.get("key")
     if not _hf_admin_check_key(key):
         return jsonify(ok=False, error="Clave inválida"), 403
-    fecha = _get_sorteo_fecha() if callable(globals().get("_get_sorteo_fecha")) else datetime.now().strftime("%Y-%m-%d")
+    fecha = str(data.get("fecha") or "").strip()
+    if not fecha:
+        fecha = _get_sorteo_fecha() if callable(globals().get("_get_sorteo_fecha")) else datetime.now().strftime("%Y-%m-%d")
     serie_archivo = str(data.get("serie_archivo") or "").strip()
     carton_id = str(data.get("carton_id") or data.get("boleto") or "").strip()
     if not serie_archivo:
