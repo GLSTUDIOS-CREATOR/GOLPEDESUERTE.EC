@@ -12206,6 +12206,11 @@ def _detectar_ganadores(fecha_iso: str, stack: list, ultimo_marcado: int, recalc
     # Figuras que ya tuvieron ganador en bolas anteriores (se cierran para próximos clicks)
     figuras_cerradas_prev = set()
     tl_codes_closed_prev = set()
+    full_stage_closed_prev = {
+        "LLENA": False,
+        "RELLENA": False,
+        "COMPLETA": False,
+    }
     if not recalc:
         for g in (ganadores or []):
             fk = _norm_fig_name((g or {}).get("figura") or (g or {}).get("nombre_figura") or "")
@@ -12215,6 +12220,12 @@ def _detectar_ganadores(fecha_iso: str, stack: list, ultimo_marcado: int, recalc
                 gc = str((g or {}).get("fig_code") or "").strip().upper()
                 if gc in ("TL1", "TL2", "TL3", "TL4"):
                     tl_codes_closed_prev.add(gc)
+                if gc in ("TL1", "LLEN"):
+                    full_stage_closed_prev["LLENA"] = True
+                elif gc in ("TL2", "RELL"):
+                    full_stage_closed_prev["RELLENA"] = True
+                elif gc in ("TL4", "COMP"):
+                    full_stage_closed_prev["COMPLETA"] = True
             except Exception:
                 pass
 
@@ -12320,6 +12331,9 @@ def _detectar_ganadores(fecha_iso: str, stack: list, ultimo_marcado: int, recalc
 
     if not patrones:
         return ganadores, nuevos, sorted(known)
+
+    has_llena_stage = any(str((p or {}).get("code") or "").strip().upper() in ("LLEN", "TL1") for p in (patrones or []))
+    has_rellena_stage = any(str((p or {}).get("code") or "").strip().upper() in ("RELL", "TL2") for p in (patrones or []))
 
     non_tl_fig_keys = {
         p.get("fig_key") for p in (patrones or [])
@@ -12453,6 +12467,15 @@ def _detectar_ganadores(fecha_iso: str, stack: list, ultimo_marcado: int, recalc
                 if key in known:
                     continue
 
+                # LLENA / RELLENA / COMPLETA deben jugar por etapas separadas.
+                # RELLENA no puede salir hasta que LLENA ya exista desde una jugada previa,
+                # y COMPLETA no puede salir hasta que RELLENA ya exista desde una jugada previa.
+                # OJO: aquí usamos SOLO el estado previo, no lo que se detecte en este mismo clic.
+                if fig_code == "RELL" and has_llena_stage and not full_stage_closed_prev.get("LLENA"):
+                    continue
+                if fig_code == "COMP" and has_rellena_stage and not full_stage_closed_prev.get("RELLENA"):
+                    continue
+
                 # Si existe una TL programada para esta semántica, la figura normal queda bloqueada
                 # hasta que la TL correspondiente ya haya caído. Esto evita que LLENA/RELLENA normales
                 # se adelanten a TABLA LLENA 1/2/3/4.
@@ -12501,11 +12524,14 @@ def _detectar_ganadores(fecha_iso: str, stack: list, ultimo_marcado: int, recalc
 
                     slot_num = int(fig_code[-1]) if fig_code[-1:].isdigit() else 1
                     prev_tl_ok = True
-                    if slot_num >= 2 and "TL1" not in closed_tl_codes_now:
+                    # IMPORTANTE:
+                    #   TL2/TL3/TL4 solo pueden habilitarse si la TL previa ya estaba cerrada
+                    #   DESDE ANTES de este clic. Así evitamos que LLENA y RELLENA caigan juntas.
+                    if slot_num >= 2 and "TL1" not in tl_codes_closed_prev:
                         prev_tl_ok = False
-                    if slot_num >= 3 and "TL2" not in closed_tl_codes_now:
+                    if slot_num >= 3 and "TL2" not in tl_codes_closed_prev:
                         prev_tl_ok = False
-                    if slot_num >= 4 and "TL3" not in closed_tl_codes_now:
+                    if slot_num >= 4 and "TL3" not in tl_codes_closed_prev:
                         prev_tl_ok = False
 
                     all_non_tl_closed_now = non_tl_fig_keys.issubset(closed_fig_keys_now)
