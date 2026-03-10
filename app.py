@@ -10983,6 +10983,9 @@ DB_DIR = DB_DIR_PERSIST
 # Archivos core
 BINGO_XML     = os.path.join(DB_DIR, "datos_bingo.xml")
 HIST_JSON     = os.path.join(DB_DIR, "historial.json")
+VMIX_NUMEROS_XML = os.path.join(DB_DIR, "vmix_numeros.xml")
+VMIX_NUMEROS_MEDIA_DIR = os.getenv("VMIX_NUMEROS_MEDIA_DIR", r"E:\MEDIA\NUMEROS")
+VMIX_NUMEROS_INACTIVA_FILE = os.getenv("VMIX_NUMEROS_INACTIVA_FILE", "INACTIVA")
 
 # Spinners (VMIX overlay + fallback XML)
 VMIX_SPINNERS_XML = globals().get("VMIX_SPINNERS_XML", os.path.join(DB_DIR, "vmix_spinners.xml"))
@@ -12701,6 +12704,63 @@ def _ensure_bingo_xml():
     ET.SubElement(root, "stinger").text = ""
     ET.ElementTree(root).write(BINGO_XML, encoding="utf-8", xml_declaration=True)
 
+def _vmix_num_path(filename: str) -> str:
+    base = str(VMIX_NUMEROS_MEDIA_DIR or "").strip().rstrip("\\/")
+    if not base:
+        return filename
+    return os.path.join(base, filename)
+
+def _ensure_vmix_numeros_xml():
+    if os.path.exists(VMIX_NUMEROS_XML):
+        return
+    try:
+        _sync_vmix_numeros_xml_from_stack(_read_stack())
+    except Exception:
+        pass
+
+def _sync_vmix_numeros_xml_from_stack(stack):
+    """
+    XML paralelo para vMix con rutas directas a PNG:
+      - si el número está marcado: ruta_actual = E:\\MEDIA\\NUMEROS\\N.png
+      - si no está marcado:       ruta_actual = E:\\MEDIA\\NUMEROS\\INACTIVA.png
+    No toca datos_bingo.xml; es un espejo exclusivo para overlays/imágenes.
+    """
+    marked = set(int(x) for x in (stack or []) if 1 <= int(x) <= 75)
+    last = (stack or [])[-1] if stack else None
+    ult5 = list(reversed((stack or [])[-5:])) if stack else []
+
+    inactive_name = f"{VMIX_NUMEROS_INACTIVA_FILE}.png"
+    inactive_path = _vmix_num_path(inactive_name)
+
+    root = ET.Element("numeros")
+    meta = ET.SubElement(root, "meta")
+    ET.SubElement(meta, "directorio").text = str(VMIX_NUMEROS_MEDIA_DIR or "")
+    ET.SubElement(meta, "inactiva").text = inactive_path
+    ET.SubElement(meta, "ultimoMarcado").text = (str(last) if last is not None else "")
+    ET.SubElement(meta, "ultimos5").text = ",".join(str(x) for x in ult5)
+    ET.SubElement(meta, "totalMarcadas").text = str(len(marked))
+
+    items = ET.SubElement(root, "items")
+    for n in range(1, 76):
+        active = n in marked
+        active_path = _vmix_num_path(f"{n}.png")
+        current_path = active_path if active else inactive_path
+        ET.SubElement(
+            items,
+            "numero",
+            id=str(n),
+            valor=str(n),
+            archivo=f"{n}.png",
+            activo=("1" if active else "0"),
+            estado=("ACTIVO" if active else "INACTIVO"),
+            ultimo=("1" if last == n else "0"),
+            ruta_activa=active_path,
+            ruta_inactiva=inactive_path,
+            ruta_actual=current_path,
+        )
+
+    _write_game_xml_dual(ET.ElementTree(root), "vmix_numeros.xml")
+
 def _sync_bingo_xml_from_stack(stack):
     """
     Reglas pedidas (como tu captura):
@@ -12740,6 +12800,10 @@ def _sync_bingo_xml_from_stack(stack):
     root.find("ultimoMarcado").text = (str(last) if last is not None else "")
 
     tree.write(BINGO_XML, encoding="utf-8", xml_declaration=True)
+    try:
+        _sync_vmix_numeros_xml_from_stack(stack)
+    except Exception:
+        pass
 
 def _to_iso_date(s: str) -> str:
     s = (s or "").strip()
@@ -13339,6 +13403,11 @@ def juego_xml_bingo():
     _ensure_bingo_xml()
     return _no_cache_file(BINGO_XML)
 
+@juego_bp.get("/xml/numeros")
+def juego_xml_numeros():
+    _ensure_vmix_numeros_xml()
+    return _no_cache_file(VMIX_NUMEROS_XML)
+
 @juego_bp.get("/xml/spinners")
 def juego_xml_spinners():
     _ensure_vmix_xml()
@@ -13675,6 +13744,7 @@ def juego_vmix_panel():
             "titulo": "Juego",
             "items": [
                 {"nombre": "Bingo XML", "tipo": "xml", "url": f"{base}/juego/xml/bingo", "ruta": "/juego/xml/bingo", "nota": "Tablero de balotas para Data Source.", "disponible": True},
+                {"nombre": "Números PNG XML", "tipo": "xml", "url": f"{base}/juego/xml/numeros", "ruta": "/juego/xml/numeros", "nota": "Rutas de imágenes PNG por número para vMix.", "disponible": True},
                 {"nombre": "Spinners XML", "tipo": "xml", "url": f"{base}/juego/xml/spinners", "ruta": "/juego/xml/spinners", "nota": "Spinners activos para overlays.", "disponible": True},
                 {"nombre": "Ganadores XML", "tipo": "xml", "url": f"{base}/juego/ganadores.xml", "ruta": "/juego/ganadores.xml", "nota": "Listado de premios ganadores.", "disponible": True},
                 {"nombre": "Cartón ganador (tabla DS)", "tipo": "xml", "url": f"{base}/juego/xml/carton_ganador", "ruta": "/juego/xml/carton_ganador", "nota": "Tabla única para vMix Data Source.", "disponible": True},
@@ -13722,6 +13792,7 @@ def juego_vmix_links_json():
         "base_url": base,
         "links": {
             "bingo": f"{base}/juego/xml/bingo",
+            "numeros_png": f"{base}/juego/xml/numeros",
             "spinners": f"{base}/juego/xml/spinners",
             "ganadores": f"{base}/juego/ganadores.xml",
             "carton_ganador": f"{base}/juego/xml/carton_ganador",
