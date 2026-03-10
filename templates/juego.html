@@ -1600,7 +1600,25 @@
           <!-- TABLERO 75 COMPLETO (igual al del juego, sin deformarse) -->
           <div class="fix-panel full fix-panel-board75">
             <div class="fix-title">🎯 Tablero 75 (números salidos)</div>
-            <div class="fix-sub">Rojo = marcado · Gris = no ha salido · Azul = último</div>
+            <div class="fix-sub">Aquí también puedes marcar, reversar y resetear sin salir de la corrección.</div>
+
+            <div class="fix-toolbar" style="display:flex;gap:10px;align-items:end;flex-wrap:wrap;margin-top:10px">
+              <div class="we-field small">
+                <label>Marcar número</label>
+                <input id="fixMarkNumero" type="number" min="1" max="75" step="1" placeholder="Ej: 48">
+              </div>
+              <div class="fix-actions" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+                <button id="fixMarkBtn" class="btn start" type="button">➕ Marcar</button>
+                <button id="fixUndo1Btn" class="btn ghost" type="button">↩ Última</button>
+                <button id="fixUndoNBtn" class="btn ghost" type="button">↩ Varias</button>
+                <button id="fixResetBoardBtn" class="btn reset" type="button">🗑 Reset</button>
+                <button id="fixRefreshBoardBtn" class="btn ghost" type="button">🔄 Refrescar</button>
+              </div>
+            </div>
+
+            <div id="fixBoardInfo" class="hint" style="margin:10px 0 0">Marcadas: 0 · Última: 0</div>
+            <div id="fixLast5" class="last6" style="margin-top:10px"></div>
+
             <div class="fix-board-wrap" style="margin-top:10px">
               <div id="fixBoard75" class="board75 fix-grid75"></div>
             </div>
@@ -3245,8 +3263,16 @@ const fixModal = byId("fixBoletoModal");
   const fixInfo = byId("fixInfo");
   const fixBoard75 = byId("fixBoard75");
   const fixRefreshMeta = byId("fixRefreshMeta");
+  const fixBoardInfo = byId("fixBoardInfo");
+  const fixLast5 = byId("fixLast5");
+  const fixMarkNumero = byId("fixMarkNumero");
+  const fixMarkBtn = byId("fixMarkBtn");
+  const fixUndo1Btn = byId("fixUndo1Btn");
+  const fixUndoNBtn = byId("fixUndoNBtn");
+  const fixResetBoardBtn = byId("fixResetBoardBtn");
+  const fixRefreshBoardBtn = byId("fixRefreshBoardBtn");
 
-  const fixState = { stack: [], last: 0, total: 0, fecha: "" };
+  const fixState = { stack: [], last: 0, total: 0, fecha: "", ultimos5: [] };
 
 
   // Modo FIGURA (solo visual): rojo = figura, gris = otras marcadas
@@ -3519,27 +3545,110 @@ const fixModal = byId("fixBoletoModal");
 
   const refreshFixEstado = async () => {
     try{
-      const st = await safeFetch(`/juego/estado.json${bust()}`);
-      fixState.stack = st.stack || [];
-      fixState.last  = st.ultima || (fixState.stack.length ? fixState.stack[fixState.stack.length-1] : 0);
-      fixState.total = (st.stack||[]).length;
-    }catch(_){}
+      let st = await safeFetch(`/juego/admin/boletos/estado${bust()}`);
+      if (!st || st.ok === false){
+        st = await safeFetch(`/juego/estado.json${bust()}`);
+      }
+      const stack = Array.isArray(st?.stack) ? st.stack.map(Number).filter(n=>Number.isFinite(n)) : [];
+      const lastRaw = st?.last ?? st?.ultima ?? (stack.length ? stack[stack.length-1] : 0);
+      const last = Number(lastRaw || 0) || 0;
+      fixState.stack = stack;
+      fixState.last  = last;
+      fixState.total = Number(st?.total ?? stack.length) || stack.length;
+      fixState.ultimos5 = Array.isArray(st?.ultimos5) ? st.ultimos5.map(Number).filter(n=>Number.isFinite(n)) : [...stack].slice(-5).reverse();
+    }catch(_){ }
     try{ renderFixBoard75(); }catch(_){ }
+    try{ renderPreview(); }catch(_){ }
   };
 
   const renderFixBoard75 = () => {
     if (!fixBoard75) return;
-    const stack = fixState.stack || [];
-    const last  = fixState.last;
+    const stack = Array.isArray(fixState.stack) ? fixState.stack.map(Number) : [];
+    const marked = new Set(stack);
+    const last  = Number(fixState.last || 0) || 0;
+    const ult5 = Array.isArray(fixState.ultimos5) ? fixState.ultimos5.map(Number).filter(n=>Number.isFinite(n)) : [];
+
+    if (fixBoardInfo){
+      fixBoardInfo.textContent = `Marcadas: ${fixState.total || stack.length} · Última: ${last || 0}`;
+    }
+
+    if (fixLast5){
+      fixLast5.innerHTML = '';
+      if (!ult5.length){
+        const empty = document.createElement('div');
+        empty.className = 'hint';
+        empty.textContent = 'Aún no hay números marcados.';
+        fixLast5.appendChild(empty);
+      } else {
+        ult5.forEach((num, idx) => {
+          const c = document.createElement('div');
+          c.className = 'chip6' + (idx === 0 ? ' live' : '');
+          c.textContent = String(num);
+          c.title = idx === 0 ? 'Última balota' : `Hace ${idx} balota(s)`;
+          fixLast5.appendChild(c);
+        });
+      }
+    }
+
     fixBoard75.innerHTML = "";
     for(let n=1;n<=75;n++){
       const d=document.createElement('div');
-      const isMarked = stack.includes(n);
+      const isMarked = marked.has(n);
       d.className = isMarked ? (n===last ? 'ball marked last' : 'ball marked') : 'ball';
       d.textContent = n;
-      d.style.cursor = "default";
+      d.style.cursor = "pointer";
+      d.title = isMarked ? `Número ${n} ya marcado` : `Marcar ${n}`;
+      d.addEventListener('click', async () => {
+        try{ await markFixNumero(n); }
+        catch(e){ alert("❌ " + ((e && (e.message||e)) || "Error")); }
+      });
       fixBoard75.appendChild(d);
     }
+  };
+
+  const fixPostBoard = async (path, body={}) => {
+    const r = await fetch(path, {
+      method: "POST",
+      headers: {"Content-Type":"application/json"},
+      body: JSON.stringify(body || {})
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok || j.ok === false || j.success === false){
+      throw new Error(j.error || j.msg || r.statusText || "Error");
+    }
+    return j;
+  };
+
+  const applyFixPanelPayload = (j) => {
+    if (!j || typeof j !== 'object') return;
+    const panel = j.panel_numeros || j;
+    const stack = Array.isArray(panel.stack) ? panel.stack.map(Number).filter(n=>Number.isFinite(n)) : [];
+    fixState.stack = stack;
+    fixState.last = Number(panel.last ?? j.last ?? (stack.length ? stack[stack.length-1] : 0) || 0) || 0;
+    fixState.total = Number(panel.total ?? j.total ?? j.total_marcadas ?? stack.length) || stack.length;
+    fixState.ultimos5 = Array.isArray(panel.ultimos5) ? panel.ultimos5.map(Number).filter(n=>Number.isFinite(n)) : [...stack].slice(-5).reverse();
+  };
+
+  const markFixNumero = async (nOverride=null) => {
+    const raw = nOverride != null ? nOverride : normCell(fixMarkNumero?.value);
+    const n = Number(raw);
+    if (!Number.isInteger(n) || n < 1 || n > 75) throw new Error('Ingresa un número válido entre 1 y 75.');
+    await fixPostBoard('/juego/admin/boletos/marcar', {numero:n});
+    if (fixMarkNumero) fixMarkNumero.value = '';
+    await refreshFixEstado();
+  };
+
+  const reversaFixPanel = async (k=1) => {
+    const kk = Number(k);
+    if (!Number.isInteger(kk) || kk < 1) throw new Error('Cantidad inválida para reversa.');
+    await fixPostBoard('/juego/admin/boletos/reversa', {k:kk});
+    await refreshFixEstado();
+  };
+
+  const resetFixPanel = async () => {
+    if (!confirm('¿Seguro que quieres resetear las balotas desde la corrección?')) return;
+    await fixPostBoard('/juego/admin/boletos/reset', {});
+    await refreshFixEstado();
   };
 
   const refreshFixMeta = async (keyOverride=null) => {
@@ -3578,8 +3687,8 @@ const fixModal = byId("fixBoletoModal");
     const j = await postJSON("/juego/admin/boletos/get", {key, serie_archivo, carton_id});
     buildGridInputs(j.grid || j.original_grid || null);
     fixState.fecha = j.fecha || fixState.fecha || "";
-    fixState.last = j.last || fixState.last || 0;
-    fixState.total = j.total_marcadas || fixState.total || 0;
+    applyFixPanelPayload(j);
+    renderFixBoard75();
     renderPreview();
     if (j.has_correction) {
       fixInfo.textContent = `${fixInfo.textContent} · ⚠ Este boleto ya tenía una corrección guardada.`;
@@ -3684,6 +3793,36 @@ const fixModal = byId("fixBoletoModal");
 
     if (fixSave) fixSave.addEventListener("click", async () => {
       try{ await saveBoleto(); }
+      catch(e){ alert("❌ " + (e.message || e)); }
+    });
+
+    if (fixMarkBtn) fixMarkBtn.addEventListener("click", async () => {
+      try{ await markFixNumero(); }
+      catch(e){ alert("❌ " + (e.message || e)); }
+    });
+    if (fixMarkNumero) fixMarkNumero.addEventListener("keydown", async (ev) => {
+      if (ev.key === 'Enter'){
+        ev.preventDefault();
+        try{ await markFixNumero(); }
+        catch(e){ alert("❌ " + (e.message || e)); }
+      }
+    });
+    if (fixUndo1Btn) fixUndo1Btn.addEventListener("click", async () => {
+      try{ await reversaFixPanel(1); }
+      catch(e){ alert("❌ " + (e.message || e)); }
+    });
+    if (fixUndoNBtn) fixUndoNBtn.addEventListener("click", async () => {
+      const raw = prompt('¿Cuántas balotas quieres reversar?', '5');
+      if (raw === null) return;
+      try{ await reversaFixPanel(parseInt(String(raw).trim(), 10) || 1); }
+      catch(e){ alert("❌ " + (e.message || e)); }
+    });
+    if (fixResetBoardBtn) fixResetBoardBtn.addEventListener("click", async () => {
+      try{ await resetFixPanel(); }
+      catch(e){ alert("❌ " + (e.message || e)); }
+    });
+    if (fixRefreshBoardBtn) fixRefreshBoardBtn.addEventListener("click", async () => {
+      try{ await refreshFixEstado(); }
       catch(e){ alert("❌ " + (e.message || e)); }
     });
 
