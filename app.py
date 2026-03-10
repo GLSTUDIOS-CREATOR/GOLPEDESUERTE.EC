@@ -4151,6 +4151,7 @@ def series_impresas_en_fecha(fecha_iso):
             s.add(serie)
     return sorted(s)
 
+
 def fechas_impresas_disponibles():
     _, r = _imp_root()
     fechas = set()
