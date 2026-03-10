@@ -15563,11 +15563,22 @@ def _hf_admin_boletos_get():
             orig_grid = payload.get("grid")
     except Exception:
         orig_grid = payload.get("grid")
+    stack = _read_stack() or []
     payload["original_grid"] = orig_grid
     payload["grid"] = payload.get("grid") or orig_grid
     payload["has_correction"] = bool(corr)
     payload["motivo"] = str(corr.get("motivo","") or "")
     payload["corregido_por"] = str(corr.get("user","") or "")
+    payload["stack"] = stack
+    payload["last"] = (stack[-1] if stack else None)
+    payload["total"] = len(stack)
+    payload["ultimos5"] = list(reversed(stack[-5:]))
+    payload["panel_numeros"] = {
+        "stack": stack,
+        "last": (stack[-1] if stack else None),
+        "total": len(stack),
+        "ultimos5": list(reversed(stack[-5:])),
+    }
     return jsonify(payload)
 
 @app.post("/juego/admin/boletos/save")
@@ -15636,6 +15647,30 @@ def _hf_admin_boletos_save():
         return jsonify(ok=True, warning=f"Corrección guardada, pero no se pudo recalcular: {_e}")
 
     return jsonify(ok=True, msg="Corrección guardada y juego recalculado", fecha=fecha)
+
+@app.get("/juego/admin/boletos/estado")
+def _hf_admin_boletos_estado():
+    stack = _read_stack()
+    last = (stack[-1] if stack else None)
+    return jsonify(
+        ok=True,
+        stack=stack,
+        last=last,
+        total=len(stack),
+        ultimos5=list(reversed(stack[-5:])),
+    )
+
+@app.post("/juego/admin/boletos/marcar")
+def _hf_admin_boletos_marcar():
+    return juego_marcar()
+
+@app.post("/juego/admin/boletos/reversa")
+def _hf_admin_boletos_reversa():
+    return juego_reversa()
+
+@app.post("/juego/admin/boletos/reset")
+def _hf_admin_boletos_reset():
+    return juego_reset()
 
 print("[HOTFIX FINAL] APIs de juego y sincronización activadas")
 
