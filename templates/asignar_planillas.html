@@ -367,7 +367,6 @@
     location.href = `?${qs.toString()}`;
   }
 
-  // Selector inferior "Ver día"
   document.getElementById('fecha-select')?.addEventListener('change', ()=>{
     const f = document.getElementById('fecha-select').value;
     const s = document.getElementById('serie-select-view').value;
@@ -380,14 +379,12 @@
     recargarVista(f, s);
   });
 
-  // Fecha principal de arriba
   document.getElementById('fecha-input')?.addEventListener('change', ()=>{
     const f = document.getElementById('fecha-input').value;
     const s = document.getElementById('serie-select')?.value || '';
     recargarVista(f, s);
   });
 
-  // Serie principal de arriba
   document.getElementById('serie-select')?.addEventListener('change', ()=>{
     const f = document.getElementById('fecha-input')?.value || '';
     const s = document.getElementById('serie-select').value;
