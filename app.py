@@ -1697,7 +1697,7 @@ def _try_draw_qr_on_canvas(c, data, x, y, size):
         if total <= 0:
             return False
 
-        module = max(1.0, float(size) / float(total))
+        module = float(size) / float(total)
         qr_size = module * total
         ox = x + (size - qr_size) / 2.0
         oy = y + (size - qr_size) / 2.0
@@ -1844,7 +1844,7 @@ def generar_pdf_boletos_excel(
                                 )
                         except Exception:
                             pass
-                        _try_draw_qr_on_canvas(c, qr_data, cx + 2, cy + 2, (size - 4) * 0.50)
+                        _try_draw_qr_on_canvas(c, qr_data, cx + 2, cy + 2, (size - 4) * 0.62)
                     else:
                         v = str(row.get(f"{letra}{r+1}", "-"))
                         c.drawCentredString(cx + size / 2, cy + size * 0.28, v)
