@@ -14466,6 +14466,142 @@ def juego_figuras_sync_xml():
     return jsonify(ok=True, fecha=fecha, origen_xml=path_xml, figuras=figs)
 
 # ============================================================
+#  vMix XML extra: TOTAL A JUGAR + ESTADO DE FIGURAS
+# ============================================================
+VMIX_TOTAL_JUGAR_REL = "vmix_total_jugar.xml"
+VMIX_FIGURAS_ESTADO_REL = "vmix_figuras_estado.xml"
+
+
+def _vmix_money_fmt(v):
+    try:
+        return f"${_fmt_int(v)}"
+    except Exception:
+        try:
+            return f"${int(float(str(v).replace(',', '.')))}"
+        except Exception:
+            return "$0"
+
+
+def _vmix_total_jugar_root(fecha: str | None = None):
+    fecha = str(fecha or _get_sorteo_fecha() or date.today().isoformat()).strip()
+    cfg = _sorteo_read_config(fecha) or {}
+    activo = _get_sorteo_activo_info() or {}
+
+    valor = _fmt_int(cfg.get('total_a_jugar') or 0)
+    premios = _fmt_int(cfg.get('total_premios') or 0)
+    boletos = _fmt_int(cfg.get('boletos_impresos') or 0)
+    valor_boleto = _fmt_int(cfg.get('valor_boleto') or 0)
+    nombre_sorteo = (cfg.get('nombre_sorteo') or activo.get('nombre_sorteo') or f'Sorteo {fecha}').strip()
+    identificador = (cfg.get('identificador') or activo.get('identificador') or '').strip()
+
+    root = ET.Element('total_jugar', {
+        'fecha': fecha,
+        'sorteo': nombre_sorteo,
+        'identificador': identificador,
+        'orden': 'filas',
+    })
+    fila = ET.SubElement(root, 'fila')
+    ET.SubElement(fila, 'fecha').text = fecha
+    ET.SubElement(fila, 'sorteo').text = nombre_sorteo
+    ET.SubElement(fila, 'identificador').text = identificador
+    ET.SubElement(fila, 'concepto').text = 'TOTAL A JUGAR'
+    ET.SubElement(fila, 'valor').text = valor
+    ET.SubElement(fila, 'valor_fmt').text = _vmix_money_fmt(valor)
+    ET.SubElement(fila, 'total_premios').text = premios
+    ET.SubElement(fila, 'total_premios_fmt').text = _vmix_money_fmt(premios)
+    ET.SubElement(fila, 'boletos_impresos').text = boletos
+    ET.SubElement(fila, 'valor_boleto').text = valor_boleto
+    ET.SubElement(fila, 'valor_boleto_fmt').text = _vmix_money_fmt(valor_boleto)
+    return root
+
+
+def _winner_name_for_vmix(g: dict) -> str:
+    nombre = str((g or {}).get('nombre') or '').strip()
+    if nombre:
+        return nombre
+    boleto = str((g or {}).get('boleto') or '').strip()
+    if boleto:
+        return f'BOLETO #{boleto}'
+    vendedor = str((g or {}).get('vendedor') or '').strip()
+    if vendedor:
+        return vendedor
+    sector = str((g or {}).get('sector') or '').strip()
+    if sector:
+        return sector
+    return '-'
+
+
+def _vmix_figuras_estado_root(fecha: str | None = None):
+    fecha = str(fecha or _get_sorteo_fecha() or date.today().isoformat()).strip()
+    resultados = _cargar_resultados(fecha) or {'items': []}
+    items = list(resultados.get('items') or [])
+
+    root = ET.Element('figuras_estado', {
+        'fecha': fecha,
+        'total': str(len(items)),
+        'orden': 'filas',
+    })
+
+    for idx, item in enumerate(items, start=1):
+        nombre_raw = str(item.get('figura') or item.get('nombre') or '').strip()
+        if not nombre_raw:
+            continue
+        figura = _panel_name_display(nombre_raw)
+        ganadores = list(item.get('ganadores') or [])
+        ganador_nombres = []
+        for g in ganadores:
+            nom = _winner_name_for_vmix(g)
+            if nom != '-':
+                ganador_nombres.append(nom)
+        ganador_txt = ' / '.join(ganador_nombres) if ganador_nombres else '-'
+        jugada = '1' if ganadores else '0'
+        estado = 'JUGADA' if ganadores else 'PENDIENTE'
+        texto = f'{figura} -' if not ganadores else f'{figura} {ganador_txt}'
+        premio = '0'
+        try:
+            if ganadores:
+                premio = _fmt_int(ganadores[0].get('premio') or 0)
+        except Exception:
+            premio = '0'
+
+        fila = ET.SubElement(root, 'fila')
+        ET.SubElement(fila, 'orden').text = str(idx)
+        ET.SubElement(fila, 'figura').text = figura
+        ET.SubElement(fila, 'figura_raw').text = nombre_raw
+        ET.SubElement(fila, 'estado').text = estado
+        ET.SubElement(fila, 'jugada').text = jugada
+        ET.SubElement(fila, 'ganador').text = ganador_txt
+        ET.SubElement(fila, 'texto').text = texto
+        ET.SubElement(fila, 'cantidad_ganadores').text = str(len(ganadores))
+        ET.SubElement(fila, 'premio').text = premio
+        ET.SubElement(fila, 'premio_fmt').text = _vmix_money_fmt(premio)
+
+    return root
+
+
+@juego_bp.get('/xml/total_jugar')
+def juego_xml_total_jugar():
+    fecha = (request.args.get('fecha') or _get_sorteo_fecha()).strip()
+    root = _vmix_total_jugar_root(fecha)
+    try:
+        _write_xml_both(ET.ElementTree(root), VMIX_TOTAL_JUGAR_REL)
+    except Exception:
+        pass
+    return _vmix_xml_response(root)
+
+
+@juego_bp.get('/xml/figuras_estado')
+def juego_xml_figuras_estado():
+    fecha = (request.args.get('fecha') or _get_sorteo_fecha()).strip()
+    root = _vmix_figuras_estado_root(fecha)
+    try:
+        _write_xml_both(ET.ElementTree(root), VMIX_FIGURAS_ESTADO_REL)
+    except Exception:
+        pass
+    return _vmix_xml_response(root)
+
+
+# ============================================================
 #  REGISTRO BP + INICIALIZACIÓN
 # ============================================================
 def register_juego(app):
