@@ -1844,7 +1844,10 @@ def generar_pdf_boletos_excel(
                                 )
                         except Exception:
                             pass
-                        _try_draw_qr_on_canvas(c, qr_data, cx + 2, cy + 2, (size - 4) * 1.20)
+                        qr_target = (size - 4) * 0.62
+                        qr_x = cx + (size - qr_target) / 2.0
+                        qr_y = cy + (size - qr_target) / 2.0
+                        _try_draw_qr_on_canvas(c, qr_data, qr_x, qr_y, qr_target)
                     else:
                         v = str(row.get(f"{letra}{r+1}", "-"))
                         c.drawCentredString(cx + size / 2, cy + size * 0.28, v)
