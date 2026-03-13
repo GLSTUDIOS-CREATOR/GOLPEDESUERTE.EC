@@ -1697,7 +1697,7 @@ def _try_draw_qr_on_canvas(c, data, x, y, size):
         if total <= 0:
             return False
 
-        module = float(size) / float(total)
+        module = max(1.0, float(size) / float(total))
         qr_size = module * total
         ox = x + (size - qr_size) / 2.0
         oy = y + (size - qr_size) / 2.0
@@ -1844,10 +1844,7 @@ def generar_pdf_boletos_excel(
                                 )
                         except Exception:
                             pass
-                        qr_target = (size - 4) * 1.20
-                        qr_x = cx + (size - qr_target) / 2.0
-                        qr_y = cy + (size - qr_target) / 2.0
-                        _try_draw_qr_on_canvas(c, qr_data, qr_x, qr_y, qr_target)
+                        _try_draw_qr_on_canvas(c, qr_data, cx + 2, cy + 2, size - 4)
                     else:
                         v = str(row.get(f"{letra}{r+1}", "-"))
                         c.drawCentredString(cx + size / 2, cy + size * 0.28, v)
@@ -14473,6 +14470,7 @@ def juego_figuras_sync_xml():
 # ============================================================
 VMIX_TOTAL_JUGAR_REL = "vmix_total_jugar.xml"
 VMIX_FIGURAS_ESTADO_REL = "vmix_figuras_estado.xml"
+VMIX_FIGURAS_ESTADO_2COL_REL = "vmix_figuras_estado_2col.xml"
 
 
 def _vmix_money_fmt(v):
@@ -14532,6 +14530,60 @@ def _winner_name_for_vmix(g: dict) -> str:
     if sector:
         return sector
     return '-'
+
+
+def _winner_ticket_text_for_vmix(g: dict) -> str:
+    nombre = str((g or {}).get('nombre') or '').strip()
+    boleto = str((g or {}).get('boleto') or '').strip()
+    vendedor = str((g or {}).get('vendedor') or '').strip()
+    sector = str((g or {}).get('sector') or '').strip()
+
+    if boleto and nombre:
+        return f'#{boleto} {nombre}'
+    if boleto:
+        return f'#{boleto}'
+    if nombre:
+        return nombre
+    if vendedor:
+        return vendedor
+    if sector:
+        return sector
+    return '-'
+
+
+def _vmix_figuras_estado_2col_root(fecha: str | None = None):
+    fecha = str(fecha or _get_sorteo_fecha() or date.today().isoformat()).strip()
+    resultados = _cargar_resultados(fecha) or {'items': []}
+    items = list(resultados.get('items') or [])
+
+    root = ET.Element('figuras_estado_2col', {
+        'fecha': fecha,
+        'total': str(len(items)),
+        'orden': 'filas',
+    })
+
+    for idx, item in enumerate(items, start=1):
+        nombre_raw = str(item.get('figura') or item.get('nombre') or '').strip()
+        if not nombre_raw:
+            continue
+
+        figura = _panel_name_display(nombre_raw)
+        ganadores = list(item.get('ganadores') or [])
+        if ganadores:
+            valores = []
+            for g in ganadores:
+                t = _winner_ticket_text_for_vmix(g)
+                if t and t != '-':
+                    valores.append(t)
+            resultado = ' / '.join(valores) if valores else '-'
+        else:
+            resultado = '-'
+
+        fila = ET.SubElement(root, 'fila')
+        ET.SubElement(fila, 'figura').text = figura
+        ET.SubElement(fila, 'resultado').text = resultado
+
+    return root
 
 
 def _vmix_figuras_estado_root(fecha: str | None = None):
@@ -14599,6 +14651,17 @@ def juego_xml_figuras_estado():
     root = _vmix_figuras_estado_root(fecha)
     try:
         _write_xml_both(ET.ElementTree(root), VMIX_FIGURAS_ESTADO_REL)
+    except Exception:
+        pass
+    return _vmix_xml_response(root)
+
+
+@juego_bp.get('/xml/figuras_estado_2col')
+def juego_xml_figuras_estado_2col():
+    fecha = (request.args.get('fecha') or _get_sorteo_fecha()).strip()
+    root = _vmix_figuras_estado_2col_root(fecha)
+    try:
+        _write_xml_both(ET.ElementTree(root), VMIX_FIGURAS_ESTADO_2COL_REL)
     except Exception:
         pass
     return _vmix_xml_response(root)
