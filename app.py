@@ -12217,6 +12217,25 @@ def _write_ganadores_detalle_xml(fecha_iso: str, ganadores: list):
         ET.SubElement(fila, "serie").text = serie
         ET.SubElement(fila, "scan_at").text = scan_at
         ET.SubElement(fila, "ultima_bola").text = str(g.get("ultima_bola") or "")
+        texto_completo = " | ".join([
+            f"BOLETO {boleto}" if boleto else "",
+            f"FIGURA {figura_nombre}" if figura_nombre else "",
+            f"NRO FIGURA {figura_numero}" if figura_numero else "",
+            f"VALOR ${float(valor_figura or 0.0):.2f}",
+            f"VENDEDOR {vendedor}" if vendedor else "",
+            f"PLANILLA {planilla}" if planilla else "",
+            f"RANGO {rango}" if rango else "",
+            f"SECTOR {sector}" if sector else "",
+            f"NOMBRE {nombre}" if nombre else "",
+            f"CLIENTE {nombre}" if nombre else "",
+            f"CABALA {nombre}" if nombre else "",
+            f"CELULAR {celular}" if celular else "",
+            f"SERIE {serie}" if serie else "",
+            f"SCAN {scan_at}" if scan_at else "",
+            f"ULTIMA BOLA {str(g.get('ultima_bola') or "")}" if str(g.get('ultima_bola') or "") else "",
+        ])
+        texto_completo = " | ".join([x for x in texto_completo.split(" | ") if x])
+        ET.SubElement(fila, "texto_completo").text = texto_completo
 
         filas_cache.append({
             "numero_figura": figura_numero,
@@ -12233,12 +12252,13 @@ def _write_ganadores_detalle_xml(fecha_iso: str, ganadores: list):
             "celular": celular,
             "serie": serie,
             "scan_at": scan_at,
-            "ultima_bola": str(g.get("ultima_bola") or "")
+            "ultima_bola": str(g.get("ultima_bola") or ""),
+            "texto_completo": texto_completo
         })
 
     ult = filas_cache[-1] if filas_cache else {}
     ultimo = ET.SubElement(root, "ultimo")
-    for k in ("numero_figura", "figura", "valor_figura", "boleto", "vendedor", "planilla", "rango", "sector", "nombre", "cliente_nombre", "cabala", "celular", "serie", "scan_at", "ultima_bola"):
+    for k in ("numero_figura", "figura", "valor_figura", "boleto", "vendedor", "planilla", "rango", "sector", "nombre", "cliente_nombre", "cabala", "celular", "serie", "scan_at", "ultima_bola", "texto_completo"):
         v = ult.get(k, "")
         if k == "valor_figura" and v not in ("", None):
             v = f"{float(v or 0.0):.2f}"
@@ -12973,9 +12993,38 @@ def juego_ganadores_detalle_xml():
     if not path or not os.path.exists(path):
         fecha = _get_sorteo_fecha()
         data = _safe_json_read(GANADORES_JSON) or {}
-        _write_ganadores_detalle_xml(str(fecha), data.get(str(fecha), []) or [])
+        try:
+            _write_ganadores_detalle_xml(str(fecha), data.get(str(fecha), []) or [])
+        except Exception:
+            pass
         path = GANADORES_DETALLE_XML if os.path.exists(GANADORES_DETALLE_XML) else GANADORES_DETALLE_XML_PUBLIC
-    return send_file(path, mimetype="application/xml", as_attachment=False, download_name="vmix_ganadores_detalle.xml")
+
+    if path and os.path.exists(path):
+        return send_file(path, mimetype="application/xml", as_attachment=False, download_name="vmix_ganadores_detalle.xml")
+
+    fecha = str(_get_sorteo_fecha() or "")
+    xml_fallback = f"""<?xml version="1.0" encoding="utf-8"?>
+<ganadores_detalle fecha="{fecha}" total="0">
+  <ultimo>
+    <numero_figura></numero_figura>
+    <figura></figura>
+    <valor_figura>0.00</valor_figura>
+    <boleto></boleto>
+    <vendedor></vendedor>
+    <planilla></planilla>
+    <rango></rango>
+    <sector></sector>
+    <nombre></nombre>
+    <cliente_nombre></cliente_nombre>
+    <cabala></cabala>
+    <celular></celular>
+    <serie></serie>
+    <scan_at></scan_at>
+    <ultima_bola></ultima_bola>
+    <texto_completo></texto_completo>
+  </ultimo>
+</ganadores_detalle>""".strip()
+    return Response(xml_fallback, mimetype="application/xml")
 
 # ============================================================
 #  HELPERS JSON/XML
