@@ -6012,6 +6012,45 @@ def _figuras_de_fecha(fecha_iso):
             return out
     return []
 
+
+def _siguiente_fecha_con_figuras(fecha_base_iso: str) -> str:
+    """
+    Devuelve la siguiente fecha REAL programada en figuras_por_fecha.xml.
+    Si no existe una fecha posterior, mantiene compatibilidad devolviendo
+    el día calendario siguiente a fecha_base_iso.
+    """
+    base = (fecha_base_iso or "").strip()
+    if not _is_fecha_iso(base):
+        base = date.today().isoformat()
+
+    try:
+        base_date = datetime.fromisoformat(base).date()
+    except Exception:
+        base_date = date.today()
+        base = base_date.isoformat()
+
+    candidatas = []
+    try:
+        _ensure_xml(FIGURAS_FECHA_XML, "agenda")
+        root = ET.parse(FIGURAS_FECHA_XML).getroot()
+        for d in root.findall("dia"):
+            fecha_txt = (d.attrib.get("fecha") or "").strip()
+            if not _is_fecha_iso(fecha_txt):
+                continue
+            try:
+                fecha_d = datetime.fromisoformat(fecha_txt).date()
+            except Exception:
+                continue
+            if fecha_d > base_date:
+                candidatas.append(fecha_d)
+    except Exception:
+        candidatas = []
+
+    if candidatas:
+        return min(candidatas).isoformat()
+
+    return (base_date + timedelta(days=1)).isoformat()
+
 # ------------------ Formas 5x5 ------------------
 def _load_shapes():
     shapes = {}
@@ -6726,10 +6765,10 @@ def api_figuras_manana():
     base = (request.args.get("fecha") or date.today().isoformat()).strip()
     if not _is_fecha_iso(base):
         base = date.today().isoformat()
-    manana = (datetime.fromisoformat(base) + timedelta(days=1)).date().isoformat()
-    figs = _figuras_de_fecha(manana)
+    fecha_objetivo = _siguiente_fecha_con_figuras(base)
+    figs = _figuras_de_fecha(fecha_objetivo)
     total = sum((f.get("valor") or 0.0) for f in figs)
-    return jsonify({"ok": True, "fecha": manana, "figuras": figs, "total": total})
+    return jsonify({"ok": True, "fecha": fecha_objetivo, "figuras": figs, "total": total})
 
 @app.get("/api/resultados")
 def api_resultados():
@@ -6858,10 +6897,10 @@ def api_layout_get():
     fecha = (request.args.get("fecha") or date.today().isoformat()).strip()
     if not _is_fecha_iso(fecha):
         fecha = date.today().isoformat()
-    manana = (datetime.fromisoformat(fecha) + timedelta(days=1)).date().isoformat()
-    figs = _figuras_de_fecha(manana)
+    fecha_objetivo = _siguiente_fecha_con_figuras(fecha)
+    figs = _figuras_de_fecha(fecha_objetivo)
     lay  = _layout_for(fecha, figs, scale=FIG_BLOCK_SCALE, fixed_cols=FIG_FIXED_COLS)
-    return jsonify({"ok": True, "layout": lay, "figuras": figs})
+    return jsonify({"ok": True, "fecha": fecha_objetivo, "layout": lay, "figuras": figs})
 
 @app.post("/api/boletin-layout/save")
 def api_layout_save():
@@ -6937,9 +6976,9 @@ def boletin_pdf():
         SPIN_SCALE = max(0.5, min(1.6, _float_arg("spin_scale", 1.00)))
 
         dt = datetime.fromisoformat(fecha).date()
-        manana = (dt + timedelta(days=1)).isoformat()
+        fecha_objetivo = _siguiente_fecha_con_figuras(fecha)
 
-        figs_manana  = _figuras_de_fecha(manana)
+        figs_manana  = _figuras_de_fecha(fecha_objetivo)
         total_manana = sum((f.get("valor") or 0.0) for f in figs_manana)
         resultados   = _cargar_resultados(fecha)
         shapes       = _load_shapes()
@@ -6999,7 +7038,7 @@ def boletin_pdf():
         c.setFont(FONT, 18)
         c.drawCentredString(W/2, H - 42, T("JUEGO HOY"))
         c.setFont(FONT, 11)
-        c.drawCentredString(W/2, H - 58, T(_es_corta(manana).capitalize()))
+        c.drawCentredString(W/2, H - 58, T(_es_corta(fecha_objetivo).capitalize()))
 
         # Total a jugar
         TL = layout.get("total", {"x": W - 22, "y": 24, "size": 56, "align": "right"})
