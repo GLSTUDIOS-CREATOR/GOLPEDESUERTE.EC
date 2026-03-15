@@ -12965,6 +12965,7 @@ def juego_ganadores_xml():
     return send_file(path, mimetype="application/xml", as_attachment=False, download_name="ganadores.xml")
 
 
+@juego_bp.get("/xml/ganadores_detalle")
 @juego_bp.get("/ganadores_detalle.xml")
 def juego_ganadores_detalle_xml():
     """XML extra para vMix con vendedor, sector, número de figura y valor."""
@@ -14066,6 +14067,7 @@ def juego_vmix_panel():
                 {"nombre": "Números PNG XML", "tipo": "xml", "url": f"{base}/juego/xml/numeros", "ruta": "/juego/xml/numeros", "nota": "Rutas de imágenes PNG por número para vMix.", "disponible": True},
                 {"nombre": "Spinners XML", "tipo": "xml", "url": f"{base}/juego/xml/spinners", "ruta": "/juego/xml/spinners", "nota": "Spinners activos para overlays.", "disponible": True},
                 {"nombre": "Ganadores XML", "tipo": "xml", "url": f"{base}/juego/ganadores.xml", "ruta": "/juego/ganadores.xml", "nota": "Listado de premios ganadores.", "disponible": True},
+                {"nombre": "Ganadores detalle XML", "tipo": "xml", "url": f"{base}/juego/ganadores_detalle.xml", "ruta": "/juego/ganadores_detalle.xml", "nota": "Detalle ganador por fila: boleto, figura, vendedor, sector y datos QR.", "disponible": True},
                 {"nombre": "Cartón ganador (tabla DS)", "tipo": "xml", "url": f"{base}/juego/xml/carton_ganador", "ruta": "/juego/xml/carton_ganador", "nota": "Tabla única para vMix Data Source.", "disponible": True},
                 {"nombre": "Cartón ganador (siguiente)", "tipo": "xml", "url": f"{base}/juego/xml/carton_ganador/next", "ruta": "/juego/xml/carton_ganador/next", "nota": "Avanza al siguiente ganador.", "disponible": True},
                 {"nombre": "Cartón ganador (anterior)", "tipo": "xml", "url": f"{base}/juego/xml/carton_ganador/prev", "ruta": "/juego/xml/carton_ganador/prev", "nota": "Regresa al ganador anterior.", "disponible": True},
@@ -14114,6 +14116,7 @@ def juego_vmix_links_json():
             "numeros_png": f"{base}/juego/xml/numeros",
             "spinners": f"{base}/juego/xml/spinners",
             "ganadores": f"{base}/juego/ganadores.xml",
+            "ganadores_detalle": f"{base}/juego/ganadores_detalle.xml",
             "carton_ganador": f"{base}/juego/xml/carton_ganador",
             "carton_ganador_next": f"{base}/juego/xml/carton_ganador/next",
             "carton_ganador_prev": f"{base}/juego/xml/carton_ganador/prev",
