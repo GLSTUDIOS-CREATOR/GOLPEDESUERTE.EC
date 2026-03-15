@@ -2308,6 +2308,63 @@ def _qr_buscar_registro_ticket(fecha_iso, serie_archivo, boleto_id):
         pass
     return None
 
+def _qr_buscar_registro_ticket_flexible(fecha_iso, boleto_id, serie_archivo=""):
+    """
+    Busca primero por fecha+serie+boleto.
+    Si no encuentra y la serie no coincide o viene vacía, toma cualquier registro
+    del mismo boleto en esa fecha, priorizando el más reciente por scan_at.
+    """
+    fecha_iso = str(fecha_iso or "").strip()
+    boleto_id = str(boleto_id or "").strip()
+    serie_archivo = str(serie_archivo or "").strip()
+
+    if not fecha_iso or not boleto_id:
+        return None
+
+    exact = _qr_buscar_registro_ticket(fecha_iso, serie_archivo, boleto_id)
+    if exact:
+        return exact
+
+    try:
+        _qr_ensure_xml(QR_REGISTROS_XML, "registros_qr")
+        root = ET.parse(QR_REGISTROS_XML).getroot()
+        candidatos = []
+        for r in root.findall("registro"):
+            if (r.attrib.get("fecha_sorteo", "").strip() != fecha_iso):
+                continue
+            if (r.attrib.get("boleto", "").strip() != boleto_id):
+                continue
+            candidatos.append({
+                "cliente_nombre": r.attrib.get("cliente_nombre", ""),
+                "sector": r.attrib.get("sector", ""),
+                "celular": r.attrib.get("celular", ""),
+                "vendedor": r.attrib.get("vendedor", ""),
+                "planilla": r.attrib.get("planilla", ""),
+                "scan_at": r.attrib.get("scan_at", ""),
+                "serie": r.attrib.get("serie", ""),
+            })
+
+        if not candidatos:
+            return None
+
+        if serie_archivo:
+            same_serie = [x for x in candidatos if _serie_equal(x.get("serie", ""), serie_archivo)]
+            if same_serie:
+                candidatos = same_serie
+
+        candidatos.sort(key=lambda x: x.get("scan_at", ""), reverse=True)
+        top = candidatos[0]
+        return {
+            "cliente_nombre": top.get("cliente_nombre", ""),
+            "sector": top.get("sector", ""),
+            "celular": top.get("celular", ""),
+            "vendedor": top.get("vendedor", ""),
+            "planilla": top.get("planilla", ""),
+            "scan_at": top.get("scan_at", ""),
+        }
+    except Exception:
+        return None
+
 def _qr_refrescar_vmix_clientes(fecha_iso=None):
     try:
         _qr_ensure_xml(QR_REGISTROS_XML, "registros_qr")
@@ -6337,6 +6394,25 @@ def _guardar_resultados(fecha_iso, resultados, extras=None):
     # escribir y espejar en ambas rutas (persistente + static/db)
     xml_bytes = ET.tostring(root, encoding="utf-8", xml_declaration=True)
     _boletin_write_resultados_xml(xml_bytes)
+
+    try:
+        flat_ganadores = []
+        for item in (resultados or []):
+            figura_nom = str(item.get("figura") or "").strip()
+            for g in (item.get("ganadores") or []):
+                if not isinstance(g, dict):
+                    continue
+                flat_ganadores.append({
+                    "figura": figura_nom,
+                    "boleto": str(g.get("boleto") or "").strip(),
+                    "nombre": str(g.get("nombre") or "").strip(),
+                    "vendedor": str(g.get("vendedor") or "").strip(),
+                    "sector": str(g.get("sector") or "").strip(),
+                    "premio": _safe_float(g.get("premio")),
+                })
+        _write_ganadores_detalle_xml(fecha_iso, flat_ganadores)
+    except Exception:
+        pass
 
 def _sync_resultados_from_juego(fecha_iso, ganadores):
     """
@@ -11070,10 +11146,12 @@ juego_bp = Blueprint("juego", __name__, url_prefix="/juego")
 # ============================
 from collections import defaultdict
 
-GANADORES_XML         = os.path.join(DB_DIR, "ganadores.xml")
-GANADORES_JSON        = os.path.join(DB_DIR, "ganadores.json")
-GANADORES_STATE_JSON  = os.path.join(DB_DIR, "ganadores_state.json")
-GANADORES_XML_PUBLIC  = os.path.join(BASE_DIR, "static", "db", "ganadores.xml")  # compat (por si alguien lee static/db)
+GANADORES_XML                = os.path.join(DB_DIR, "ganadores.xml")
+GANADORES_JSON               = os.path.join(DB_DIR, "ganadores.json")
+GANADORES_STATE_JSON         = os.path.join(DB_DIR, "ganadores_state.json")
+GANADORES_XML_PUBLIC         = os.path.join(BASE_DIR, "static", "db", "ganadores.xml")  # compat (por si alguien lee static/db)
+GANADORES_DETALLE_XML        = os.path.join(DB_DIR, "vmix_ganadores_detalle.xml")
+GANADORES_DETALLE_XML_PUBLIC = os.path.join(BASE_DIR, "static", "db", "vmix_ganadores_detalle.xml")
 
 def _safe_json_read(path):
     fn = globals().get("_json_read")
@@ -11988,6 +12066,196 @@ def _dedupe_ganadores(fecha_iso: str, ganadores: list) -> list:
         out.append(gg)
     return out
 
+def _ganadores_figuras_meta(fecha_iso: str):
+    """
+    Devuelve el orden real y valor de las figuras del día.
+    - order_map: nombre_normalizado -> índice 1-based
+    - value_map: nombre_normalizado -> valor
+    - name_map: nombre_normalizado -> nombre original
+    """
+    order_map, value_map, name_map = {}, {}, {}
+    try:
+        figs = _load_figuras_por_fecha(str(fecha_iso)) or []
+    except Exception:
+        figs = []
+
+    idx = 1
+    for f in figs:
+        nombre = str((f or {}).get("nombre") or "").strip()
+        if not nombre:
+            continue
+        key = _norm_fig_name(nombre)
+        if key and key not in order_map:
+            order_map[key] = idx
+            idx += 1
+        try:
+            value_map[key] = round(float((f or {}).get("valor") or 0.0), 2)
+        except Exception:
+            value_map[key] = 0.0
+        name_map[key] = nombre
+    return order_map, value_map, name_map
+
+
+def _write_ganadores_detalle_xml(fecha_iso: str, ganadores: list):
+    """
+    XML extra para vMix con:
+      - número de figura (orden del día)
+      - nombre de figura
+      - valor de la figura
+      - boleto ganador proyectado
+      - vendedor / planilla asignada
+      - nombre o cábala del cliente si registró el QR
+      - sector/barrio del cliente si registró el QR
+    """
+    fecha_iso = str(fecha_iso or "").strip()
+    order_map, value_map, name_map = _ganadores_figuras_meta(fecha_iso)
+    ganadores = _dedupe_ganadores(fecha_iso, ganadores)
+
+    root = ET.Element("ganadores_detalle", {
+        "fecha": fecha_iso,
+        "total": str(len(ganadores or []))
+    })
+
+    seen_fig_idx = max(order_map.values(), default=0)
+    local_order = {}
+    filas_cache = []
+
+    for idx, g in enumerate(ganadores or [], start=1):
+        if not isinstance(g, dict):
+            continue
+
+        figura = str(g.get("figura") or g.get("nombre_figura") or "").strip()
+        fig_key = _norm_fig_name(figura)
+        if fig_key and fig_key not in order_map:
+            if fig_key not in local_order:
+                seen_fig_idx += 1
+                local_order[fig_key] = seen_fig_idx
+            order_map[fig_key] = local_order[fig_key]
+
+        figura_numero = order_map.get(fig_key, 0)
+        figura_nombre = name_map.get(fig_key, figura)
+
+        try:
+            valor_figura = round(float(g.get("valor") if g.get("valor") not in (None, "") else value_map.get(fig_key, g.get("premio", 0.0))), 2)
+        except Exception:
+            try:
+                valor_figura = round(float(value_map.get(fig_key, 0.0)), 2)
+            except Exception:
+                valor_figura = 0.0
+
+        boleto = _norm_tabla_id(g.get("tabla") or g.get("boleto") or "")
+        serie = str(g.get("serie") or "").strip()
+        vendedor = str(g.get("vendedor") or "").strip()
+        planilla = str(g.get("planilla") or "").strip()
+        rango = str(g.get("rango") or "").strip()
+        sector = str(g.get("sector") or planilla or rango or "").strip()
+        nombre = str(g.get("nombre") or g.get("nota") or "").strip()
+        celular = ""
+        scan_at = ""
+
+        if boleto:
+            try:
+                info_b = buscar_info_por_boleto(fecha_iso, boleto, serie) or {}
+            except Exception:
+                info_b = {}
+
+            if not vendedor:
+                vendedor = str(info_b.get("vendedor") or "").strip()
+            if not planilla:
+                planilla = str(info_b.get("planilla") or "").strip()
+            if not rango:
+                rango = str(info_b.get("rango") or "").strip()
+            if not sector:
+                sector = str(info_b.get("sector") or info_b.get("planilla") or info_b.get("rango") or "").strip()
+
+            try:
+                qr_reg = _qr_buscar_registro_ticket_flexible(fecha_iso, boleto, serie) or {}
+            except Exception:
+                qr_reg = {}
+
+            qr_nombre = str(qr_reg.get("cliente_nombre") or "").strip()
+            qr_sector = str(qr_reg.get("sector") or "").strip()
+            qr_celular = str(qr_reg.get("celular") or "").strip()
+            qr_vendedor = str(qr_reg.get("vendedor") or "").strip()
+            qr_planilla = str(qr_reg.get("planilla") or "").strip()
+            scan_at = str(qr_reg.get("scan_at") or "").strip()
+
+            if qr_nombre:
+                nombre = qr_nombre
+            if qr_sector:
+                sector = qr_sector
+            if not vendedor and qr_vendedor:
+                vendedor = qr_vendedor
+            if not planilla and qr_planilla:
+                planilla = qr_planilla
+            if qr_celular:
+                celular = qr_celular
+
+        fila = ET.SubElement(root, "fila", {
+            "index": str(idx),
+            "numero_figura": (str(figura_numero) if figura_numero else ""),
+            "figura": figura_nombre,
+            "valor_figura": f"{float(valor_figura or 0.0):.2f}",
+            "boleto": boleto,
+            "vendedor": vendedor,
+            "planilla": planilla,
+            "sector": sector,
+            "cliente_nombre": nombre,
+        })
+        ET.SubElement(fila, "numero_figura").text = str(figura_numero) if figura_numero else ""
+        ET.SubElement(fila, "figura").text = figura_nombre
+        ET.SubElement(fila, "valor_figura").text = f"{float(valor_figura or 0.0):.2f}"
+        ET.SubElement(fila, "boleto").text = boleto
+        ET.SubElement(fila, "vendedor").text = vendedor
+        ET.SubElement(fila, "planilla").text = planilla
+        ET.SubElement(fila, "rango").text = rango
+        ET.SubElement(fila, "sector").text = sector
+        ET.SubElement(fila, "nombre").text = nombre
+        ET.SubElement(fila, "cliente_nombre").text = nombre
+        ET.SubElement(fila, "cabala").text = nombre
+        ET.SubElement(fila, "celular").text = celular
+        ET.SubElement(fila, "serie").text = serie
+        ET.SubElement(fila, "scan_at").text = scan_at
+        ET.SubElement(fila, "ultima_bola").text = str(g.get("ultima_bola") or "")
+
+        filas_cache.append({
+            "numero_figura": figura_numero,
+            "figura": figura_nombre,
+            "valor_figura": valor_figura,
+            "boleto": boleto,
+            "vendedor": vendedor,
+            "planilla": planilla,
+            "rango": rango,
+            "sector": sector,
+            "nombre": nombre,
+            "cliente_nombre": nombre,
+            "cabala": nombre,
+            "celular": celular,
+            "serie": serie,
+            "scan_at": scan_at,
+            "ultima_bola": str(g.get("ultima_bola") or "")
+        })
+
+    ult = filas_cache[-1] if filas_cache else {}
+    ultimo = ET.SubElement(root, "ultimo")
+    for k in ("numero_figura", "figura", "valor_figura", "boleto", "vendedor", "planilla", "rango", "sector", "nombre", "cliente_nombre", "cabala", "celular", "serie", "scan_at", "ultima_bola"):
+        v = ult.get(k, "")
+        if k == "valor_figura" and v not in ("", None):
+            v = f"{float(v or 0.0):.2f}"
+        ET.SubElement(ultimo, k).text = str(v if v is not None else "")
+
+    tree = ET.ElementTree(root)
+    try:
+        _write_game_xml_dual(tree, os.path.basename(GANADORES_DETALLE_XML))
+    except Exception:
+        for path in [GANADORES_DETALLE_XML, GANADORES_DETALLE_XML_PUBLIC]:
+            try:
+                os.makedirs(os.path.dirname(path), exist_ok=True)
+                tree.write(path, encoding="utf-8", xml_declaration=True)
+            except Exception:
+                pass
+
+
 def _write_ganadores_xml(fecha_iso: str, ultimo_marcado: int, ganadores: list):
     """Escribe ganadores.xml con estructura + colores + números."""
     root = ET.Element("ganadores", {
@@ -11996,31 +12264,26 @@ def _write_ganadores_xml(fecha_iso: str, ultimo_marcado: int, ganadores: list):
     })
     ganadores = _dedupe_ganadores(str(fecha_iso), ganadores)
 
-
     for g in ganadores:
         ga = ET.SubElement(root, "ganador", {
-            "figura": str(g.get("figura","")),
-            "fig_code": str(g.get("fig_code","")),
-            "valor": f'{float(g.get("valor",0) or 0):.2f}',
-            "serie": str(g.get("serie","")),
-            "tabla": str(g.get("tabla","")),
-            "ultima_bola": str(g.get("ultima_bola",""))
+            "figura": str(g.get("figura", "")),
+            "fig_code": str(g.get("fig_code", "")),
+            "valor": f'{float(g.get("valor", 0) or 0):.2f}',
+            "serie": str(g.get("serie", "")),
+            "tabla": str(g.get("tabla", "")),
+            "ultima_bola": str(g.get("ultima_bola", ""))
         })
 
-        # resumen
         ET.SubElement(ga, "numeros_figura").text = ",".join(str(x) for x in (g.get("numeros_figura") or []))
-        ET.SubElement(ga, "numero_ganador").text = str(g.get("numero_ganador","") or "")
+        ET.SubElement(ga, "numero_ganador").text = str(g.get("numero_ganador", "") or "")
 
-        # grilla
-        carton = ET.SubElement(ga, "carton", {"id": str(g.get("tabla",""))})
+        carton = ET.SubElement(ga, "carton", {"id": str(g.get("tabla", ""))})
         pos_order = globals().get("POS_25_ROW") or []
-        grid = g.get("grid") or [[""]*5 for _ in range(5)]
+        grid = g.get("grid") or [[""] * 5 for _ in range(5)]
         cmap = g.get("color_map_pos") or {}
-        req  = set(g.get("required_pos") or [])
+        req = set(g.get("required_pos") or [])
         marked = set(str(x) for x in (g.get("marcados_nums") or []))
 
-        # exporta 25 celdas, en orden B1..O5
-        # además exporta el número del cartón y si está marcado y si es requerido por la figura
         for i, pos in enumerate(pos_order):
             r = i // 5
             c = i % 5
@@ -12029,24 +12292,29 @@ def _write_ganadores_xml(fecha_iso: str, ultimo_marcado: int, ganadores: list):
                 num = str(grid[r][c]).strip()
             except Exception:
                 num = ""
-            cel = ET.SubElement(carton, "celda", {
+            ET.SubElement(carton, "celda", {
                 "pos": pos,
                 "numero": num,
-                "figura_color": (cmap.get(pos,"#FFFFFF") or "#FFFFFF"),
+                "figura_color": (cmap.get(pos, "#FFFFFF") or "#FFFFFF"),
                 "requerido": ("1" if pos in req else "0"),
                 "marcado": ("1" if (num in marked or (num and num.isdigit() and str(int(num)) in marked) or _is_free_cell(num)) else "0")
             })
 
     xml_bytes = ET.tostring(root, encoding="utf-8")
-    # pretty simple: deja tal cual (vMix no exige "pretty")
     for path in [GANADORES_XML, GANADORES_XML_PUBLIC]:
         try:
             os.makedirs(os.path.dirname(path), exist_ok=True)
             with open(path, "wb") as f:
-                f.write(b'<?xml version="1.0" encoding="utf-8"?>\n')
+                f.write(b'<?xml version=\"1.0\" encoding=\"utf-8\"?>\n')
                 f.write(xml_bytes)
         except Exception:
             pass
+
+    try:
+        _write_ganadores_detalle_xml(fecha_iso, ganadores)
+    except Exception:
+        pass
+
 
 def _write_ganadores_json(fecha_iso: str, ganadores: list, keys: list):
     ganadores = _dedupe_ganadores(str(fecha_iso), ganadores)
@@ -12695,6 +12963,18 @@ def juego_ganadores_xml():
         _write_ganadores_xml(_get_sorteo_fecha(), 0, [])
         path = GANADORES_XML if os.path.exists(GANADORES_XML) else GANADORES_XML_PUBLIC
     return send_file(path, mimetype="application/xml", as_attachment=False, download_name="ganadores.xml")
+
+
+@juego_bp.get("/ganadores_detalle.xml")
+def juego_ganadores_detalle_xml():
+    """XML extra para vMix con vendedor, sector, número de figura y valor."""
+    path = GANADORES_DETALLE_XML if os.path.exists(GANADORES_DETALLE_XML) else GANADORES_DETALLE_XML_PUBLIC
+    if not path or not os.path.exists(path):
+        fecha = _get_sorteo_fecha()
+        data = _safe_json_read(GANADORES_JSON) or {}
+        _write_ganadores_detalle_xml(str(fecha), data.get(str(fecha), []) or [])
+        path = GANADORES_DETALLE_XML if os.path.exists(GANADORES_DETALLE_XML) else GANADORES_DETALLE_XML_PUBLIC
+    return send_file(path, mimetype="application/xml", as_attachment=False, download_name="vmix_ganadores_detalle.xml")
 
 # ============================================================
 #  HELPERS JSON/XML
