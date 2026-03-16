@@ -6012,6 +6012,45 @@ def _figuras_de_fecha(fecha_iso):
             return out
     return []
 
+
+def _siguiente_fecha_con_figuras(fecha_base_iso: str) -> str:
+    """
+    Devuelve la siguiente fecha REAL programada en figuras_por_fecha.xml.
+    Si no existe una fecha posterior, mantiene compatibilidad devolviendo
+    el día calendario siguiente a fecha_base_iso.
+    """
+    base = (fecha_base_iso or "").strip()
+    if not _is_fecha_iso(base):
+        base = date.today().isoformat()
+
+    try:
+        base_date = datetime.fromisoformat(base).date()
+    except Exception:
+        base_date = date.today()
+        base = base_date.isoformat()
+
+    candidatas = []
+    try:
+        _ensure_xml(FIGURAS_FECHA_XML, "agenda")
+        root = ET.parse(FIGURAS_FECHA_XML).getroot()
+        for d in root.findall("dia"):
+            fecha_txt = (d.attrib.get("fecha") or "").strip()
+            if not _is_fecha_iso(fecha_txt):
+                continue
+            try:
+                fecha_d = datetime.fromisoformat(fecha_txt).date()
+            except Exception:
+                continue
+            if fecha_d > base_date:
+                candidatas.append(fecha_d)
+    except Exception:
+        candidatas = []
+
+    if candidatas:
+        return min(candidatas).isoformat()
+
+    return (base_date + timedelta(days=1)).isoformat()
+
 # ------------------ Formas 5x5 ------------------
 def _load_shapes():
     shapes = {}
@@ -6726,10 +6765,10 @@ def api_figuras_manana():
     base = (request.args.get("fecha") or date.today().isoformat()).strip()
     if not _is_fecha_iso(base):
         base = date.today().isoformat()
-    manana = (datetime.fromisoformat(base) + timedelta(days=1)).date().isoformat()
-    figs = _figuras_de_fecha(manana)
+    fecha_objetivo = _siguiente_fecha_con_figuras(base)
+    figs = _figuras_de_fecha(fecha_objetivo)
     total = sum((f.get("valor") or 0.0) for f in figs)
-    return jsonify({"ok": True, "fecha": manana, "figuras": figs, "total": total})
+    return jsonify({"ok": True, "fecha": fecha_objetivo, "figuras": figs, "total": total})
 
 @app.get("/api/resultados")
 def api_resultados():
@@ -6858,10 +6897,10 @@ def api_layout_get():
     fecha = (request.args.get("fecha") or date.today().isoformat()).strip()
     if not _is_fecha_iso(fecha):
         fecha = date.today().isoformat()
-    manana = (datetime.fromisoformat(fecha) + timedelta(days=1)).date().isoformat()
-    figs = _figuras_de_fecha(manana)
+    fecha_objetivo = _siguiente_fecha_con_figuras(fecha)
+    figs = _figuras_de_fecha(fecha_objetivo)
     lay  = _layout_for(fecha, figs, scale=FIG_BLOCK_SCALE, fixed_cols=FIG_FIXED_COLS)
-    return jsonify({"ok": True, "layout": lay, "figuras": figs})
+    return jsonify({"ok": True, "fecha": fecha_objetivo, "layout": lay, "figuras": figs})
 
 @app.post("/api/boletin-layout/save")
 def api_layout_save():
@@ -6937,9 +6976,9 @@ def boletin_pdf():
         SPIN_SCALE = max(0.5, min(1.6, _float_arg("spin_scale", 1.00)))
 
         dt = datetime.fromisoformat(fecha).date()
-        manana = (dt + timedelta(days=1)).isoformat()
+        fecha_objetivo = _siguiente_fecha_con_figuras(fecha)
 
-        figs_manana  = _figuras_de_fecha(manana)
+        figs_manana  = _figuras_de_fecha(fecha_objetivo)
         total_manana = sum((f.get("valor") or 0.0) for f in figs_manana)
         resultados   = _cargar_resultados(fecha)
         shapes       = _load_shapes()
@@ -6999,7 +7038,7 @@ def boletin_pdf():
         c.setFont(FONT, 18)
         c.drawCentredString(W/2, H - 42, T("JUEGO HOY"))
         c.setFont(FONT, 11)
-        c.drawCentredString(W/2, H - 58, T(_es_corta(manana).capitalize()))
+        c.drawCentredString(W/2, H - 58, T(_es_corta(fecha_objetivo).capitalize()))
 
         # Total a jugar
         TL = layout.get("total", {"x": W - 22, "y": 24, "size": 56, "align": "right"})
@@ -16382,6 +16421,21 @@ _GDX_FIELDS = [
     "ultima_bola", "texto_completo"
 ]
 
+_GDX_LINE_SPECS = [
+    ("boleto", "BOLETO"),
+    ("vendedor", "VENDEDOR"),
+    ("valor_figura", "VALOR PREMIO"),
+    ("figura", "FIGURA"),
+    ("numero_figura", "NRO FIGURA"),
+    ("planilla", "PLANILLA"),
+    ("rango", "RANGO"),
+    ("sector", "SECTOR"),
+    ("cabala", "NOMBRE/CABALA"),
+    ("celular", "CELULAR"),
+    ("serie", "SERIE"),
+    ("scan_at", "SCAN"),
+    ("ultima_bola", "ULTIMA BOLA"),
+]
 
 def _gdx_str(v):
     try:
@@ -16389,18 +16443,15 @@ def _gdx_str(v):
     except Exception:
         return ""
 
-
 def _gdx_dash(v):
     s = _gdx_str(v)
     return s if s else "—"
-
 
 def _gdx_safe_float(v):
     try:
         return float(v or 0.0)
     except Exception:
         return 0.0
-
 
 def _gdx_num_fig_map(fecha_iso: str) -> dict:
     out = {}
@@ -16416,7 +16467,6 @@ def _gdx_num_fig_map(fecha_iso: str) -> dict:
     except Exception:
         pass
     return out
-
 
 def _gdx_resultado_nombre(fecha_iso: str, figura: str, boleto: str) -> str:
     figura_key = _gdx_str(figura).lower()
@@ -16438,7 +16488,6 @@ def _gdx_resultado_nombre(fecha_iso: str, figura: str, boleto: str) -> str:
         pass
     return ""
 
-
 def _gdx_winners_from_json(fecha_iso: str) -> list:
     out = []
     try:
@@ -16451,7 +16500,6 @@ def _gdx_winners_from_json(fecha_iso: str) -> list:
     except Exception:
         pass
     return out
-
 
 def _gdx_winners_from_xml(fecha_iso: str) -> list:
     out = []
@@ -16478,7 +16526,6 @@ def _gdx_winners_from_xml(fecha_iso: str) -> list:
         pass
     return out
 
-
 def _gdx_winners_from_resultados(fecha_iso: str) -> list:
     out = []
     try:
@@ -16502,7 +16549,6 @@ def _gdx_winners_from_resultados(fecha_iso: str) -> list:
         pass
     return out
 
-
 def _gdx_pick_winners(fecha_iso: str) -> list:
     winners = _gdx_winners_from_json(fecha_iso)
     if winners:
@@ -16512,6 +16558,40 @@ def _gdx_pick_winners(fecha_iso: str) -> list:
         return winners
     return _gdx_winners_from_resultados(fecha_iso)
 
+def _gdx_qr_lookup(fecha_iso: str, serie: str, boleto: str) -> dict:
+    try:
+        qr = _qr_buscar_registro_ticket(str(fecha_iso), serie, boleto) or {}
+        if qr:
+            return qr
+    except Exception:
+        pass
+    try:
+        _qr_ensure_xml(QR_REGISTROS_XML, "registros_qr")
+        root = ET.parse(QR_REGISTROS_XML).getroot()
+        boleto_key = _gdx_str(boleto)
+        serie_key = os.path.basename(_gdx_str(serie)).lower()
+        fallback = None
+        for r in root.findall("registro"):
+            fecha_r = _gdx_str(r.attrib.get("fecha_sorteo"))
+            boleto_r = _gdx_str(r.attrib.get("boleto"))
+            if fecha_r != _gdx_str(fecha_iso) or boleto_r != boleto_key:
+                continue
+            serie_r = os.path.basename(_gdx_str(r.attrib.get("serie"))).lower()
+            item = {
+                "cliente_nombre": r.attrib.get("cliente_nombre", ""),
+                "sector": r.attrib.get("sector", ""),
+                "celular": r.attrib.get("celular", ""),
+                "vendedor": r.attrib.get("vendedor", ""),
+                "planilla": r.attrib.get("planilla", ""),
+                "scan_at": r.attrib.get("scan_at", ""),
+            }
+            if serie_key and serie_r and serie_r == serie_key:
+                return item
+            if fallback is None:
+                fallback = item
+        return fallback or {}
+    except Exception:
+        return {}
 
 def _gdx_enrich_winner(fecha_iso: str, w: dict, idx_map: dict) -> dict:
     figura = _gdx_str((w or {}).get("figura") or (w or {}).get("nombre_figura"))
@@ -16522,31 +16602,30 @@ def _gdx_enrich_winner(fecha_iso: str, w: dict, idx_map: dict) -> dict:
         valor_raw = (w or {}).get("premio")
     valor_figura = _gdx_safe_float(valor_raw)
 
+    info_b = {}
     try:
         info_b = buscar_info_por_boleto(str(fecha_iso), boleto, serie) or {}
     except Exception:
+        info_b = {}
+    if not info_b:
         try:
             info_b = buscar_info_por_boleto(str(fecha_iso), boleto) or {}
         except Exception:
             info_b = {}
 
-    try:
-        qr = _qr_buscar_registro_ticket(str(fecha_iso), serie, boleto) or {}
-    except Exception:
-        qr = {}
+    qr = _gdx_qr_lookup(str(fecha_iso), serie, boleto) or {}
 
     nombre_boletin = _gdx_resultado_nombre(str(fecha_iso), figura, boleto)
     cliente_nombre = _gdx_str(qr.get("cliente_nombre") or nombre_boletin or (w or {}).get("nombre") or (w or {}).get("nota"))
     vendedor = _gdx_str((w or {}).get("vendedor") or qr.get("vendedor") or info_b.get("vendedor"))
     planilla = _gdx_str((w or {}).get("planilla") or qr.get("planilla") or info_b.get("planilla"))
     rango = _gdx_str((w or {}).get("rango") or info_b.get("rango"))
-    sector = _gdx_str(qr.get("sector") or info_b.get("sector") or (w or {}).get("sector"))
+    sector = _gdx_str(qr.get("sector") or (w or {}).get("sector") or info_b.get("sector"))
     celular = _gdx_str(qr.get("celular"))
     scan_at = _gdx_str(qr.get("scan_at"))
     ultima_bola = _gdx_str((w or {}).get("ultima_bola") or (w or {}).get("numero_ganador"))
     numero_figura = str(idx_map.get(figura.lower(), "")) if figura else ""
 
-    # En tu sistema QR solo guarda un campo "Nombre o Cábala"; por compatibilidad lo reflejamos en ambos.
     nombre = cliente_nombre
     cabala = cliente_nombre
 
@@ -16585,6 +16664,21 @@ def _gdx_enrich_winner(fecha_iso: str, w: dict, idx_map: dict) -> dict:
         "texto_completo": texto_completo,
     }
 
+def _gdx_build_line_rows(row: dict, has_winner: bool) -> list:
+    line_rows = []
+    if not has_winner:
+        line_rows.append({"campo": "estado", "texto": "ESTADO: SIN GANADOR AUN"})
+    for field, label in _GDX_LINE_SPECS:
+        val = _gdx_str((row or {}).get(field))
+        if field == "valor_figura":
+            try:
+                txt = f"{label}: ${float(val or 0):.2f}"
+            except Exception:
+                txt = f"{label}: $0.00"
+        else:
+            txt = f"{label}: {_gdx_dash(val)}"
+        line_rows.append({"campo": field, "texto": txt})
+    return line_rows
 
 def _gdx_build_root(fecha_iso: str = "") -> ET.Element:
     fecha_iso = _gdx_str(fecha_iso) or (_get_sorteo_fecha() if callable(globals().get("_get_sorteo_fecha")) else date.today().isoformat())
@@ -16603,25 +16697,31 @@ def _gdx_build_root(fecha_iso: str = "") -> ET.Element:
         if any(_gdx_str(row.get(k)) for k in ("figura", "boleto", "vendedor", "cliente_nombre", "sector")):
             rows.append(row)
 
+    last = rows[-1] if rows else {f: "" for f in _GDX_FIELDS}
+    if not _gdx_str(last.get("texto_completo")):
+        last["texto_completo"] = "SIN GANADOR AUN"
+
+    line_rows = _gdx_build_line_rows(last, bool(rows))
     root = ET.Element("ganadores_detalle", {"fecha": str(fecha_iso), "total": str(len(rows))})
 
+    for idx, item in enumerate(line_rows, start=1):
+        fila = ET.SubElement(root, "fila", {"index": str(idx), "campo": _gdx_str(item.get("campo"))})
+        ET.SubElement(fila, "texto").text = _gdx_str(item.get("texto"))
+
+    ultimo = ET.SubElement(root, "ultimo")
+    for f in _GDX_FIELDS:
+        ET.SubElement(ultimo, f).text = _gdx_str(last.get(f))
+
+    detalles = ET.SubElement(root, "detalles")
     for idx, row in enumerate(rows, start=1):
         fila_attrs = {"index": str(idx)}
         for f in _GDX_FIELDS:
             fila_attrs[f] = _gdx_str(row.get(f))
-        fila = ET.SubElement(root, "fila", fila_attrs)
+        fila = ET.SubElement(detalles, "fila", fila_attrs)
         for f in _GDX_FIELDS:
             ET.SubElement(fila, f).text = _gdx_str(row.get(f))
 
-    ultimo = ET.SubElement(root, "ultimo")
-    last = rows[-1] if rows else {f: "" for f in _GDX_FIELDS}
-    if not _gdx_str(last.get("texto_completo")):
-        last["texto_completo"] = "SIN GANADOR AUN"
-    for f in _GDX_FIELDS:
-        ET.SubElement(ultimo, f).text = _gdx_str(last.get(f))
-
     return root
-
 
 def _gdx_write_files(root_elem: ET.Element):
     xml_bytes = ET.tostring(root_elem, encoding="utf-8")
@@ -16634,7 +16734,6 @@ def _gdx_write_files(root_elem: ET.Element):
         except Exception:
             pass
 
-
 def _gdx_response_impl():
     fecha = _gdx_str(request.args.get("fecha")) or (_get_sorteo_fecha() if callable(globals().get("_get_sorteo_fecha")) else date.today().isoformat())
     root = _gdx_build_root(fecha)
@@ -16644,10 +16743,8 @@ def _gdx_response_impl():
         pass
     return _vmix_xml_response(root)
 
-
 def _gdx_alias_impl():
     return _gdx_response_impl()
-
 
 try:
     app.add_url_rule("/juego/ganadores_detalle.xml", "juego_ganadores_detalle_xml", _gdx_response_impl, methods=["GET"])
@@ -16659,12 +16756,52 @@ try:
 except Exception:
     pass
 
+# Agrega el link al JSON de enlaces vMix sin romper la ruta existente
+def _gdx_patch_links_json():
+    endpoint_name = None
+    for name in ("juego.juego_vmix_links_json", "juego_vmix_links_json"):
+        if name in app.view_functions:
+            endpoint_name = name
+            break
+    if not endpoint_name:
+        return
+
+    original = app.view_functions.get(endpoint_name)
+    if not callable(original):
+        return
+
+    def _wrapped():
+        resp = original()
+        try:
+            data = resp.get_json(silent=True) if hasattr(resp, "get_json") else None
+        except Exception:
+            data = None
+        if not isinstance(data, dict):
+            return resp
+        try:
+            base = data.get("base_url") or _vmix_base_url()
+        except Exception:
+            base = _vmix_base_url()
+        links = data.get("links") or {}
+        links["ganadores_detalle"] = f"{base}/juego/ganadores_detalle.xml"
+        data["links"] = links
+        new_resp = jsonify(data)
+        for k, v in getattr(resp, "headers", {}).items():
+            if k.lower() not in ("content-length", "content-type"):
+                new_resp.headers[k] = v
+        return new_resp
+
+    app.view_functions[endpoint_name] = _wrapped
+
+try:
+    _gdx_patch_links_json()
+except Exception:
+    pass
 
 if __name__ == "__main__":
     import os
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
-
 
 
 
