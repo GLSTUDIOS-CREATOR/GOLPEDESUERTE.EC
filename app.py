@@ -12989,20 +12989,35 @@ def juego_ganadores_xml():
 @juego_bp.get("/ganadores_detalle.xml")
 def juego_ganadores_detalle_xml():
     """XML extra para vMix con vendedor, sector, número de figura y valor."""
+    fecha = str(_get_sorteo_fecha() or "").strip()
+
+    # IMPORTANTE:
+    # siempre regenerar el XML desde el estado actual del juego para evitar
+    # servir un archivo viejo de otra fecha (por ejemplo viernes/viejo con total=0).
+    data = _safe_json_read(GANADORES_JSON) or {}
+    try:
+        ganadores_actuales = data.get(fecha, []) or []
+        _write_ganadores_detalle_xml(fecha, ganadores_actuales)
+    except Exception:
+        pass
+
     path = GANADORES_DETALLE_XML if os.path.exists(GANADORES_DETALLE_XML) else GANADORES_DETALLE_XML_PUBLIC
-    if not path or not os.path.exists(path):
-        fecha = _get_sorteo_fecha()
-        data = _safe_json_read(GANADORES_JSON) or {}
+    if path and os.path.exists(path):
         try:
-            _write_ganadores_detalle_xml(str(fecha), data.get(str(fecha), []) or [])
+            tree = ET.parse(path)
+            root = tree.getroot()
+            xml_fecha = str((root.attrib.get("fecha") or "")).strip()
+            xml_total = str((root.attrib.get("total") or "")).strip()
+            if xml_fecha != fecha:
+                _write_ganadores_detalle_xml(fecha, data.get(fecha, []) or [])
+                path = GANADORES_DETALLE_XML if os.path.exists(GANADORES_DETALLE_XML) else GANADORES_DETALLE_XML_PUBLIC
+            elif (data.get(fecha, []) or []) and xml_total == "0":
+                _write_ganadores_detalle_xml(fecha, data.get(fecha, []) or [])
+                path = GANADORES_DETALLE_XML if os.path.exists(GANADORES_DETALLE_XML) else GANADORES_DETALLE_XML_PUBLIC
         except Exception:
             pass
-        path = GANADORES_DETALLE_XML if os.path.exists(GANADORES_DETALLE_XML) else GANADORES_DETALLE_XML_PUBLIC
-
-    if path and os.path.exists(path):
         return send_file(path, mimetype="application/xml", as_attachment=False, download_name="vmix_ganadores_detalle.xml")
 
-    fecha = str(_get_sorteo_fecha() or "")
     xml_fallback = f"""<?xml version="1.0" encoding="utf-8"?>
 <ganadores_detalle fecha="{fecha}" total="0">
   <ultimo>
