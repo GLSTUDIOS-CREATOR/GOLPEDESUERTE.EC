@@ -6639,7 +6639,7 @@ def _parse_spinners(extras: dict):
       - fallback: extras['comodin'] -> usa 'boletos' como numeros y 'texto' como valor
     """
     extras = extras or {}
-    block = extras.get("spinners") or extras.get("spinner") or {}
+    block = extras.get("spinners") or {}
     if not block:
         block = extras.get("comodin") or {}
 
@@ -6657,114 +6657,7 @@ def _parse_spinners(extras: dict):
         except Exception:
             valor = None
 
-    return {"nums": nums, "valor": valor, "texto": raw_val}
-
-
-def _parse_bonus(extras: dict):
-    """Lee GRAN BONUS / BONUS desde resultados para el PDF."""
-    extras = extras or {}
-    block = extras.get("gran_bonus") or extras.get("granbonus") or extras.get("bonus") or {}
-    raw_nums = block.get("numeros") or block.get("numbers") or ""
-    if isinstance(raw_nums, (list, tuple)):
-        nums = [str(x).strip() for x in raw_nums if str(x).strip()]
-    else:
-        nums = [n.strip() for n in re.findall(r"\d{1,2}", str(raw_nums)) if n.strip()]
-    nums = nums[:10]
-    raw_text = (block.get("texto") or block.get("valor") or "").strip()
-    return {"nums": nums, "texto": raw_text}
-
-def _bonus_from_sources_for_date(fecha_iso: str, extras: dict | None = None):
-    """Resuelve BONUS para PDF desde resultados y, si falta, desde historial bonus_*.json."""
-    data = _parse_bonus(extras or {})
-    if data.get("nums") or data.get("texto"):
-        return data
-    try:
-        items = _bonus_history_items_for_date(fecha_iso) if "_bonus_history_items_for_date" in globals() else []
-    except Exception:
-        items = []
-    if items:
-        src = items[0] or {}
-        nums = [str(x).strip() for x in (src.get("numbers") or []) if str(x).strip()][:10]
-        req = src.get("requested") or {}
-        win = src.get("winners") or {}
-        resumen = []
-        for k in (5,4,3,2,1):
-            rk = str(k)
-            rv = int(req.get(rk, 0) or 0)
-            wv = int(win.get(rk, 0) or 0)
-            if rv or wv:
-                resumen.append(f"{k}A:{wv}/{rv}")
-        texto = " · ".join(resumen) if resumen else (src.get("serie_archivo") or "")
-        return {"nums": nums, "texto": texto}
-    return {"nums": [], "texto": ""}
-
-
-def _spinners_from_sources_for_date(fecha_iso: str, extras: dict | None = None):
-    """Resuelve SPINNERS para PDF desde resultados y, si falta, desde el XML/histórico del sorteo."""
-    data = _parse_spinners(extras or {})
-    if data.get("nums"):
-        return data
-    nums = []
-    try:
-        if "_load_spinners_for_fecha" in globals():
-            nums = [str(x).strip() for x in (_load_spinners_for_fecha(fecha_iso) or []) if str(x).strip()]
-    except Exception:
-        nums = []
-    nums = nums[:20]
-    return {"nums": nums, "valor": data.get("valor"), "texto": data.get("texto") or ""}
-
-
-def _reintegro_from_sources_for_date(fecha_iso: str):
-    """Resuelve reintegro e imagen para PDF usando LOGS y fallback a configuración del sorteo."""
-    data = _reintegro_from_log_for_date(fecha_iso)
-    if data.get("imagen") or data.get("archivo"):
-        return data
-
-    nombre = ""
-    try:
-        if "get_impresiones_info" in globals():
-            imp = get_impresiones_info(fecha_iso) or {}
-            nombre = str(imp.get("reintegro_dia") or imp.get("reintegro") or "").strip()
-    except Exception:
-        nombre = ""
-
-    if not nombre:
-        try:
-            if "_get_sorteo_activo_info" in globals() and (fecha_iso == (_get_sorteo_fecha() if "_get_sorteo_fecha" in globals() else fecha_iso)):
-                info = _get_sorteo_activo_info() or {}
-                nombre = str(info.get("reintegro") or info.get("reintegro_dia") or "").strip()
-        except Exception:
-            pass
-
-    if not nombre:
-        return data
-
-    # Intentar resolver con helper del módulo de juego si existe
-    try:
-        if "_resolve_reintegro_media" in globals():
-            meta = _resolve_reintegro_media(nombre) or {}
-            ruta = meta.get("ruta") or ""
-            if ruta and os.path.exists(ruta):
-                return {"archivo": nombre, "imagen": ruta, "cantidad": None, "fecha": fecha_iso}
-    except Exception:
-        pass
-
-    dirs = []
-    for cand in (
-        globals().get("REINTEGRO_MEDIA_DIR"),
-        globals().get("REINTEGROS_MEDIA_DIR"),
-        os.path.join(STATIC_DIR, "REINTEGRO"),
-        os.path.join(STATIC_DIR, "REINTEGROS"),
-        os.path.join(STATIC_DIR, "reintegro"),
-        os.path.join(STATIC_DIR, "reintegros"),
-        os.path.join(IMG_DIR, "reintegros"),
-        os.path.join(IMG_DIR, "REINTEGROS"),
-    ):
-        if cand and cand not in dirs:
-            dirs.append(cand)
-    img = _find_image_case_insensitive(dirs, nombre)
-    return {"archivo": nombre, "imagen": img, "cantidad": None, "fecha": fecha_iso}
-
+    return {"nums": nums, "valor": valor}
 
 def _draw_spinners_card(c, x, y, w, h, nums, valor, font):
     """
@@ -6864,75 +6757,6 @@ def _draw_spinners_card(c, x, y, w, h, nums, valor, font):
             idx += 1
             if idx >= n:
                 break
-
-
-def _draw_bonus_card(c, x, y, w, h, nums, texto, font):
-    """Tarjeta elegante para BONUS / GRAN BONUS."""
-    c.setFillColor(colors.HexColor("#FFF7D6"))
-    c.setStrokeColor(colors.HexColor("#E7B91E"))
-    c.roundRect(x, y, w, h, 10, stroke=1, fill=1)
-
-    pad = 10
-    header_h = 20
-    c.setFillColor(colors.HexColor("#D4A414"))
-    c.roundRect(x, y + h - header_h, w, header_h, 10, stroke=0, fill=1)
-    c.setFillColor(colors.white)
-    c.setFont(font, 10)
-    c.drawCentredString(x + w/2, y + h - 14, "BONUS")
-
-    nums = [str(n).zfill(2) for n in (nums or []) if str(n).strip()][:10]
-    if texto:
-        c.setFillColor(colors.HexColor("#6B7280"))
-        c.setFont(font, 7.6)
-        txt = _fit_text_one_line(c, str(texto), font, 7.6, w - 2*pad)
-        c.drawCentredString(x + w/2, y + h - header_h - 10, txt)
-
-    body_top = y + h - header_h - (14 if texto else 8)
-    body_h = max(24, body_top - y - 8)
-
-    if not nums:
-        c.setFillColor(colors.HexColor("#9CA3AF"))
-        c.setFont(font, 10)
-        c.drawCentredString(x + w/2, y + body_h/2, "SIN BONUS")
-        return
-
-    cols = 5 if len(nums) > 5 else max(1, len(nums))
-    rows = int(math.ceil(len(nums) / float(cols)))
-    gap_x = 8
-    gap_y = 8
-    inner_w = w - 2 * pad
-    inner_h = body_h - 10
-    ball = min((inner_w - (cols - 1) * gap_x) / cols, (inner_h - (rows - 1) * gap_y) / rows, 28)
-    ball = max(18, ball)
-    total_grid_w = cols * ball + (cols - 1) * gap_x
-    total_grid_h = rows * ball + (rows - 1) * gap_y
-    start_x = x + pad + max(0, (inner_w - total_grid_w) / 2)
-    start_y = y + 8 + max(0, (inner_h - total_grid_h) / 2) + (rows - 1) * (ball + gap_y)
-
-    for i, n in enumerate(nums):
-        col = i % cols
-        row = i // cols
-        bx = start_x + col * (ball + gap_x)
-        by = start_y - row * (ball + gap_y)
-        c.setFillColor(colors.HexColor("#FACC15"))
-        c.setStrokeColor(colors.HexColor("#B7791F"))
-        c.circle(bx + ball/2, by + ball/2, ball/2, stroke=1, fill=1)
-        c.setFillColor(colors.HexColor("#1F2937"))
-        fs = max(8, min(12, ball * 0.40))
-        c.setFont(font, fs)
-        tw = pdfmetrics.stringWidth(n, font, fs)
-        c.drawString(bx + (ball - tw)/2, by + (ball - fs)/2 + 1, n)
-
-
-def _fit_text_one_line(c, txt, font, size, max_w):
-    txt = _safe_text(txt or "", font)
-    if pdfmetrics.stringWidth(txt, font, size) <= max_w:
-        return txt
-    base = txt
-    while base and pdfmetrics.stringWidth(base + "...", font, size) > max_w:
-        base = base[:-1]
-    return (base + "...") if base else ""
-
 
 # ------------------ Rutas Flask ------------------
 
@@ -7122,6 +6946,7 @@ def boletin_pdf():
         if not _is_fecha_iso(fecha):
             fecha = date.today().isoformat()
 
+        # escala de figuras + columnas
         qscale = request.args.get("scale")
         qcols  = request.args.get("cols")
         fixed_cols = int(qcols) if qcols else (FIG_FIXED_COLS or None)
@@ -7136,6 +6961,7 @@ def boletin_pdf():
             scale = max(0.5, min(1.2, scale))
             force_autofit = True
 
+        # Escalas opcionales
         def _float_arg(name, default):
             v = request.args.get(name)
             if v is None:
@@ -7146,22 +6972,25 @@ def boletin_pdf():
                 return default
 
         LOGO_SCALE = max(0.5, min(2.0, _float_arg("logo_scale", LOGO_SCALE_DEFAULT)))
-        REIN_SCALE = max(0.5, min(1.8, _float_arg("rein_scale", 1.10)))
-        SPIN_SCALE = max(0.5, min(1.8, _float_arg("spin_scale", 1.10)))
-        BONUS_SCALE = max(0.5, min(1.8, _float_arg("bonus_scale", 1.08)))
+        REIN_SCALE = max(0.5, min(1.6, _float_arg("rein_scale", 1.05)))
+        SPIN_SCALE = max(0.5, min(1.6, _float_arg("spin_scale", 1.00)))
 
+        dt = datetime.fromisoformat(fecha).date()
         fecha_objetivo = _siguiente_fecha_con_figuras(fecha)
+
         figs_manana  = _figuras_de_fecha(fecha_objetivo)
         total_manana = sum((f.get("valor") or 0.0) for f in figs_manana)
         resultados   = _cargar_resultados(fecha)
         shapes       = _load_shapes()
         layout       = _layout_for(fecha, figs_manana, scale=scale, force_autofit=force_autofit, fixed_cols=fixed_cols)
 
-        extras = resultados.get("extras") or {}
-        rein_log   = _reintegro_from_sources_for_date(fecha)
-        sp_data    = _spinners_from_sources_for_date(fecha, extras)
-        bonus_data = _bonus_from_sources_for_date(fecha, extras)
+        # Reintegro (por fecha) desde LOGS
+        rein_log = _reintegro_from_log_for_date(fecha)
 
+        # SPINNERS (Extras)
+        sp_data = _parse_spinners(resultados.get("extras") or {})
+
+        # Backfill posiciones
         default_figs_pos = _default_layout(figs_manana, scale=scale, fixed_cols=fixed_cols)["figs"]
         layout.setdefault("figs", {})
         for f in figs_manana:
@@ -7172,6 +7001,7 @@ def boletin_pdf():
         buf = BytesIO()
         c = canvas.Canvas(buf, pagesize=A4)
         W, H = A4
+
         FONT = _register_font()
         T = lambda s: _safe_text(s, FONT)
 
@@ -7180,6 +7010,7 @@ def boletin_pdf():
         c.setFillColor(colors.HexColor("#E7B91E"))
         c.rect(0, H - header_h, W, header_h, 0, 1)
 
+        # Logo
         logo_candidates = [
             os.path.join(BASE_DIR, "static", "golpe_suerte_logo.png"),
             os.path.join(IMG_DIR, "logo.png"),
@@ -7198,30 +7029,33 @@ def boletin_pdf():
                 f = min(L["w"]/draw_w, L["h"]/draw_h, 1.0)
                 draw_w *= f
                 draw_h *= f
-            c.drawImage(img, L["x"], H - (L["y"] + draw_h), width=draw_w, height=draw_h, preserveAspectRatio=True, mask="auto")
+            c.drawImage(img, L["x"], H - (L["y"] + draw_h),
+                        width=draw_w, height=draw_h,
+                        preserveAspectRatio=True, mask="auto")
 
+        # Título + fecha
         c.setFillColor(colors.black)
         c.setFont(FONT, 18)
         c.drawCentredString(W/2, H - 42, T("JUEGO HOY"))
         c.setFont(FONT, 11)
         c.drawCentredString(W/2, H - 58, T(_es_corta(fecha_objetivo).capitalize()))
 
+        # Total a jugar
         TL = layout.get("total", {"x": W - 22, "y": 24, "size": 56, "align": "right"})
-        c.setFillColor(colors.white)
-        c.setFont(FONT, 11)
+        c.setFillColor(colors.white); c.setFont(FONT, 11)
         c.drawRightString(W - 18, H - 22, T("PREMIO TOTAL"))
         amount = T(_money_header(total_manana))
-        _draw_ultrablack(c, amount, TL.get("x", W - 22), H - (TL.get("y", 24) + TL.get("size", 56)), TL.get("size", 56), FONT)
+        _draw_ultrablack(c, amount,
+                         TL.get("x", W - 22),
+                         H - (TL.get("y", 24) + TL.get("size", 56)),
+                         TL.get("size", 56), FONT)
 
-        # ---------- Figuras del siguiente sorteo ----------
+        # ---------- Figuras de mañana ----------
         fig_lay = layout.get("figs", {})
         for f in figs_manana:
-            name = f["nombre"]
-            val = f.get("valor") or 0.0
+            name = f["nombre"]; val = f.get("valor") or 0.0
             pos = fig_lay.get(name) or {}
-            bx = float(pos.get("x", 50))
-            by = float(pos.get("y", header_h + 28))
-            bw = float(pos.get("size", 96))
+            bx = float(pos.get("x", 50)); by = float(pos.get("y", header_h + 28)); bw = float(pos.get("size", 96))
 
             _chip(c, bx, H - by, bw, T(_money(val)), FONT, "#1F58FF", 10)
             grid_top = H - by - 22
@@ -7229,40 +7063,28 @@ def boletin_pdf():
             _grid5(c, bx, grid_top, bw, mask)
             _bar(c, bx, grid_top - (bw + 8), bw, T(name.upper()), FONT, "#0E2E8E", 10)
 
-        # ---------- Resultados estructurados ----------
+        # ---------- Resultados ----------
         block_h_extra = 22 + 8 + 18
         max_depth = header_h
         for f in figs_manana:
             pos = fig_lay.get(f["nombre"]) or {}
-            by = float(pos.get("y", header_h + 28))
-            bw = float(pos.get("size", 96))
+            by   = float(pos.get("y", header_h + 28))
+            bw   = float(pos.get("size", 96))
             depth = by + (bw + block_h_extra)
             if depth > max_depth:
                 max_depth = depth
 
-        depth = max_depth + 24
+        depth = max_depth + 28
         y = H - depth
-        MIN_Y_FIRST_PAGE = 126
+        MIN_Y_FIRST_PAGE = 120
         if y < MIN_Y_FIRST_PAGE:
             y = MIN_Y_FIRST_PAGE
 
-        items_resultado = list(resultados.get("items") or [])
-        items_con_ganador = [it for it in items_resultado if (it.get("ganadores") or [])]
-        items_a_mostrar = items_con_ganador or items_resultado
-        total_ganadores = sum(len(it.get("ganadores") or []) for it in items_resultado)
-
-        c.setFillColor(colors.HexColor("#2B2370"))
-        c.rect(0, y, W, 18, 0, 1)
-        c.setFillColor(colors.white)
-        c.setFont(FONT, 10)
-        c.drawCentredString(W/2, y + 5, T(f"RESULTADOS SORTEO { _es_largo(fecha) }"))
-        y -= 8
-
-        chip_y = y
-        _chip(c, 16, chip_y, 132, T(f"FIGURAS DEL DIA: {len(items_resultado)}"), FONT, "#1E40AF", 9)
-        _chip(c, 154, chip_y, 136, T(f"FIGURAS PREMIADAS: {len(items_con_ganador)}"), FONT, "#1D4ED8", 9)
-        _chip(c, 296, chip_y, 118, T(f"GANADORES: {total_ganadores}"), FONT, "#0F766E", 9)
-        y -= 28
+        # Banda compacta
+        c.setFillColor(colors.HexColor("#2B2370")); c.rect(0, y, W, 16, 0, 1)
+        c.setFillColor(colors.white); c.setFont(FONT, 10)
+        c.drawCentredString(W/2, y + 4, T(f"RESULTADOS SORTEO { _es_largo(fecha) }"))
+        y -= 4
 
         agenda = _figuras_de_fecha(fecha)
         premio_map = {a["nombre"].strip().lower(): (a.get("valor") or 0.0) for a in agenda}
@@ -7275,73 +7097,57 @@ def boletin_pdf():
 
         def bloque(fig, ganadores, premio_total):
             nonlocal y
-            rows = list(ganadores or [])
-            if not rows:
-                rows = [{"boleto": "—", "nombre": "SIN GANADOR REGISTRADO", "vendedor": "—", "sector": "", "premio": 0.0, "_placeholder": True}]
+            ensure_space(120)
+            y -= 16
+            c.setFillColor(colors.HexColor("#EDF2FF")); c.rect(14, y, W - 28, 18, 0, 1)
+            c.setFillColor(colors.HexColor("#203880")); c.setFont(FONT, 10)
+            c.drawCentredString(W / 2, y + 5, T(fig.upper()))
+            c.drawRightString(W - 20, y + 5, T(f"Premio total { _money(premio_total) }"))
+            y -= 20
 
-            row_h = 16
-            box_h = 42 + (len(rows) * row_h) + 14
-            ensure_space(box_h + 12, top_margin=26)
-            y -= box_h
+            c.setFillColor(colors.HexColor("#6B7280")); c.setFont(FONT, 9)
+            c.drawString(20, y, T("Boleto"))
+            c.drawString(86, y, T("Nombre"))
+            c.drawString(320, y, T("Vendedor"))
+            c.drawRightString(W - 20, y, T("Premio"))
+            y -= 8
+            c.setStrokeColor(colors.HexColor("#CBD5F1")); c.line(14, y, W - 14, y)
+            y -= 8
 
-            bx = 14
-            bw = W - 28
-            by = y
-
-            c.setFillColor(colors.HexColor("#F8FAFF"))
-            c.setStrokeColor(colors.HexColor("#CBD5F1"))
-            c.roundRect(bx, by, bw, box_h, 10, stroke=1, fill=1)
-
-            c.setFillColor(colors.HexColor("#203880"))
-            c.roundRect(bx, by + box_h - 22, bw, 22, 10, stroke=0, fill=1)
-            c.setFillColor(colors.white)
-            c.setFont(FONT, 10)
-            c.drawString(bx + 10, by + box_h - 15, T(fig.upper()))
-            c.drawRightString(bx + bw - 10, by + box_h - 15, T(f"PREMIO TOTAL { _money(premio_total) }"))
-
-            c.setFillColor(colors.HexColor("#64748B"))
-            c.setFont(FONT, 8)
-            c.drawString(bx + 8, by + box_h - 34, T("Boleto"))
-            c.drawString(bx + 74, by + box_h - 34, T("Nombre / Observacion"))
-            c.drawString(bx + 322, by + box_h - 34, T("Vendedor / Sector"))
-            c.drawRightString(bx + bw - 10, by + box_h - 34, T("Premio"))
-            c.setStrokeColor(colors.HexColor("#E2E8F0"))
-            c.line(bx + 8, by + box_h - 38, bx + bw - 8, by + box_h - 38)
-
-            row_y = by + box_h - 52
-            for i, g in enumerate(rows):
-                if i % 2 == 0:
-                    c.setFillColor(colors.HexColor("#F1F5FF"))
-                    c.roundRect(bx + 6, row_y - 9, bw - 12, 14, 4, stroke=0, fill=1)
-
-                boleto = str(g.get("boleto") or "—")
-                nombre = str(g.get("nombre") or "—")
-                vendedor = str(g.get("vendedor") or "").strip()
-                sector = str(g.get("sector") or "").strip()
+            par = True
+            for g in (ganadores or []):
+                ensure_space(30)
+                if par:
+                    c.setFillColor(colors.HexColor("#F7F9FF")); c.rect(14, y - 12, W - 28, 14, 0, 1)
+                par = not par
+                c.setFillColor(colors.black); c.setFont(FONT, 9)
+                nombre = g.get("nombre", "") or ""
+                vendedor = (g.get("vendedor", "") or "").strip()
+                planilla = (g.get("sector", "") or "").strip()
+                
+                # Si NO hay vendedor (planilla sin asignar), mostramos el nombre del sorteo
+                sorteo_nombre = ""
+                try:
+                    sorteo_nombre = (layout.get("sorteo") or layout.get("nombre_sorteo") or "").strip()
+                except Exception:
+                    sorteo_nombre = ""
                 if not vendedor:
-                    vendedor = (layout.get("sorteo") or layout.get("nombre_sorteo") or "GOLPE DE SUERTE")
-                vend_show = vendedor if not sector else f"{vendedor} · {sector}"
-                nombre = _fit_text_one_line(c, nombre, FONT, 8.7, 230)
-                vend_show = _fit_text_one_line(c, vend_show, FONT, 8.5, 180)
-
+                    vendedor = sorteo_nombre or "GOLPE DE SUERTE"
+                
+                vend_show = vendedor if not planilla else f"{vendedor} · {planilla}"
+                
+                c.drawString(20, y - 9, T(g.get("boleto", "")))
+                c.drawString(86, y - 9, T(nombre))
+                c.drawString(320, y - 9, T(vend_show))
                 try:
                     prem = float(g.get("premio") or 0.0)
                 except Exception:
                     prem = 0.0
-                if g.get("_placeholder") and premio_total:
-                    prem = float(premio_total or 0.0)
+                c.drawRightString(W - 20, y - 9, T(_money(prem)))
+                y -= 14
+            y -= 4
 
-                c.setFillColor(colors.HexColor("#111827"))
-                c.setFont(FONT, 8.7)
-                c.drawString(bx + 8, row_y - 5, T(boleto))
-                c.drawString(bx + 74, row_y - 5, T(nombre))
-                c.drawString(bx + 322, row_y - 5, T(vend_show))
-                c.drawRightString(bx + bw - 10, row_y - 5, T(_money(prem)))
-                row_y -= row_h
-
-            y -= 10
-
-        for item in items_a_mostrar:
+        for item in (resultados.get("items") or []):
             nom = item.get("figura", "")
             gan = item.get("ganadores") or []
             premio = premio_map.get(nom.strip().lower(), 0.0)
@@ -7349,80 +7155,70 @@ def boletin_pdf():
                 premio = sum((g.get("premio") or 0.0) for g in gan)
             bloque(nom, gan, premio)
 
-        # ---------- Extras inferiores: BONUS, SPINNERS, REINTEGRO ----------
-        extras_cards = []
-        if bonus_data.get("nums") or bonus_data.get("texto"):
-            extras_cards.append("bonus")
-        if sp_data.get("nums") or (sp_data.get("valor") is not None):
-            extras_cards.append("spinners")
-        if rein_log.get("imagen") or rein_log.get("archivo"):
-            extras_cards.append("reintegro")
+        # ---------- Tarjetas inferiores ----------
+        margin = 12
+        espacio_disponible = (y - margin)
 
-        if extras_cards:
-            section_h = 160
-            ensure_space(section_h + 24, top_margin=24)
-            c.setFillColor(colors.HexColor("#2B2370"))
-            c.rect(0, y, W, 16, 0, 1)
-            c.setFillColor(colors.white)
-            c.setFont(FONT, 10)
-            c.drawCentredString(W/2, y + 4, T("EXTRAS DEL SORTEO"))
-            y -= (section_h + 10)
+        # SPINNERS (izquierda)
+        sp_base_h = 86
+        sp_base_w = 360
+        sp_h = sp_base_h * SPIN_SCALE
+        sp_w = sp_base_w * SPIN_SCALE
+        if espacio_disponible < (sp_h + 20):
+            factor = max(0.40, (espacio_disponible - 20) / max(sp_h, 1))
+            sp_h *= factor
+            sp_w *= factor
+        if sp_data["nums"] or (sp_data["valor"] is not None):
+            _draw_spinners_card(c, margin, margin, sp_w, sp_h, sp_data["nums"], sp_data["valor"], FONT)
 
-            margin = 12
-            gap = 10
-            count = len(extras_cards)
-            slot_w = (W - (2 * margin) - ((count - 1) * gap)) / max(1, count)
-            card_y = y
-            cur_x = margin
+        # REINTEGRO (derecha)
+        rein_base_h = 90
+        rein_base_w = int(rein_base_h * 3.75)
+        card_h = rein_base_h * REIN_SCALE
+        card_w = rein_base_w * REIN_SCALE
+        if espacio_disponible < (card_h + 20):
+            factor = max(0.40, (espacio_disponible - 20) / max(card_h, 1))
+            card_h *= factor
+            card_w *= factor
 
-            for kind in extras_cards:
-                if kind == "bonus":
-                    _draw_bonus_card(c, cur_x, card_y, slot_w, section_h, bonus_data.get("nums") or [], bonus_data.get("texto") or "", FONT)
-                elif kind == "spinners":
-                    _draw_spinners_card(c, cur_x, card_y, slot_w, section_h, sp_data.get("nums") or [], sp_data.get("valor"), FONT)
-                elif kind == "reintegro":
-                    c.setFillColor(colors.HexColor("#FFFFFF"))
-                    c.setStrokeColor(colors.HexColor("#CBD5F1"))
-                    c.roundRect(cur_x, card_y, slot_w, section_h, 10, stroke=1, fill=1)
+        rein_x = W - margin - card_w
+        base_y = margin
 
-                    c.setFillColor(colors.HexColor("#2B2370"))
-                    c.roundRect(cur_x, card_y + section_h - 20, slot_w, 20, 10, stroke=0, fill=1)
-                    c.setFillColor(colors.white)
-                    c.setFont(FONT, 10)
-                    c.drawCentredString(cur_x + slot_w/2, card_y + section_h - 14, "REINTEGRO")
+        if rein_log.get("imagen"):
+            c.setFillColor(colors.HexColor("#D1D5DB"))
+            c.roundRect(rein_x+2.5, base_y-2.5, card_w, card_h, 10, stroke=0, fill=1)
+            c.setFillColor(colors.white); c.setStrokeColor(colors.HexColor("#CBD5F1"))
+            c.roundRect(rein_x, base_y, card_w, card_h, 10, stroke=1, fill=1)
 
-                    label = str((rein_log.get("archivo") or "")).rsplit('.', 1)[0].strip() or "SIN REINTEGRO"
-                    c.setFillColor(colors.HexColor("#1F2937"))
-                    c.setFont(FONT, 9)
-                    txt = _fit_text_one_line(c, label, FONT, 9, slot_w - 16)
-                    c.drawCentredString(cur_x + slot_w/2, card_y + 22, T(txt))
+            gap = 25
+            label_w = card_w * 0.45
+            img_w   = card_w - label_w - gap - 10
+            label_x = rein_x + 8
+            img_x   = label_x + label_w + gap
+            inner_y = base_y + 8
+            inner_h = card_h - 16
 
-                    if rein_log.get("imagen") and os.path.exists(str(rein_log.get("imagen"))):
-                        try:
-                            img = ImageReader(str(rein_log.get("imagen")))
-                            iw, ih = img.getSize()
-                            max_w = slot_w - 22
-                            max_h = section_h - 54
-                            s = min(max_w / float(iw), max_h / float(ih), 1.0)
-                            draw_w = iw * s
-                            draw_h = ih * s
-                            ix = cur_x + (slot_w - draw_w) / 2.0
-                            iy = card_y + 30 + max(0, (max_h - draw_h) / 2.0)
-                            c.drawImage(img, ix, iy, width=draw_w, height=draw_h, preserveAspectRatio=True, mask='auto')
-                        except Exception:
-                            c.setFillColor(colors.HexColor("#9CA3AF"))
-                            c.setFont(FONT, 10)
-                            c.drawCentredString(cur_x + slot_w/2, card_y + section_h/2, "SIN IMAGEN")
-                    else:
-                        c.setFillColor(colors.HexColor("#9CA3AF"))
-                        c.setFont(FONT, 10)
-                        c.drawCentredString(cur_x + slot_w/2, card_y + section_h/2, "SIN IMAGEN")
-                cur_x += slot_w + gap
+            c.setFillColor(colors.HexColor("#190042"))
+            c.setFont(FONT, max(12, int(16 * REIN_SCALE)))
+            text_y = inner_y + (inner_h / 2) - 6
+            c.drawString(label_x, text_y, "REINTEGRO")
+
+            c.setStrokeColor(colors.HexColor("#0C8A3E"))
+            c.setLineWidth(1)
+            c.line(label_x, text_y - 4, label_x + (label_w * 0.60), text_y - 4)
+
+            c.drawImage(
+                rein_log["imagen"], img_x, inner_y,
+                width=img_w, height=inner_h,
+                preserveAspectRatio=True, anchor='sw', mask='auto'
+            )
 
         c.showPage()
         c.save()
         buf.seek(0)
-        return send_file(buf, as_attachment=True, download_name=f"boletin_{fecha}.pdf", mimetype="application/pdf")
+        return send_file(buf, as_attachment=True,
+                         download_name=f"boletin_{fecha}.pdf",
+                         mimetype="application/pdf")
 
     except Exception:
         import traceback
