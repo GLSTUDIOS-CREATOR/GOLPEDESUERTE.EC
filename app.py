@@ -6673,6 +6673,99 @@ def _parse_bonus(extras: dict):
     raw_text = (block.get("texto") or block.get("valor") or "").strip()
     return {"nums": nums, "texto": raw_text}
 
+def _bonus_from_sources_for_date(fecha_iso: str, extras: dict | None = None):
+    """Resuelve BONUS para PDF desde resultados y, si falta, desde historial bonus_*.json."""
+    data = _parse_bonus(extras or {})
+    if data.get("nums") or data.get("texto"):
+        return data
+    try:
+        items = _bonus_history_items_for_date(fecha_iso) if "_bonus_history_items_for_date" in globals() else []
+    except Exception:
+        items = []
+    if items:
+        src = items[0] or {}
+        nums = [str(x).strip() for x in (src.get("numbers") or []) if str(x).strip()][:10]
+        req = src.get("requested") or {}
+        win = src.get("winners") or {}
+        resumen = []
+        for k in (5,4,3,2,1):
+            rk = str(k)
+            rv = int(req.get(rk, 0) or 0)
+            wv = int(win.get(rk, 0) or 0)
+            if rv or wv:
+                resumen.append(f"{k}A:{wv}/{rv}")
+        texto = " · ".join(resumen) if resumen else (src.get("serie_archivo") or "")
+        return {"nums": nums, "texto": texto}
+    return {"nums": [], "texto": ""}
+
+
+def _spinners_from_sources_for_date(fecha_iso: str, extras: dict | None = None):
+    """Resuelve SPINNERS para PDF desde resultados y, si falta, desde el XML/histórico del sorteo."""
+    data = _parse_spinners(extras or {})
+    if data.get("nums"):
+        return data
+    nums = []
+    try:
+        if "_load_spinners_for_fecha" in globals():
+            nums = [str(x).strip() for x in (_load_spinners_for_fecha(fecha_iso) or []) if str(x).strip()]
+    except Exception:
+        nums = []
+    nums = nums[:20]
+    return {"nums": nums, "valor": data.get("valor"), "texto": data.get("texto") or ""}
+
+
+def _reintegro_from_sources_for_date(fecha_iso: str):
+    """Resuelve reintegro e imagen para PDF usando LOGS y fallback a configuración del sorteo."""
+    data = _reintegro_from_log_for_date(fecha_iso)
+    if data.get("imagen") or data.get("archivo"):
+        return data
+
+    nombre = ""
+    try:
+        if "get_impresiones_info" in globals():
+            imp = get_impresiones_info(fecha_iso) or {}
+            nombre = str(imp.get("reintegro_dia") or imp.get("reintegro") or "").strip()
+    except Exception:
+        nombre = ""
+
+    if not nombre:
+        try:
+            if "_get_sorteo_activo_info" in globals() and (fecha_iso == (_get_sorteo_fecha() if "_get_sorteo_fecha" in globals() else fecha_iso)):
+                info = _get_sorteo_activo_info() or {}
+                nombre = str(info.get("reintegro") or info.get("reintegro_dia") or "").strip()
+        except Exception:
+            pass
+
+    if not nombre:
+        return data
+
+    # Intentar resolver con helper del módulo de juego si existe
+    try:
+        if "_resolve_reintegro_media" in globals():
+            meta = _resolve_reintegro_media(nombre) or {}
+            ruta = meta.get("ruta") or ""
+            if ruta and os.path.exists(ruta):
+                return {"archivo": nombre, "imagen": ruta, "cantidad": None, "fecha": fecha_iso}
+    except Exception:
+        pass
+
+    dirs = []
+    for cand in (
+        globals().get("REINTEGRO_MEDIA_DIR"),
+        globals().get("REINTEGROS_MEDIA_DIR"),
+        os.path.join(STATIC_DIR, "REINTEGRO"),
+        os.path.join(STATIC_DIR, "REINTEGROS"),
+        os.path.join(STATIC_DIR, "reintegro"),
+        os.path.join(STATIC_DIR, "reintegros"),
+        os.path.join(IMG_DIR, "reintegros"),
+        os.path.join(IMG_DIR, "REINTEGROS"),
+    ):
+        if cand and cand not in dirs:
+            dirs.append(cand)
+    img = _find_image_case_insensitive(dirs, nombre)
+    return {"archivo": nombre, "imagen": img, "cantidad": None, "fecha": fecha_iso}
+
+
 def _draw_spinners_card(c, x, y, w, h, nums, valor, font):
     """
     Tarjeta SPINNERS con 'pastillas' de 4 cuadritos.
@@ -6775,50 +6868,57 @@ def _draw_spinners_card(c, x, y, w, h, nums, valor, font):
 
 def _draw_bonus_card(c, x, y, w, h, nums, texto, font):
     """Tarjeta elegante para BONUS / GRAN BONUS."""
-    c.setFillColor(colors.HexColor("#FFF9E8"))
+    c.setFillColor(colors.HexColor("#FFF7D6"))
     c.setStrokeColor(colors.HexColor("#E7B91E"))
     c.roundRect(x, y, w, h, 10, stroke=1, fill=1)
 
     pad = 10
-    c.setFillColor(colors.HexColor("#7A5300"))
+    header_h = 20
+    c.setFillColor(colors.HexColor("#D4A414"))
+    c.roundRect(x, y + h - header_h, w, header_h, 10, stroke=0, fill=1)
+    c.setFillColor(colors.white)
     c.setFont(font, 10)
-    c.drawString(x + pad, y + h - 16, "BONUS")
+    c.drawCentredString(x + w/2, y + h - 14, "BONUS")
 
+    nums = [str(n).zfill(2) for n in (nums or []) if str(n).strip()][:10]
     if texto:
         c.setFillColor(colors.HexColor("#6B7280"))
-        c.setFont(font, 8)
-        c.drawRightString(x + w - pad, y + h - 16, _safe_text(str(texto), font)[:34])
+        c.setFont(font, 7.6)
+        txt = _fit_text_one_line(c, str(texto), font, 7.6, w - 2*pad)
+        c.drawCentredString(x + w/2, y + h - header_h - 10, txt)
 
-    nums = [str(n).zfill(2) for n in (nums or [])][:10]
+    body_top = y + h - header_h - (14 if texto else 8)
+    body_h = max(24, body_top - y - 8)
+
     if not nums:
         c.setFillColor(colors.HexColor("#9CA3AF"))
         c.setFont(font, 10)
-        c.drawCentredString(x + w/2, y + h/2 - 5, "SIN BONUS REGISTRADO")
+        c.drawCentredString(x + w/2, y + body_h/2, "SIN BONUS")
         return
 
     cols = 5 if len(nums) > 5 else max(1, len(nums))
     rows = int(math.ceil(len(nums) / float(cols)))
-    title_h = 24
-    inner_w = w - 2 * pad
-    inner_h = h - title_h - 2 * pad
     gap_x = 8
     gap_y = 8
-    ball = min((inner_w - (cols - 1) * gap_x) / cols, (inner_h - (rows - 1) * gap_y) / rows, 30)
+    inner_w = w - 2 * pad
+    inner_h = body_h - 10
+    ball = min((inner_w - (cols - 1) * gap_x) / cols, (inner_h - (rows - 1) * gap_y) / rows, 28)
     ball = max(18, ball)
     total_grid_w = cols * ball + (cols - 1) * gap_x
+    total_grid_h = rows * ball + (rows - 1) * gap_y
     start_x = x + pad + max(0, (inner_w - total_grid_w) / 2)
-    start_y = y + h - title_h - ball
+    start_y = y + 8 + max(0, (inner_h - total_grid_h) / 2) + (rows - 1) * (ball + gap_y)
 
     for i, n in enumerate(nums):
         col = i % cols
         row = i // cols
         bx = start_x + col * (ball + gap_x)
         by = start_y - row * (ball + gap_y)
-        c.setFillColor(colors.HexColor("#E7B91E"))
+        c.setFillColor(colors.HexColor("#FACC15"))
         c.setStrokeColor(colors.HexColor("#B7791F"))
         c.circle(bx + ball/2, by + ball/2, ball/2, stroke=1, fill=1)
         c.setFillColor(colors.HexColor("#1F2937"))
-        fs = max(9, min(13, ball * 0.42))
+        fs = max(8, min(12, ball * 0.40))
         c.setFont(font, fs)
         tw = pdfmetrics.stringWidth(n, font, fs)
         c.drawString(bx + (ball - tw)/2, by + (ball - fs)/2 + 1, n)
@@ -7057,10 +7157,10 @@ def boletin_pdf():
         shapes       = _load_shapes()
         layout       = _layout_for(fecha, figs_manana, scale=scale, force_autofit=force_autofit, fixed_cols=fixed_cols)
 
-        rein_log   = _reintegro_from_log_for_date(fecha)
-        extras     = resultados.get("extras") or {}
-        sp_data    = _parse_spinners(extras)
-        bonus_data = _parse_bonus(extras)
+        extras = resultados.get("extras") or {}
+        rein_log   = _reintegro_from_sources_for_date(fecha)
+        sp_data    = _spinners_from_sources_for_date(fecha, extras)
+        bonus_data = _bonus_from_sources_for_date(fecha, extras)
 
         default_figs_pos = _default_layout(figs_manana, scale=scale, fixed_cols=fixed_cols)["figs"]
         layout.setdefault("figs", {})
@@ -7255,13 +7355,12 @@ def boletin_pdf():
             extras_cards.append("bonus")
         if sp_data.get("nums") or (sp_data.get("valor") is not None):
             extras_cards.append("spinners")
-        if rein_log.get("imagen"):
+        if rein_log.get("imagen") or rein_log.get("archivo"):
             extras_cards.append("reintegro")
 
         if extras_cards:
-            section_h = 122
-            ensure_space(section_h + 24, top_margin=26)
-            y -= 4
+            section_h = 160
+            ensure_space(section_h + 24, top_margin=24)
             c.setFillColor(colors.HexColor("#2B2370"))
             c.rect(0, y, W, 16, 0, 1)
             c.setFillColor(colors.white)
@@ -7273,36 +7372,51 @@ def boletin_pdf():
             gap = 10
             count = len(extras_cards)
             slot_w = (W - (2 * margin) - ((count - 1) * gap)) / max(1, count)
-            base_h = section_h
             card_y = y
             cur_x = margin
 
             for kind in extras_cards:
                 if kind == "bonus":
-                    bonus_h = min(base_h, base_h * BONUS_SCALE)
-                    _draw_bonus_card(c, cur_x, card_y, slot_w, bonus_h, bonus_data.get("nums") or [], bonus_data.get("texto") or "", FONT)
+                    _draw_bonus_card(c, cur_x, card_y, slot_w, section_h, bonus_data.get("nums") or [], bonus_data.get("texto") or "", FONT)
                 elif kind == "spinners":
-                    spin_h = min(base_h, base_h * SPIN_SCALE)
-                    _draw_spinners_card(c, cur_x, card_y, slot_w, spin_h, sp_data.get("nums") or [], sp_data.get("valor"), FONT)
+                    _draw_spinners_card(c, cur_x, card_y, slot_w, section_h, sp_data.get("nums") or [], sp_data.get("valor"), FONT)
                 elif kind == "reintegro":
-                    card_h = min(base_h, base_h * REIN_SCALE)
                     c.setFillColor(colors.HexColor("#FFFFFF"))
                     c.setStrokeColor(colors.HexColor("#CBD5F1"))
-                    c.roundRect(cur_x, card_y, slot_w, card_h, 10, stroke=1, fill=1)
+                    c.roundRect(cur_x, card_y, slot_w, section_h, 10, stroke=1, fill=1)
 
-                    pad = 10
-                    c.setFillColor(colors.HexColor("#190042"))
+                    c.setFillColor(colors.HexColor("#2B2370"))
+                    c.roundRect(cur_x, card_y + section_h - 20, slot_w, 20, 10, stroke=0, fill=1)
+                    c.setFillColor(colors.white)
                     c.setFont(FONT, 10)
-                    c.drawString(cur_x + pad, card_y + card_h - 16, "REINTEGRO")
+                    c.drawCentredString(cur_x + slot_w/2, card_y + section_h - 14, "REINTEGRO")
 
-                    label_w = slot_w * 0.38
-                    img_x = cur_x + label_w + pad + 6
-                    img_w = max(30, slot_w - label_w - (2 * pad) - 6)
-                    img_h = card_h - 30
-                    c.setFillColor(colors.HexColor("#6B7280"))
+                    label = str((rein_log.get("archivo") or "")).rsplit('.', 1)[0].strip() or "SIN REINTEGRO"
+                    c.setFillColor(colors.HexColor("#1F2937"))
                     c.setFont(FONT, 9)
-                    c.drawString(cur_x + pad, card_y + (card_h / 2), T((rein_log.get("archivo") or "").rsplit('.', 1)[0]))
-                    c.drawImage(rein_log["imagen"], img_x, card_y + 8, width=img_w, height=img_h, preserveAspectRatio=True, anchor='sw', mask='auto')
+                    txt = _fit_text_one_line(c, label, FONT, 9, slot_w - 16)
+                    c.drawCentredString(cur_x + slot_w/2, card_y + 22, T(txt))
+
+                    if rein_log.get("imagen") and os.path.exists(str(rein_log.get("imagen"))):
+                        try:
+                            img = ImageReader(str(rein_log.get("imagen")))
+                            iw, ih = img.getSize()
+                            max_w = slot_w - 22
+                            max_h = section_h - 54
+                            s = min(max_w / float(iw), max_h / float(ih), 1.0)
+                            draw_w = iw * s
+                            draw_h = ih * s
+                            ix = cur_x + (slot_w - draw_w) / 2.0
+                            iy = card_y + 30 + max(0, (max_h - draw_h) / 2.0)
+                            c.drawImage(img, ix, iy, width=draw_w, height=draw_h, preserveAspectRatio=True, mask='auto')
+                        except Exception:
+                            c.setFillColor(colors.HexColor("#9CA3AF"))
+                            c.setFont(FONT, 10)
+                            c.drawCentredString(cur_x + slot_w/2, card_y + section_h/2, "SIN IMAGEN")
+                    else:
+                        c.setFillColor(colors.HexColor("#9CA3AF"))
+                        c.setFont(FONT, 10)
+                        c.drawCentredString(cur_x + slot_w/2, card_y + section_h/2, "SIN IMAGEN")
                 cur_x += slot_w + gap
 
         c.showPage()
