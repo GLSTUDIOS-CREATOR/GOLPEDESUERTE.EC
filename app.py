@@ -12096,6 +12096,86 @@ def _ganadores_figuras_meta(fecha_iso: str):
     return order_map, value_map, name_map
 
 
+
+
+def _ganadores_detalle_desde_resultados(fecha_iso: str) -> list:
+    """Reconstruye lista de ganadores usando resultados_sorteo.xml cuando ganadores.json aún no refleja el último click."""
+    out = []
+    try:
+        data = _cargar_resultados(str(fecha_iso)) or {"items": []}
+    except Exception:
+        data = {"items": []}
+    for item in (data.get("items") or []):
+        figura = str((item or {}).get("figura") or "").strip()
+        for g in ((item or {}).get("ganadores") or []):
+            if not isinstance(g, dict):
+                continue
+            boleto = _norm_tabla_id(g.get("boleto") or g.get("tabla") or "")
+            if not boleto:
+                continue
+            out.append({
+                "figura": figura,
+                "tabla": boleto,
+                "boleto": boleto,
+                "nombre": str(g.get("nombre") or "").strip(),
+                "vendedor": str(g.get("vendedor") or "").strip(),
+                "sector": str(g.get("sector") or "").strip(),
+                "premio": _safe_float(g.get("premio")),
+                "valor": _safe_float(g.get("premio")),
+            })
+    return out
+
+
+def _ganadores_detalle_desde_ganadores_xml(fecha_iso: str) -> list:
+    """Fallback final: lee ganadores.xml si JSON/resultados todavía no llenaron el detalle."""
+    paths = [globals().get("GANADORES_XML"), globals().get("GANADORES_XML_PUBLIC")]
+    out = []
+    for path in paths:
+        try:
+            if not path or not os.path.exists(path):
+                continue
+            root = ET.parse(path).getroot()
+            fecha_xml = str((root.attrib.get("fecha") or "")).strip()
+            if fecha_xml and str(fecha_iso or "").strip() and fecha_xml != str(fecha_iso).strip():
+                continue
+            for ga in root.findall("./ganador"):
+                figura = str(ga.attrib.get("figura") or ga.findtext("figura") or "").strip()
+                boleto = _norm_tabla_id(ga.attrib.get("tabla") or ga.findtext("tabla") or "")
+                if not boleto:
+                    boleto = _norm_tabla_id(ga.find("./carton").attrib.get("id") if ga.find("./carton") is not None else "")
+                out.append({
+                    "figura": figura,
+                    "tabla": boleto,
+                    "boleto": boleto,
+                    "serie": str(ga.attrib.get("serie") or ga.findtext("serie") or "").strip(),
+                    "valor": _safe_float(ga.attrib.get("valor") or ga.findtext("valor") or 0),
+                    "ultima_bola": str(ga.attrib.get("ultima_bola") or ga.findtext("numero_ganador") or "").strip(),
+                })
+            if out:
+                return out
+        except Exception:
+            continue
+    return out
+
+
+def _ganadores_detalle_fuente_actual(fecha_iso: str) -> list:
+    """Devuelve la mejor fuente disponible de ganadores para el XML detalle."""
+    fecha_iso = str(fecha_iso or "").strip()
+    try:
+        data = _safe_json_read(GANADORES_JSON) or {}
+    except Exception:
+        data = {}
+    wins = data.get(fecha_iso, []) or []
+    if wins:
+        return wins
+    wins = _ganadores_detalle_desde_resultados(fecha_iso)
+    if wins:
+        return wins
+    wins = _ganadores_detalle_desde_ganadores_xml(fecha_iso)
+    if wins:
+        return wins
+    return []
+
 def _write_ganadores_detalle_xml(fecha_iso: str, ganadores: list):
     """
     XML extra para vMix con:
@@ -12991,15 +13071,11 @@ def juego_ganadores_detalle_xml():
     """XML extra para vMix con vendedor, sector, número de figura y valor."""
     fecha = str(_get_sorteo_fecha() or "").strip()
 
-    # IMPORTANTE:
-    # siempre regenerar el XML desde el estado actual del juego para evitar
-    # servir un archivo viejo de otra fecha (por ejemplo viernes/viejo con total=0).
-    data = _safe_json_read(GANADORES_JSON) or {}
     try:
-        ganadores_actuales = data.get(fecha, []) or []
+        ganadores_actuales = _ganadores_detalle_fuente_actual(fecha)
         _write_ganadores_detalle_xml(fecha, ganadores_actuales)
     except Exception:
-        pass
+        ganadores_actuales = []
 
     path = GANADORES_DETALLE_XML if os.path.exists(GANADORES_DETALLE_XML) else GANADORES_DETALLE_XML_PUBLIC
     if path and os.path.exists(path):
@@ -13009,10 +13085,10 @@ def juego_ganadores_detalle_xml():
             xml_fecha = str((root.attrib.get("fecha") or "")).strip()
             xml_total = str((root.attrib.get("total") or "")).strip()
             if xml_fecha != fecha:
-                _write_ganadores_detalle_xml(fecha, data.get(fecha, []) or [])
+                _write_ganadores_detalle_xml(fecha, ganadores_actuales)
                 path = GANADORES_DETALLE_XML if os.path.exists(GANADORES_DETALLE_XML) else GANADORES_DETALLE_XML_PUBLIC
-            elif (data.get(fecha, []) or []) and xml_total == "0":
-                _write_ganadores_detalle_xml(fecha, data.get(fecha, []) or [])
+            elif ganadores_actuales and xml_total == "0":
+                _write_ganadores_detalle_xml(fecha, ganadores_actuales)
                 path = GANADORES_DETALLE_XML if os.path.exists(GANADORES_DETALLE_XML) else GANADORES_DETALLE_XML_PUBLIC
         except Exception:
             pass
