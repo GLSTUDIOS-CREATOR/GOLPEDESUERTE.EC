@@ -16667,14 +16667,18 @@ def _gdx_enrich_winner(fecha_iso: str, w: dict, idx_map: dict) -> dict:
 def _gdx_build_line_rows(row: dict, has_winner: bool) -> list:
     line_rows = []
     if not has_winner:
-        line_rows.append({"campo": "estado", "texto": "ESTADO: SIN GANADOR AUN"})
+        line_rows.append({"campo": "estado", "texto": "SIN GANADOR AUN"})
     for field, label in _GDX_LINE_SPECS:
         val = _gdx_str((row or {}).get(field))
         if field == "valor_figura":
             try:
-                txt = f"{label}: ${float(val or 0):.2f}"
+                txt = f"${float(val or 0):.2f}"
             except Exception:
-                txt = f"{label}: $0.00"
+                txt = "$0.00"
+        elif field in ("boleto", "vendedor", "figura", "ultima_bola"):
+            txt = _gdx_dash(val)
+        elif field == "cabala":
+            txt = f"ESCANEADA: {_gdx_dash(val)}"
         else:
             txt = f"{label}: {_gdx_dash(val)}"
         line_rows.append({"campo": field, "texto": txt})
