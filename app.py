@@ -16704,9 +16704,11 @@ def _gdx_build_root(fecha_iso: str = "") -> ET.Element:
     line_rows = _gdx_build_line_rows(last, bool(rows))
     root = ET.Element("ganadores_detalle", {"fecha": str(fecha_iso), "total": str(len(rows))})
 
-    for idx, item in enumerate(line_rows, start=1):
-        fila = ET.SubElement(root, "fila", {"index": str(idx), "campo": _gdx_str(item.get("campo"))})
-        ET.SubElement(fila, "texto").text = _gdx_str(item.get("texto"))
+    # vMix Table: una sola columna (#text) y varias filas.
+    # Repetimos nodos directos <linea>texto</linea> para que el Data Source
+    # muestre una sola columna con varias filas separadas.
+    for item in line_rows:
+        ET.SubElement(root, "linea").text = _gdx_str(item.get("texto"))
 
     ultimo = ET.SubElement(root, "ultimo")
     for f in _GDX_FIELDS:
