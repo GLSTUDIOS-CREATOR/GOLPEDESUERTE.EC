@@ -7859,8 +7859,9 @@ def _resolve_reintegro_media(reinteg_name: str):
 
 def _build_reintegro_root(fecha: str, nombre: str, archivo: str, ruta: str, carpeta: str, encontrado=False, click_count=0, click_token=""):
     root = ET.Element("reintegro", {"fecha": str(fecha or "")})
-    ET.SubElement(root, "nombre").text = str(nombre or "")
-    ET.SubElement(root, "valor").text = str(nombre or "")
+    nombre_limpio = _reintegro_stem(nombre)
+    ET.SubElement(root, "nombre").text = str(nombre_limpio or "")
+    ET.SubElement(root, "valor").text = str(nombre_limpio or "")
     ET.SubElement(root, "activo").text = "1" if str(nombre or "").strip() else "0"
     ET.SubElement(root, "click_count").text = str(int(click_count or 0))
     ET.SubElement(root, "click_token").text = str(click_token or "")
