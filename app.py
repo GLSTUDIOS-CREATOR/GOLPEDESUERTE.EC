@@ -12472,6 +12472,7 @@ def _detectar_ganadores(fecha_iso: str, stack: list, ultimo_marcado: int, recalc
 
     # Figuras que ya tuvieron ganador en bolas anteriores (se cierran para próximos clicks)
     figuras_cerradas_prev = set()
+    fig_codes_cerrados_prev = set()
     tl_codes_closed_prev = set()
     if not recalc:
         for g in (ganadores or []):
@@ -12479,11 +12480,13 @@ def _detectar_ganadores(fecha_iso: str, stack: list, ultimo_marcado: int, recalc
             if fk:
                 figuras_cerradas_prev.add(fk)
             try:
-                gc = str((g or {}).get("fig_code") or "").strip().upper()
+                gc = str((g or {}).get("fig_code") or code_for((g or {}).get("figura") or (g or {}).get("nombre_figura") or "")).strip().upper()
+            except Exception:
+                gc = ""
+            if gc:
+                fig_codes_cerrados_prev.add(gc)
                 if gc in ("TL1", "TL2", "TL3", "TL4"):
                     tl_codes_closed_prev.add(gc)
-            except Exception:
-                pass
 
     # figuras del día
     figuras = _load_figuras_por_fecha(fecha_iso)
@@ -12651,6 +12654,20 @@ def _detectar_ganadores(fecha_iso: str, stack: list, ultimo_marcado: int, recalc
             and p.get("code") not in _normal_codes_bloqueados
         }
 
+    # Salvaguarda: cuando ya cerraron todas las figuras normales del día,
+    # desde ese punto solo deben participar los cierres finales (LLENA/RELLENA/YAPA/
+    # COMPLETA o sus TL programadas). Esto evita que una balota de cierre reabra por error
+    # figuras antiguas por alias de nombre o diferencias entre agenda/resultado.
+    final_family_codes = {"LLEN", "RELL", "YAPA", "COMP", "TL1", "TL2", "TL3", "TL4"}
+    if (not recalc) and all_non_tl_closed_prev:
+        pendientes_finales = [
+            p for p in (patrones or [])
+            if str(p.get("code") or "").strip().upper() in final_family_codes
+            and str(p.get("code") or "").strip().upper() not in fig_codes_cerrados_prev
+        ]
+        if pendientes_finales:
+            patrones = pendientes_finales
+
     # normaliza último marcado (solo en modo normal)
     try:
         ultimo = int(ultimo_marcado) if ultimo_marcado else 0
@@ -12722,8 +12739,12 @@ def _detectar_ganadores(fecha_iso: str, stack: list, ultimo_marcado: int, recalc
 
             for pat in patrones:
                 # Si la figura ya tuvo ganador en una bola anterior, ya no participa más.
-                if (not recalc) and pat.get("fig_key") and pat.get("fig_key") in figuras_cerradas_prev:
-                    continue
+                if not recalc:
+                    _pat_code = str(pat.get("code") or "").strip().upper()
+                    if _pat_code and _pat_code in fig_codes_cerrados_prev:
+                        continue
+                    if pat.get("fig_key") and pat.get("fig_key") in figuras_cerradas_prev:
+                        continue
 
                 fig_code = pat["code"]
                 carton_id_norm = _norm_tabla_id(carton_id)
