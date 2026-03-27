@@ -535,7 +535,6 @@
     function collectResultados(){
       const items = Array.from(document.querySelectorAll('.block')).map(bl=>{
         const figura = bl.dataset.fig || '';
-        the
         const ganadores = Array.from(bl.querySelectorAll('.rows tr')).map(tr=>{
           const ins=tr.querySelectorAll('input');
           return {boleto:(ins[0]?.value||'').trim(), nombre:(ins[1]?.value||'').trim(), vendedor:(ins[2]?.value||'').trim(), sector:(ins[3]?.value||'').trim(), premio:Number(ins[4]?.value||0)}
@@ -547,10 +546,25 @@
     }
 
     async function guardar(){
-      const fd=new FormData(); fd.append('fecha', FECHA);
-      const {items, extras}=collectResultados(); fd.append('resultados', JSON.stringify(items)); fd.append('extras', JSON.stringify(extras));
-      const r=await fetch('/boletin/guardar',{method:'POST',body:fd}); const j=await r.json().catch(()=>({ok:false}));
-      toast(j.ok ? 'Resultados guardados. ✅' : ('Error: ' + (j.error||'no se pudo guardar') + ' ❌'), j.ok);
+      try{
+        const fd=new FormData();
+        fd.append('fecha', FECHA);
+        const {items, extras}=collectResultados();
+        fd.append('resultados', JSON.stringify(items));
+        fd.append('extras', JSON.stringify(extras));
+
+        const r=await fetch('/boletin/guardar',{method:'POST',body:fd,cache:'no-store'});
+        const j=await r.json().catch(()=>({ok:false,error:'respuesta inválida del servidor'}));
+        if(!r.ok || !j.ok){
+          throw new Error(j.error || 'no se pudo guardar');
+        }
+        toast('Resultados guardados. ✅', true);
+        return true;
+      }catch(err){
+        console.error('Error guardando boletín:', err);
+        toast('Error: ' + (err?.message || 'no se pudo guardar') + ' ❌', false);
+        return false;
+      }
     }
 
     function setLinks(){
@@ -560,15 +574,15 @@
 
   // IMPORTANTE: antes de abrir el PDF, guardar lo que escribiste (para que no salga en blanco)
   $('#btnPdf').onclick = async () => {
-    try { await guardar(); } catch(e) {}
-    window.open(pdfUrl, '_blank');
+    const ok = await guardar();
+    if(ok) window.open(pdfUrl, '_blank');
   };
 
   // Si dan clic en "Abrir PDF" también guarda primero
   $('#aPdfLink').onclick = async (e) => {
     e.preventDefault();
-    try { await guardar(); } catch(e) {}
-    window.open(pdfUrl, '_blank');
+    const ok = await guardar();
+    if(ok) window.open(pdfUrl, '_blank');
   };
 }
 
@@ -604,9 +618,13 @@
     $('#btnCollapseAll').addEventListener('click', ()=>document.querySelectorAll('.block').forEach(b=>b.setAttribute('data-collapsed','1')));
 
     // Atajos
-    document.addEventListener('keydown', (e)=>{
-      if(e.ctrlKey && e.key.toLowerCase()==='s'){ e.preventDefault(); guardar(); }
-      if(e.ctrlKey && e.key.toLowerCase()==='p'){ e.preventDefault(); window.open(`/boletin/pdf?fecha=${encodeURIComponent(FECHA)}`,'_blank'); }
+    document.addEventListener('keydown', async (e)=>{
+      if(e.ctrlKey && e.key.toLowerCase()==='s'){ e.preventDefault(); await guardar(); }
+      if(e.ctrlKey && e.key.toLowerCase()==='p'){
+        e.preventDefault();
+        const ok = await guardar();
+        if(ok) window.open(`/boletin/pdf?fecha=${encodeURIComponent(FECHA)}`,'_blank');
+      }
       if(e.altKey  && (e.key.toLowerCase()==='a')){ e.preventDefault();
         const bl = ACTIVE_BLOCK || document.querySelector('.block'); if(!bl) return;
         bl.querySelector('.rows').insertAdjacentHTML('beforeend',ganadorRowHTML({})); recalcBlock(bl);

@@ -5,6 +5,7 @@
   <title>Cobro de Caja | GL Bingo</title>
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet"/>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <style>
     :root{
       --bg:#f6f8fc; --panel:#ffffff; --ink:#1b2240; --muted:#7b81a6;
@@ -64,6 +65,8 @@
     .pill-red{background:#ffe9ec;color:#b01922}
 
     /* Etiqueta de transferencia por vendedor */
+    .tag-comm{display:inline-flex;align-items:center;gap:6px;background:#fff7ed;color:#9a3412;border:1px solid #fed7aa;border-radius:999px;padding:2px 8px;margin-left:8px;font-size:.74rem;font-weight:900}
+    .print-link{display:inline-flex;align-items:center;justify-content:center;min-width:36px}
     .tag-trans{
       display:inline-flex;align-items:center;gap:6px;
       background:#e8f3ff;color:#1459a6;border:1px solid #cfe6ff;
@@ -72,6 +75,7 @@
 
     .grid{display:grid;gap:12px}
     .grid.cols-3{grid-template-columns:repeat(3,1fr)}
+    .table-wrap{overflow:auto;border:1px solid var(--ring);border-radius:12px}
     .kpi{background:#f8fafc;border:1px solid var(--ring);border-radius:12px;padding:12px}
     .kpi .k{font-size:.82rem;color:#6a72a2;font-weight:800}
     .kpi .v{font-size:1.2rem;font-weight:900}
@@ -81,6 +85,7 @@
     .modal .box .hd{padding:12px 16px;border-bottom:1px solid var(--ring);display:flex;align-items:center;gap:10px}
     .modal .box .bd{padding:12px 16px;max-height:70vh;overflow:auto}
     @media (max-width:1100px){ .grid.cols-3{grid-template-columns:1fr} }
+    @media print{.sidebar,.top .btn,.btn,.modal{display:none !important} .app{grid-template-columns:1fr} main{padding:0}}
   </style>
 </head>
 <body>
@@ -169,10 +174,12 @@
           <tr class="row-porcobrar"
               data-seudonimo="{{ v.seudonimo|default('') }}"
               data-entregados="{{ v.boletos_entregados|default(0) }}"
-              data-planillas="{{ (v.planillas|default([]))|length }}">
+              data-planillas="{{ (v.planillas|default([]))|length }}"
+              data-comision-modo="{{ v.modo_comision|default('normal') }}"
+              data-comision-manual="{{ '%.2f' % (v.comision_manual|default(0.0)) }}">
             <td class="vend-cell">
               <span class="name">{{ v.nombre_completo|default(v.seudonimo) }}</span>
-              <span class="nick">{{ v.seudonimo|default('') }}</span>
+              <span class="nick">{{ v.seudonimo|default('') }}</span>{% if (v.modo_comision|default('normal')) == 'manual' and (v.comision_manual|default(0.0)) > 0 %}<span class="tag-comm" title="Comisión manual configurada"><i class="bi bi-stars"></i> Manual {{ '%.2f' % (v.comision_manual|default(0.0)) }}%</span>{% endif %}
             </td>
             <td>{{ (v.planillas|default([]))|length }}</td>
             <td class="td-ent">{{ v.boletos_entregados|default(0) }}</td>
@@ -187,6 +194,7 @@
             <td>$<span class="td-vuelto">0.00</span></td>
             <td>
               <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+                {% if can_edit_vendor_commission %}<button type="button" class="btn btn-ghost btn-mini btn-comm" title="Configurar comisión manual"><i class="bi bi-percent"></i></button>{% endif %}
                 <button type="button" class="btn btn-ghost btn-mini btn-qr"><i class="bi bi-qr-code-scan"></i> QR</button>
                 <span class="qr-count-badge" style="display:none;padding:2px 8px;border-radius:999px;background:#eef2ff;color:#3730a3;font-weight:700;font-size:11px">QR: 0</span>
                 <button type="button" class="btn btn-accent btn-mini btn-cobrar"><i class="bi bi-check2-circle"></i> Cobrar</button>
@@ -230,6 +238,7 @@
             <th>Pago $</th>
             <th>Vuelto $</th>
             <th>Estado</th>
+            {% if session.get('rol') == 'Super Administrador' %}<th>Acción</th>{% endif %}
           </tr>
           </thead>
           <tbody>
@@ -239,7 +248,7 @@
               data-efectivo="{{ '%.2f' % (v.efectivo|default(0.0)) }}">
             <td class="vend-cell">
               <span class="name">{{ v.nombre_completo|default(v.seudonimo) }}</span>
-              <span class="nick">{{ v.seudonimo|default('') }}</span>
+              <span class="nick">{{ v.seudonimo|default('') }}</span>{% if (v.modo_comision|default('normal')) == 'manual' and (v.comision_manual|default(0.0)) > 0 %}<span class="tag-comm" title="Comisión manual aplicada"><i class="bi bi-stars"></i> Manual {{ '%.2f' % (v.comision_manual|default(0.0)) }}%</span>{% endif %}
               {% if (v.transferencia|default(0.0)) > 0 %}
                 <span class="tag-trans" title="Transferencia">
                   <i class="bi bi-bank"></i> T ${{ '%.2f' % (v.transferencia|default(0.0)) }}
@@ -262,6 +271,13 @@
             <td>${{ '%.2f' % (v.pago_calc|default(0.0)) }}</td>
             <td>${{ '%.2f' % (v.vuelto_calc|default(0.0)) }}</td>
             <td>✔️</td>
+            {% if session.get('rol') == 'Super Administrador' %}
+            <td>
+              <button type="button" class="btn btn-danger btn-mini btn-del-cobro" data-fecha="{{ fecha_actual }}" data-seudonimo="{{ v.seudonimo|default('') }}">
+                <i class="bi bi-trash"></i> Eliminar
+              </button>
+            </td>
+            {% endif %}
           </tr>
           {% endfor %}
           <tr class="totals" id="row-total-pg">
@@ -277,6 +293,7 @@
             <td>${{ '%.2f' % (paid_totals.pago|default(0.0)) }}</td>
             <td>${{ '%.2f' % ((paid_totals.pago|default(0.0)) - (paid_totals.a_pagar_caja|default(0.0))) }}</td>
             <td></td>
+            {% if session.get('rol') == 'Super Administrador' %}<td></td>{% endif %}
           </tr>
           </tbody>
         </table>
@@ -297,6 +314,42 @@
       <div class="kpi">
         <div class="k">Fecha activa</div>
         <div class="v" id="res-fecha">{{ fecha_actual|default('') }}</div>
+      </div>
+    </section>
+
+    <section class="card" style="margin-top:16px" id="section-reporte-dia">
+      <div class="hd">
+        <h3><i class="bi bi-graph-up-arrow"></i> Curva y ranking diario de vendedores</h3>
+        <div style="margin-left:auto">
+          <button type="button" class="btn btn-mini btn-ghost" id="btnPrintReporteDia"><i class="bi bi-printer"></i> Imprimir reporte diario</button>
+        </div>
+      </div>
+      <div class="bd">
+        <div class="grid cols-3">
+          <div style="grid-column:span 2">
+            <canvas id="chartVendedoresDia" height="120"></canvas>
+          </div>
+          <div>
+            <div class="kpi" style="margin-bottom:10px">
+              <div class="k">Vendedor que más vendió</div>
+              <div class="v" id="topVendDia">—</div>
+            </div>
+            <div class="kpi">
+              <div class="k">Vendedor que menos vendió</div>
+              <div class="v" id="lowVendDia">—</div>
+            </div>
+          </div>
+        </div>
+        <div style="margin-top:14px" class="table-wrap">
+          <table id="tbl-ranking-dia">
+            <thead>
+              <tr><th>#</th><th>Vendedor</th><th>Vendidos</th><th>Devueltos</th></tr>
+            </thead>
+            <tbody>
+              <tr><td colspan="4" style="text-align:center;color:#7b81a6">Cargando reporte del día…</td></tr>
+            </tbody>
+          </table>
+        </div>
       </div>
     </section>
   </main>
@@ -335,6 +388,43 @@
         </div>
         <div class="soft" id="cfgResumen" style="margin-top:8px">Se calcula automáticamente: % Caja = 100 - % Comisión vendedor (y aplica extra si cumple meta).</div>
         <div style="margin-top:12px;display:flex;gap:8px;justify-content:flex-end">
+          <button type="submit" class="btn btn-primary"><i class="bi bi-save2"></i> Guardar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Comisión por vendedor -->
+<div class="modal" id="modalComm">
+  <div class="box">
+    <div class="hd">
+      <i class="bi bi-percent"></i><h3 style="margin:0">Comisión especial por vendedor</h3>
+      <div style="margin-left:auto"><button class="btn btn-mini btn-danger" id="commClose">Cerrar</button></div>
+    </div>
+    <div class="bd">
+      <div class="soft" id="commInfo" style="margin-bottom:10px">—</div>
+      <form id="formComm">
+        <div class="grid cols-3">
+          <div>
+            <label>Modo</label>
+            <select id="commModo" name="modo_comision">
+              <option value="normal">Normal del día</option>
+              <option value="manual">Comisión manual fija</option>
+            </select>
+          </div>
+          <div>
+            <label>% Manual</label>
+            <input type="number" step="0.01" min="0" max="100" id="commManual" name="comision_manual" value="0">
+          </div>
+          <div>
+            <label>Referencia</label>
+            <input type="text" id="commRef" readonly>
+          </div>
+        </div>
+        <div class="soft" style="margin-top:10px">Solo Super Administrador puede cambiar esta opción. Si está en modo manual, ese vendedor cobrará exactamente ese porcentaje y no la comisión general del día.</div>
+        <div style="margin-top:12px;display:flex;gap:8px;justify-content:flex-end">
+          <button type="button" class="btn btn-ghost" id="commNormal"><i class="bi bi-arrow-counterclockwise"></i> Volver a normal</button>
           <button type="submit" class="btn btn-primary"><i class="bi bi-save2"></i> Guardar</button>
         </div>
       </form>
@@ -455,6 +545,7 @@
 </div>
 
 <script>
+window.IS_SUPERADMIN = {{ 'true' if session.get('rol') == 'Super Administrador' else 'false' }};
 (()=>{ // IIFE
   const $ = (q,el=document)=> el.querySelector(q);
   const $$ = (q,el=document)=> Array.from(el.querySelectorAll(q));
@@ -471,6 +562,7 @@
   const BASE = parseFloat("{{ config.comision_vendedor|default(0.0) }}")||0;
   const EXTRA= parseFloat("{{ config.comision_extra_meta|default(0.0) }}")||0;
   const META = parseInt("{{ config.meta_boletos|default(0) }}",10)||0;
+  const CAN_EDIT_VENDOR_COMMISSION = {{ 'true' if can_edit_vendor_commission else 'false' }};
 
   if(fDia && !fDia.value) fDia.value = fechaBase;
   btnIr?.addEventListener('click', ()=>{
@@ -495,8 +587,105 @@
     }catch(err){ console.error(err); alert('Error de red'); }
   });
 
+  // -------- Modal comisión especial por vendedor
+  const modalComm = $('#modalComm');
+  const formComm = $('#formComm');
+  const commModo = $('#commModo');
+  const commManual = $('#commManual');
+  const commRef = $('#commRef');
+  const commInfo = $('#commInfo');
+  let currentCommTR = null;
+
+  function closeCommModal(){
+    currentCommTR = null;
+    if(modalComm) modalComm.style.display = 'none';
+  }
+
+  function openCommModal(tr){
+    if(!tr || !modalComm) return;
+    currentCommTR = tr;
+    const seud = String(tr.dataset.seudonimo || '').trim();
+    const nombre = String(tr.dataset.nombre || '').trim();
+    const cfg = getRowCommissionConfig(tr);
+    if(commModo) commModo.value = cfg.mode === 'manual' ? 'manual' : 'normal';
+    if(commManual) commManual.value = Number(cfg.manual || 0).toFixed(2);
+    if(commRef) commRef.value = seud || nombre || '—';
+    if(commInfo) commInfo.innerHTML = `<b>Vendedor:</b> ${nombre || '—'} <span style="opacity:.7">${seud || ''}</span><br><b>Comisión del día:</b> ${BASE.toFixed(2)}%${(META>0 && EXTRA>0) ? ` + ${EXTRA.toFixed(2)}% por meta` : ''}`;
+    if(commManual) commManual.disabled = (commModo?.value !== 'manual');
+    modalComm.style.display = 'flex';
+  }
+
+  commModo?.addEventListener('change', ()=>{
+    if(commManual) commManual.disabled = (commModo.value !== 'manual');
+    if(commModo.value !== 'manual' && commManual) commManual.value = '0.00';
+  });
+
+  $('#commClose')?.addEventListener('click', closeCommModal);
+  $('#commNormal')?.addEventListener('click', ()=>{
+    if(commModo) commModo.value = 'normal';
+    if(commManual) { commManual.value = '0.00'; commManual.disabled = true; }
+  });
+  window.addEventListener('click', (e)=>{ if(e.target===modalComm) closeCommModal(); });
+
+  formComm?.addEventListener('submit', async (e)=>{
+    e.preventDefault();
+    if(!currentCommTR) return;
+    const seud = String(currentCommTR.dataset.seudonimo || '').trim();
+    if(!seud){ alert('No se encontró el seudónimo del vendedor'); return; }
+    const payload = {
+      modo_comision: (commModo?.value === 'manual' ? 'manual' : 'normal'),
+      comision_manual: Number(String(commManual?.value || '0').replace(',', '.')) || 0
+    };
+    if(payload.modo_comision !== 'manual' || payload.comision_manual <= 0){
+      payload.modo_comision = 'normal';
+      payload.comision_manual = 0;
+    }
+    try{
+      const r = await fetch(`/api/vendedores/comision/${encodeURIComponent(seud)}`, {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify(payload)
+      });
+      const j = await r.json();
+      if(!r.ok || !j?.ok){
+        alert(j?.error || 'No se pudo guardar la comisión especial');
+        return;
+      }
+      currentCommTR.dataset.comisionModo = j.modo_comision || 'normal';
+      currentCommTR.dataset.comisionManual = Number(j.comision_manual || 0).toFixed(2);
+      const nick = currentCommTR.querySelector('.nick');
+      if(nick){
+        const old = currentCommTR.querySelector('.tag-comm');
+        if(old) old.remove();
+        if((j.modo_comision || 'normal') === 'manual' && Number(j.comision_manual || 0) > 0){
+          nick.insertAdjacentHTML('afterend', ` <span class="tag-comm" title="Comisión manual configurada"><i class="bi bi-stars"></i> Manual ${Number(j.comision_manual).toFixed(2)}%</span>`);
+        }
+      }
+      recalcRow(currentCommTR);
+      closeCommModal();
+    }catch(err){
+      console.error(err);
+      alert('Error de red al guardar la comisión especial');
+    }
+  });
+
   // -------- Por Cobrar: cálculos
   function pctForSold(sold){ let p=BASE; if(META>0 && sold>=META) p+=EXTRA; return Math.max(0, Math.min(100, p)); }
+  function getRowCommissionConfig(tr){
+    const mode = String(tr?.dataset?.comisionModo || 'normal').trim().toLowerCase();
+    const manual = Number(String(tr?.dataset?.comisionManual || '0').replace(',', '.')) || 0;
+    return { mode: (mode === 'manual' && manual > 0) ? 'manual' : 'normal', manual: Math.max(0, Math.min(100, manual)) };
+  }
+  function pctForRow(tr, sold){
+    const cfg = getRowCommissionConfig(tr);
+    if(cfg.mode === 'manual' && cfg.manual > 0) return cfg.manual;
+    return pctForSold(sold);
+  }
+  function commissionBadgeHTML(tr){
+    const cfg = getRowCommissionConfig(tr);
+    if(cfg.mode === 'manual' && cfg.manual > 0) return ` <span class="tag-comm" title="Comisión manual aplicada"><i class="bi bi-stars"></i> Manual ${cfg.manual.toFixed(2)}%</span>`;
+    return '';
+  }
   function recalcRow(tr){
     const ent = Number(tr.dataset.entregados||0);
     const inDev = tr.querySelector('.in-devueltos');
@@ -515,7 +704,7 @@
     inDev.value = dev;
     let sold = ent - dev;
     let total = sold * VAL;
-    let pct = pctForSold(sold);
+    let pct = pctForRow(tr, sold);
     let ganV = total * pct / 100.0;
     let ganE = total - ganV;
     let trf = Number(String(inTr.value||'0').replace(',', '.')); if(!Number.isFinite(trf) || trf<0) trf = 0;
@@ -586,6 +775,7 @@
       });
     }
     tr.querySelector('.btn-qr')?.addEventListener('click', ()=> openQRModal(tr));
+    tr.querySelector('.btn-comm')?.addEventListener('click', ()=> openCommModal(tr));
     setRowQRItems(tr, getRowQRItems(tr));
     recalcRow(tr);
   });
@@ -779,6 +969,8 @@
     const efc  = tr.querySelector('.in-efec').value || 0;
     const vlt  = tr.querySelector('.td-vuelto').textContent;
 
+    const commCfg = getRowCommissionConfig(tr);
+    const commModoTxt = (commCfg.mode === 'manual' && commCfg.manual > 0) ? `Manual (${commCfg.manual.toFixed(2)}%)` : 'Normal del día';
     const qrItems = getRowQRItems(tr);
     const qrCount = qrItems.length;
     const modoDev = qrCount > 0 ? `QR (${qrCount} boletos)` : 'Manual';
@@ -799,6 +991,7 @@ cfBody.innerHTML = `
       <div class="grid cols-3">
         <div><b>Vendedor:</b> ${name}</div>
         <div><b>% Comisión:</b> ${pct}</div>
+        <div><b>Modo comisión:</b> ${commModoTxt}</div>
         <div><b>Total venta:</b> ${money(total)}</div>
         <div><b>Vendidos:</b> ${vend}</div>
         <div><b>Devueltos:</b> ${dev}</div>
@@ -846,6 +1039,10 @@ cfBody.innerHTML = `
     if(String(cobro.modo_devolucion||'') !== 'qr'){ clearRowQRItems(tr); }
     if(tr.querySelector('.in-trans')) tr.querySelector('.in-trans').value = Number(cobro.transferencia||0).toFixed(2);
     if(tr.querySelector('.in-efec')) tr.querySelector('.in-efec').value = Number(cobro.efectivo||0).toFixed(2);
+    if(String(cobro.modo_comision||'normal') === 'manual' && Number(cobro.comision_manual||0) > 0){
+      tr.dataset.comisionModo = 'manual';
+      tr.dataset.comisionManual = Number(cobro.comision_manual||0).toFixed(2);
+    }
     if(tr.querySelector('.td-vendidos')) tr.querySelector('.td-vendidos').textContent = Number(cobro.vendidos||0);
     if(tr.querySelector('.td-total')) tr.querySelector('.td-total').textContent = Number(cobro.total_venta||0).toFixed(2);
     if(tr.querySelector('.td-pct')) tr.querySelector('.td-pct').textContent = Number(cobro.pct_aplicado||0).toFixed(2) + '%';
@@ -880,11 +1077,13 @@ cfBody.innerHTML = `
     const qrCount = getRowQRItems(tr).length;
     const tag = transf>0 ? `<span class="tag-trans" title="Transferencia"><i class="bi bi-bank"></i> T ${money(transf)}</span>` : '';
     const tagQR = qrCount>0 ? `<span class="tag-trans" style="background:#eef2ff;border-color:#c7d2fe;color:#3730a3" title="No vendidos por QR"><i class="bi bi-qr-code-scan"></i> QR ${qrCount}</span>` : '';
+    const tagComm = commissionBadgeHTML(tr);
+    const fechaAct = (new URL(location.href)).searchParams.get('fecha') || (root?.dataset.fecha) || '';
     row.innerHTML = `
-      <td class="vend-cell"><span class="name">${name}</span><span class="nick">${nick}</span>${tag}${tagQR}</td>
+      <td class="vend-cell"><span class="name">${name}</span><span class="nick">${nick}</span>${tagComm}${tag}${tagQR}</td>
       <td>${plan}</td><td>${entr}</td><td>${dev}</td><td>${vend}</td>
       <td>${money(total)}</td><td>${pct}</td><td>${money(gv)}</td><td>${money(ge)}</td>
-      <td>${money(pago)}</td><td>${money(vlt)}</td><td>✔️</td>`;
+      <td>${money(pago)}</td><td>${money(vlt)}</td><td>✔️</td>${window.IS_SUPERADMIN ? `<td><button type="button" class="btn btn-danger btn-mini btn-del-cobro" data-fecha="${encodeHTML(fechaAct)}" data-seudonimo="${encodeHTML(nick)}"><i class="bi bi-trash"></i> Eliminar</button></td>` : ''}`;
     tbody.insertBefore(row, totalsRow);
 
     tr.remove();
@@ -935,6 +1134,7 @@ cfBody.innerHTML = `
       if(resp && resp.ok){
         if(resp.cobro) applyServerCobroToRow(currentTR, resp.cobro);
         moveToPagados(currentTR);
+        cargarReporteVendedoresDia();
       } else {
         alert((resp && resp.error) ? resp.error : 'No se pudo guardar el cobro.');
         return;
@@ -978,8 +1178,53 @@ cfBody.innerHTML = `
   $('#trClose')?.addEventListener('click', ()=> modalTr.style.display='none');
   window.addEventListener('click', (e)=>{ if(e.target===modalTr) modalTr.style.display='none'; });
 
+  let chartVendDia = null;
+  async function cargarReporteVendedoresDia(){
+    const fechaAct = (new URL(location.href)).searchParams.get('fecha') || (root?.dataset.fecha) || '';
+    if(!fechaAct) return;
+    try{
+      const r = await fetch(`/api/contabilidad/vendedores_ranking?desde=${encodeURIComponent(fechaAct)}&hasta=${encodeURIComponent(fechaAct)}`);
+      const j = await r.json();
+      const items = Array.isArray(j.items) ? j.items : [];
+      const tb = document.querySelector('#tbl-ranking-dia tbody');
+      tb.innerHTML = '';
+      if(!items.length){
+        tb.innerHTML = '<tr><td colspan="4" style="text-align:center;color:#7b81a6">No hay vendedores cobrados todavía en esta fecha.</td></tr>';
+        document.getElementById('topVendDia').textContent = '—';
+        document.getElementById('lowVendDia').textContent = '—';
+        if(chartVendDia){ chartVendDia.destroy(); chartVendDia = null; }
+        return;
+      }
+      items.forEach((it, idx)=>{
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td>${idx+1}</td><td style="text-align:left">${it.vendedor||''}</td><td>${Number(it.vendidos||0)}</td><td>${Number(it.devueltos||0)}</td>`;
+        tb.appendChild(tr);
+      });
+      const top = items[0];
+      const low = items[items.length-1];
+      document.getElementById('topVendDia').textContent = `${top.vendedor} (${top.vendidos})`;
+      document.getElementById('lowVendDia').textContent = `${low.vendedor} (${low.vendidos})`;
+      const ctx = document.getElementById('chartVendedoresDia');
+      if(chartVendDia) chartVendDia.destroy();
+      chartVendDia = new Chart(ctx, {
+        type:'line',
+        data:{
+          labels: items.map(x=>x.vendedor),
+          datasets:[
+            {label:'Vendidos', data: items.map(x=>Number(x.vendidos||0)), tension:.25, borderWidth:3, fill:false},
+            {label:'Devueltos', data: items.map(x=>Number(x.devueltos||0)), tension:.25, borderWidth:2, fill:false}
+          ]
+        },
+        options:{responsive:true, maintainAspectRatio:false, plugins:{legend:{display:true}}, scales:{y:{beginAtZero:true}}}
+      });
+    }catch(err){
+      console.error(err);
+    }
+  }
+
   // Inicializa totales Pagados al cargar
   recalcTotalsPG();
+  cargarReporteVendedoresDia();
 })();
 </script>
 </body>

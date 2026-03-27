@@ -420,6 +420,7 @@
           <label>Acciones</label>
           <div class="quick">
             <button class="btn btn-ghost" id="btnExport"><i class="bi bi-download"></i> Exportar CSV</button>
+            <button class="btn btn-ghost" id="btnPdf"><i class="bi bi-file-earmark-pdf"></i> Descargar PDF</button>
             <button class="btn btn-ghost" id="btnImprimir"><i class="bi bi-printer"></i> Imprimir</button>
             <button class="btn btn-danger hide" id="btnReset"><i class="bi bi-exclamation-triangle-fill"></i> Reset Contabilidad</button>
           </div>
@@ -472,6 +473,8 @@
           <canvas id="chIngPrem" height="170"></canvas>
         </div>
       </div>
+
+      <div class="card" id="sellerHighlights" style="margin-top:14px"><div style="display:flex;gap:18px;flex-wrap:wrap"><div><b>Mejor vendedor:</b> <span id="bestSeller">—</span></div><div><b>Menor vendedor:</b> <span id="worstSeller">—</span></div><div><b>Premios por caducar:</b> <span id="premiosPendientes">0</span></div><div><b>Planillas no asignadas:</b> <span id="planillasPendientes">0</span></div></div></div>
 
       <div class="grid section" id="cardsVendedores" style="grid-template-columns:1fr 1fr">
         <div class="card">
@@ -874,7 +877,7 @@
   $('#g-cat-otro').addEventListener('input', syncCategoria);
   syncCategoria();
 
-  let chRes=null, chBol=null, chCos=null, chIngPrem=null, chGastosDia=null;
+  let chRes=null, chBol=null, chCos=null, chIngPrem=null, chGastosDia=null, chCurvaVentas=null, chCurvaDevueltos=null;
   let resumenCache=null, gastosCache=[], bancoCache=[], premiosPagadosCache=[];
 
   async function cargarResumen(){
@@ -892,16 +895,23 @@
       ['boletos_impresos','bi-grid-3x3-gap-fill','Boletos impresos', j.boletos_impresos, 'Total impresos'],
       ['boletos_vendidos','bi-bag-check-fill','Boletos vendidos', j.boletos_vendidos, 'Total vendidos'],
       ['boletos_devueltos','bi-bag-x-fill','Boletos devueltos', j.boletos_devueltos, 'Total devueltos'],
+      ['boletos_no_asignados','bi-box-seam','Boletos no asignados', j.boletos_no_asignados || 0, 'Impresos que no salieron a calle'],
+      ['planillas_asignadas','bi-journal-text','Planillas asignadas', j.planillas_asignadas || 0, 'Planillas entregadas'],
+      ['planillas_no_asignadas','bi-journal-x','Planillas no asignadas', j.planillas_no_asignadas || 0, 'Planillas en blanco'],
       ['ingresos_brutos','bi-cash-coin','Ingresos brutos', money(j.ingresos_brutos), 'Ventas brutas'],
       ['ganancia_vendedores','bi-people-fill','Ganancia vendedores', money(j.ganancia_vendedores), 'Comisiones'],
       ['ganancia_empresa','bi-building','Ganancia empresa', money(j.ganancia_empresa), 'Ingreso neto empresa'],
-      ['premios_pagados_total','bi-trophy-fill','Premios pagados', money(j.premios_pagados_total), 'Pagos registrados'],
+      ['premios_pagados_total','bi-trophy-fill','Premios pagados', money(j.premios_pagados_total), `${j.premios_pagados_cantidad || 0} premios registrados`],
+      ['premios_por_caducar','bi-alarm','Premios por caducar', j.premios_por_caducar || 0, 'Próximos a vencer'],
+      ['premios_caducados','bi-exclamation-octagon','Premios caducados', j.premios_caducados || 0, 'Vencidos'],
       ['gastos_total','bi-receipt','Gastos', money(j.gastos_total), 'Egresos'],
       ['sueldos_total','bi-person-badge-fill','Sueldos', money(j.sueldos_total), 'Egresos'],
       ['utilidad_neta','bi-clipboard-check-fill','Utilidad neta', money(j.utilidad_neta), 'Resultado'],
       ['saldo_caja','bi-wallet2','Saldo caja', money(j.saldo_caja), 'Estimado'],
       ['saldo_banco','bi-bank','Saldo banco', money(j.saldo_banco), 'Estimado'],
     ];
+    $('#premiosPendientes').textContent = `${j.premios_por_caducar || 0} / caducados ${j.premios_caducados || 0}`;
+    $('#planillasPendientes').textContent = j.planillas_no_asignadas || 0;
     items.forEach(([key,icon,label,val,sub])=>{
       const el=document.createElement('div');
       el.className='card kpi'; el.dataset.key=key;
@@ -934,6 +944,26 @@
       data:{labels:['Ingresos','Premios pagados'],datasets:[{data:[j.ingresos_brutos,j.premios_pagados_total]}]},
       options:{responsive:true,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true}}}
     });
+  }
+
+  async function cargarCurvasVendedores(){
+    const qs = new URLSearchParams({desde:$('#f-desde').value,hasta:$('#f-hasta').value}).toString();
+    const r = await fetch('/api/contabilidad/vendedores_ranking?'+qs);
+    const j = await r.json().catch(()=>({ok:false, items:[]}));
+    const items = (j.items || []).slice(0, 15);
+    const labels = items.map(x=>x.vendedor || '—');
+    const vendidos = items.map(x=>Number(x.vendidos||0));
+    const devueltos = items.map(x=>Number(x.devueltos||0));
+    const best = items.length ? `${items[0].vendedor} (${items[0].vendidos})` : '—';
+    const worst = items.length ? `${items[items.length-1].vendedor} (${items[items.length-1].vendidos})` : '—';
+    $('#bestSeller').textContent = best;
+    $('#worstSeller').textContent = worst;
+
+    chCurvaVentas && chCurvaVentas.destroy();
+    chCurvaVentas = new Chart($('#chCurvaVentas'), {type:'line', data:{labels, datasets:[{label:'Vendidos', data:vendidos, fill:false, tension:.28}]}, options:{responsive:true,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true}}}});
+
+    chCurvaDevueltos && chCurvaDevueltos.destroy();
+    chCurvaDevueltos = new Chart($('#chCurvaDevueltos'), {type:'bar', data:{labels, datasets:[{label:'Devueltos', data:devueltos}]}, options:{responsive:true,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true}}}});
   }
 
   async function cargarBanco(){
@@ -1170,7 +1200,7 @@
   });
 
   async function cargarTodo(){
-    await Promise.all([cargarResumen(), cargarBanco(), cargarGastos(), cargarMovimientos()]);
+    await Promise.all([cargarResumen(), cargarCurvasVendedores(), cargarBanco(), cargarGastos(), cargarMovimientos()]);
     if(isSuper) cargarAuditoria();
     toast('Actualizado', `Datos cargados (${user || 'usuario'})`);
   }

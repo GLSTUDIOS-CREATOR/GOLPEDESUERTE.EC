@@ -1069,6 +1069,155 @@
 .disabled{opacity:.6;cursor:not-allowed}
 
 
+/* ===== Corrección boleto: ganador detectado dentro del modal ===== */
+#fixWinnerWrap{ margin-top:12px; }
+#fixWinnerWrap .winner-grid{
+  max-width:300px;
+  margin:6px auto 4px;
+  gap:4px;
+}
+#fixWinnerWrap .wcell{
+  border-width:1px;
+  border-radius:10px;
+  font-size:20px;
+  box-shadow:0 8px 18px rgba(0,0,0,.22);
+}
+#fixWinnerWrap .winner-actions .btn:disabled{
+  opacity:.6;
+  cursor:not-allowed;
+}
+#fixWinnerWrap .fix-sub b{ color: var(--gold); }
+
+/* ===== Corrección boleto: ganador al costado, visible y compacto ===== */
+#fixBoletoModal .modal-card{
+  width:min(1520px, 97vw);
+  max-height:92vh;
+}
+#fixBoletoModal .fix-panels{
+  grid-template-columns:minmax(0,1.02fr) minmax(0,1.02fr) minmax(390px,1fr);
+  align-items:start;
+}
+#fixBoletoModal #fixWinnerWrap{
+  margin-top:0;
+  align-self:start;
+  position:sticky;
+  top:0;
+  max-height:calc(92vh - 165px);
+  overflow:auto;
+  scrollbar-gutter:stable;
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+}
+#fixBoletoModal #fixWinnerWrap.hidden{ display:none !important; }
+#fixBoletoModal #fixWinnerWrap .fix-title{
+  margin-bottom:0;
+}
+#fixBoletoModal #fixWinnerWrap .fix-sub{
+  margin-top:-2px;
+  margin-bottom:2px;
+}
+#fixBoletoModal #fixWinnerWrap .winner-meta{
+  grid-template-columns:1fr 1fr;
+  gap:6px;
+  margin-top:4px !important;
+}
+#fixBoletoModal #fixWinnerWrap .winner-meta .kv{
+  padding:7px 10px;
+  font-size:12px;
+  line-height:1.2;
+}
+#fixBoletoModal #fixWinnerWrap .winner-editor{
+  margin-top:2px;
+  padding:10px;
+}
+#fixBoletoModal #fixWinnerWrap .winner-editor .we-title{
+  margin-bottom:8px;
+}
+#fixBoletoModal #fixWinnerWrap .winner-editor .we-grid{
+  grid-template-columns:1fr 108px;
+  gap:8px;
+}
+#fixBoletoModal #fixWinnerWrap .winner-editor textarea{
+  min-height:46px;
+}
+#fixBoletoModal #fixWinnerWrap .winner-editor .we-field.small input{
+  min-height:46px;
+}
+#fixBoletoModal #fixWinnerWrap .winner-editor .we-actions{
+  justify-content:stretch;
+  gap:8px;
+  margin-top:8px;
+}
+#fixBoletoModal #fixWinnerWrap .winner-editor .we-actions .btn{
+  flex:1 1 50%;
+}
+#fixBoletoModal #fixWinnerWrap .winner-grid{
+  max-width:228px;
+  margin:0 auto 2px;
+}
+#fixBoletoModal #fixWinnerWrap .wcell{
+  font-size:18px;
+}
+#fixBoletoModal #fixWinnerWrap .winner-actions{
+  justify-content:stretch;
+  margin-top:2px;
+}
+#fixBoletoModal #fixWinnerWrap .winner-actions .btn{
+  width:100%;
+  padding:10px 12px;
+}
+#fixBoletoModal #fixWinnerWrap .winner-quick{
+  margin-top:2px;
+  max-height:none;
+  overflow:visible;
+  padding-right:0;
+}
+#fixBoletoModal #fixWinnerWrap .winner-quick .hint{
+  position:static;
+  background:none;
+  padding:0;
+  margin:0 0 6px !important;
+}
+#fixBoletoModal #fixWinnerWrap .wquick{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:6px;
+}
+#fixBoletoModal #fixWinnerWrap .wchip{
+  display:flex;
+  width:100%;
+  min-height:32px;
+  text-align:left;
+  align-items:center;
+  font-size:11px;
+  line-height:1.1;
+  padding:8px 10px;
+}
+@media (max-width: 1380px){
+  #fixBoletoModal .modal-card{ width:min(1320px, 97vw); }
+  #fixBoletoModal .fix-panels{ grid-template-columns:1fr 1fr; }
+  #fixBoletoModal #fixWinnerWrap{
+    grid-column:1 / -1;
+    position:relative;
+    top:auto;
+    max-height:none;
+  }
+  #fixBoletoModal #fixWinnerWrap .winner-meta{ grid-template-columns:1fr 1fr; }
+  #fixBoletoModal #fixWinnerWrap .winner-editor .we-grid{ grid-template-columns:1fr 150px; }
+  #fixBoletoModal #fixWinnerWrap .winner-editor .we-actions{ justify-content:flex-end; }
+  #fixBoletoModal #fixWinnerWrap .winner-editor .we-actions .btn{ flex:0 0 auto; }
+  #fixBoletoModal #fixWinnerWrap .winner-actions{ justify-content:flex-end; }
+  #fixBoletoModal #fixWinnerWrap .winner-actions .btn{ width:auto; }
+  #fixBoletoModal #fixWinnerWrap .wquick{ grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); }
+}
+@media (max-width: 920px){
+  #fixBoletoModal #fixWinnerWrap .winner-meta{ grid-template-columns:1fr; }
+  #fixBoletoModal #fixWinnerWrap .winner-editor .we-grid{ grid-template-columns:1fr; }
+  #fixBoletoModal #fixWinnerWrap .winner-actions .btn{ width:100%; }
+  #fixBoletoModal #fixWinnerWrap .wquick{ grid-template-columns:1fr; }
+}
+
 /* ===== FIX MODAL (corregir boleto) — cuadros + modo figura ===== */
 .fix-figrow{
   display:flex;
@@ -1117,6 +1266,21 @@
 #fixGrid input.free{ background:#ffffff !important; color:#666 !important; border-style:dashed !important; }
 #fixGrid input.need{ background:#e6ebf5 !important; color:#111 !important; border-color:#ff1f2d !important; box-shadow: inset 0 0 0 2px rgba(255,31,45,.45) !important; }
 #fixGrid input.off{ background:#e6ebf5 !important; color:#111 !important; border-color: rgba(0,0,0,.10) !important; }
+#fixGrid input.dup{ background:#18a957 !important; color:#fff !important; border-color:#18a957 !important; box-shadow: inset 0 0 0 2px rgba(255,255,255,.18), 0 10px 26px rgba(24,169,87,.24) !important; }
+#fixGrid input.invalidslot{
+  background:#ff4ff8 !important;
+  color:#111 !important;
+  border-color:#ff4ff8 !important;
+  box-shadow: inset 0 0 0 2px rgba(255,255,255,.24), 0 10px 26px rgba(255,79,248,.28) !important;
+}
+
+.wcell.dup{ background:#18a957 !important; color:#fff !important; border-color:#18a957 !important; box-shadow:0 8px 22px rgba(24,169,87,.24) !important; }
+.wcell.invalidslot{
+  background:#ff4ff8 !important;
+  color:#111 !important;
+  border-color:#ff4ff8 !important;
+  box-shadow:0 8px 22px rgba(255,79,248,.28) !important;
+}
 
 
 #fixGrid input:focus{
@@ -1191,9 +1355,9 @@
         <button id="rev1"   class="btn ghost" type="button">↩ Reversa 1</button>
         <button id="revn"   class="btn ghost" type="button">↩ Reversa N…</button>
         <button id="revall" class="btn ghost" type="button">↩ Reversa TODO</button>
-        <button id="btnFixBoleto" class="btn ghost" title="Corrección de boleto (SuperAdmin)" type="button" onclick="window.__openFixBoleto && window.__openFixBoleto()">🛠️ Corregir boleto</button>
-        <button id="btnProgManualTL" class="btn ghost" title="Programar TL por cantidad de balotas" type="button" onclick="window.__openProgManualTL && window.__openProgManualTL()">🎯 Programar TL</button>
-        <button id="btnConsultarBoleto" class="btn ghost" title="Consultar boleto" type="button" aria-label="Consultar boleto" onclick="window.__openViewBoleto && window.__openViewBoleto()">👁️</button>
+        <button id="btnFixBoleto" class="btn ghost" title="Corrección de boleto (SuperAdmin) · Atajo Ctrl+Shift+B" type="button" onclick="window.__openFixBoleto && window.__openFixBoleto()" style="display:none" aria-hidden="true">🛠️</button>
+        <button id="btnProgManualTL" class="btn ghost" title="Programar TL por cantidad de balotas · Atajo Ctrl+Alt+L" type="button" onclick="window.__openProgManualTL && window.__openProgManualTL()" style="display:none" aria-hidden="true">🎯</button>
+        <button id="btnConsultarBoleto" class="btn ghost" title="Consultar boleto" type="button" aria-label="Consultar boleto" onclick="window.__openViewBoleto && window.__openViewBoleto()" style="display:none" aria-hidden="true">👁️</button>
       </div>
 
       <div class="extras-wrap">
@@ -1595,12 +1759,57 @@
 
               <!-- El tablero 75 se muestra abajo en panel completo para mantener estética estable -->
             </div>
+
+            <div id="fixWinnerWrap" class="fix-panel hidden">
+              <div class="fix-title">🏆 Ganador detectado en esta corrección</div>
+              <div class="fix-sub">Este bloque solo aparece si este boleto corregido coincide con una <b>figura ganadora</b>.</div>
+
+              <div class="winner-meta" style="margin-top:10px">
+                <div class="kv"><b>Figura:</b> <span id="fwFigura">—</span></div>
+                <div class="kv"><b>Tabla:</b> <span id="fwTabla">—</span></div>
+                <div class="kv"><b>Vendedor:</b> <span id="fwVend">—</span></div>
+                <div class="kv"><b>Planilla:</b> <span id="fwPlan">—</span></div>
+                <div class="kv"><b>Serie:</b> <span id="fwSerie">—</span></div>
+                <div class="kv"><b>Último número:</b> <span id="fwUltimo">—</span></div>
+                <div class="kv"><b>Pendientes:</b> <span id="fwCounter">0</span></div>
+                <div class="kv"><b>Números de la figura:</b> <span id="fwNums">—</span></div>
+              </div>
+
+              <div class="winner-editor">
+                <div class="we-title">📝 Boletín / Resultado</div>
+                <div class="we-grid">
+                  <div class="we-field">
+                    <label>Nombre / observación (Boletín)</label>
+                    <textarea id="fwBoletinTxt" rows="2" placeholder="Ej: Se quedó · Premio entregado · Observación..."></textarea>
+                  </div>
+                  <div class="we-field small">
+                    <label>Premio ($)</label>
+                    <input id="fwPremioTxt" inputmode="decimal" placeholder="0.00">
+                  </div>
+                </div>
+                <div class="we-actions">
+                  <button id="fwSaveRes" class="btn gold" type="button">💾 Guardar boletín</button>
+                  <button id="fwGoRes" class="btn ghost" type="button">📌 Ver en Resultados</button>
+                </div>
+              </div>
+
+              <div id="fwGrid" class="winner-grid"></div>
+
+              <div class="winner-actions">
+                <button id="fwNext" class="btn gold" type="button">SIGUIENTE GANADOR</button>
+              </div>
+
+              <div class="winner-quick">
+                <div class="hint" style="margin:10px 0 0">Otros ganadores detectados en este boleto:</div>
+                <div id="fwQuick" class="wquick"></div>
+              </div>
+            </div>
           </div>
 
           <!-- TABLERO 75 COMPLETO (igual al del juego, sin deformarse) -->
           <div class="fix-panel full fix-panel-board75">
             <div class="fix-title">🎯 Tablero 75 (números salidos)</div>
-            <div class="fix-sub">Aquí también puedes marcar, reversar y resetear sin salir de la corrección.</div>
+            <div class="fix-sub">Aquí también puedes marcar, reversar y refrescar sin salir de la corrección.</div>
 
             <div class="fix-toolbar" style="display:flex;gap:10px;align-items:end;flex-wrap:wrap;margin-top:10px">
               <div class="we-field small">
@@ -1611,8 +1820,7 @@
                 <button id="fixMarkBtn" class="btn start" type="button">➕ Marcar</button>
                 <button id="fixUndo1Btn" class="btn ghost" type="button">↩ Última</button>
                 <button id="fixUndoNBtn" class="btn ghost" type="button">↩ Varias</button>
-                <button id="fixResetBoardBtn" class="btn reset" type="button">🗑 Reset</button>
-                <button id="fixRefreshBoardBtn" class="btn ghost" type="button">🔄 Refrescar</button>
+                                <button id="fixRefreshBoardBtn" class="btn ghost" type="button">🔄 Refrescar</button>
               </div>
             </div>
 
@@ -2007,15 +2215,22 @@ async function cargar(){
         bn.textContent = `${code ? ('Código: ' + code + ' · ') : ''}${fact ? (fact + ' · ') : ''}Bonus del día: ${bonusDia.join(' · ')}${actual} · (clic en el dado para lanzar)`;
       }
     }
-
     function _figUiStoreKey(fecha){
       return 'glbingo_fig_ui::' + String(fecha || '');
     }
     function _figUiNormalize(estado){
-      const s = String(estado || '').trim().toUpperCase().replace(/[\u00C1]/g,'A').replace(/[\u00C9]/g,'E').replace(/[\u00CD]/g,'I').replace(/[\u00D3]/g,'O').replace(/[\u00DA]/g,'U').replace(/\s+/g,' ');
+      const s = String(estado || '').trim().toUpperCase().replace(/[Á]/g,'A').replace(/[É]/g,'E').replace(/[Í]/g,'I').replace(/[Ó]/g,'O').replace(/[Ú]/g,'U').replace(/\s+/g,' ');
       if(s === 'SE FUE' || s === 'SE-FUE') return 'SE FUE';
       if(s === 'SE QUEDO' || s === 'SE-QUEDO') return 'SE QUEDO';
       return 'INACTIVO';
+    }
+    function _figUiStateKey(nombre){
+      return String(nombre || '')
+        .trim()
+        .normalize('NFD')
+        .replace(/[̀-ͯ]/g, '')
+        .replace(/\s+/g, ' ')
+        .toUpperCase();
     }
     function _figUiRead(fecha){
       try{
@@ -2027,11 +2242,20 @@ async function cargar(){
     function _figUiWrite(fecha, data){
       try{ localStorage.setItem(_figUiStoreKey(fecha), JSON.stringify(data || {})); }catch(_){ }
     }
+    function _figUiGet(fecha, nombre, fallbackEstado){
+      const rawKey = String(nombre || '').trim();
+      if(!rawKey) return _figUiNormalize(fallbackEstado || 'INACTIVO');
+      const data = _figUiRead(fecha);
+      const normKey = _figUiStateKey(rawKey);
+      return _figUiNormalize(data[rawKey] || data[normKey] || fallbackEstado || 'INACTIVO');
+    }
     function _figUiSet(fecha, nombre, estado){
       const key = String(nombre || '').trim();
       if(!key) return;
       const data = _figUiRead(fecha);
-      data[key] = _figUiNormalize(estado);
+      const normalized = _figUiNormalize(estado);
+      data[key] = normalized;
+      data[_figUiStateKey(key)] = normalized;
       _figUiWrite(fecha, data);
     }
     function _figUiClear(fecha){
@@ -2040,16 +2264,25 @@ async function cargar(){
 
 
 // Enviar estado al servidor para actualizar XML/vMix (sin romper UI)
-async function _figUiSendToServer(nombre, estado, valor){
+async function _figUiSendToServer(nombre, estado, valor, fecha){
   try{
-    const payload = { figura: String(nombre||'').trim(), estado: String(estado||'').trim(), valor: valor };
-    if(!payload.figura) return;
-    await fetch('/juego/figura_estado', {
+    const payload = {
+      figura: String(nombre||'').trim(),
+      estado: String(estado||'').trim(),
+      valor: valor,
+      fecha: String(fecha || '').trim()
+    };
+    if(!payload.figura) return true;
+    const resp = await fetch('/juego/figura_estado', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
     });
-  }catch(e){ /* no interrumpir */ }
+    return !!resp.ok;
+  }catch(e){
+    console.warn('No se pudo guardar el estado visual de la figura:', e);
+    return false;
+  }
 }
 
     async function loadFiguras(){
@@ -2111,7 +2344,7 @@ async function _figUiSendToServer(nombre, estado, valor){
 
           const nombre = (f.nombre||'').toString().trim();
           const valor = (f.valor!=null ? f.valor : '').toString();
-          const estadoUi = _figUiNormalize(uiStates[nombre] || 'INACTIVO');
+          const estadoUi = _figUiGet(fecha, nombre, (f && f.estado) || 'INACTIVO');
           const isInactivo = (estadoUi === 'INACTIVO');
           const isQuedo = (estadoUi === 'SE QUEDO');
           const isFue = (estadoUi === 'SE FUE');
@@ -2163,17 +2396,17 @@ async function _figUiSendToServer(nombre, estado, valor){
           const [btnIn, btnOk, btnNo] = row.querySelectorAll('button');
           btnIn.addEventListener('click', async ()=>{
             _figUiSet(fecha, nombre, 'INACTIVO');
-            await _figUiSendToServer(nombre, 'INACTIVO', valor);
+            await _figUiSendToServer(nombre, 'INACTIVO', valor, fecha);
             loadFiguras();
           });
 btnOk.addEventListener('click', async ()=>{
             _figUiSet(fecha, nombre, 'SE QUEDO');
-            await _figUiSendToServer(nombre, 'SE QUEDO', valor);
+            await _figUiSendToServer(nombre, 'SE QUEDO', valor, fecha);
             loadFiguras();
           });
 btnNo.addEventListener('click', async ()=>{
             _figUiSet(fecha, nombre, 'SE FUE');
-            await _figUiSendToServer(nombre, 'SE FUE', valor);
+            await _figUiSendToServer(nombre, 'SE FUE', valor, fecha);
             loadFiguras();
           });
 el.appendChild(row);
@@ -2374,6 +2607,8 @@ el.appendChild(row);
       __resExtras = (jR && jR.extras) ? jR.extras : {comodin:{}, gran_bonus:{}};
 
       renderResultadosPanel(fecha, wins, items);
+      try{ if (typeof window.__reapplyWinnerEditorToRow === "function") window.__reapplyWinnerEditorToRow(); }catch(_){ }
+      try{ if (typeof window.__reapplyFixWinnerEditorToRow === "function") window.__reapplyFixWinnerEditorToRow(); }catch(_){ }
 
       // limpiar indicador de refresco pendiente
       const bRef = document.getElementById("btnRefrescarRes");
@@ -3017,6 +3252,20 @@ setInterval(fetchSpinnerState, 3000);
 
     return row;
   };
+  window.__reapplyWinnerEditorToRow = _applyWinnerEditorToRow;
+
+  const bindWinnerEditorLive = () => {
+    const tx = byId("wBoletinTxt");
+    const pr = byId("wPremioTxt");
+    if (tx && !tx.dataset.liveMirror){
+      tx.addEventListener("input", () => { try{ _applyWinnerEditorToRow(); }catch(_){ } });
+      tx.dataset.liveMirror = "1";
+    }
+    if (pr && !pr.dataset.liveMirror){
+      pr.addEventListener("input", () => { try{ _applyWinnerEditorToRow(); }catch(_){ } });
+      pr.dataset.liveMirror = "1";
+    }
+  };
 
 
   const saveWinnerEditorDirect = async () => {
@@ -3200,6 +3449,8 @@ setInterval(fetchSpinnerState, 3000);
 
   // Botones / eventos
   const bind = () => {
+    bindWinnerEditorLive();
+
     const btnNext = byId("wNext");
     const btnClose = byId("wClose");
     if (btnNext) btnNext.addEventListener("click", () => showNext());
@@ -3272,7 +3523,27 @@ const fixModal = byId("fixBoletoModal");
   const fixResetBoardBtn = byId("fixResetBoardBtn");
   const fixRefreshBoardBtn = byId("fixRefreshBoardBtn");
 
+  const fixWinnerWrap = byId("fixWinnerWrap");
+  const fwFigura = byId("fwFigura");
+  const fwTabla = byId("fwTabla");
+  const fwVend = byId("fwVend");
+  const fwPlan = byId("fwPlan");
+  const fwSerie = byId("fwSerie");
+  const fwUltimo = byId("fwUltimo");
+  const fwCounter = byId("fwCounter");
+  const fwNums = byId("fwNums");
+  const fwGrid = byId("fwGrid");
+  const fwQuick = byId("fwQuick");
+  const fwBoletinTxt = byId("fwBoletinTxt");
+  const fwPremioTxt = byId("fwPremioTxt");
+  const fwSaveRes = byId("fwSaveRes");
+  const fwGoRes = byId("fwGoRes");
+  const fwNext = byId("fwNext");
+
   const fixState = { stack: [], last: 0, total: 0, fecha: "", ultimos5: [] };
+  let fixWinnerList = [];
+  let fixWinnerIndex = 0;
+  let fixCurrentWinner = null;
 
 
   // Modo FIGURA (solo visual): rojo = figura, gris = otras marcadas
@@ -3363,6 +3634,7 @@ const fixModal = byId("fixBoletoModal");
     if (!fixModal) return;
     fixModal.classList.add("hidden");
     fixModal.setAttribute("aria-hidden", "true");
+    clearFixWinnerPanel();
     // pedir clave otra vez la próxima vez
     try{ if (fixKey) fixKey.value = ""; }catch(_){ }
   };
@@ -3453,6 +3725,45 @@ const fixModal = byId("fixBoletoModal");
     return out;
   };
 
+  const findFixDuplicates = (grid) => {
+    const counts = new Map();
+    const cells = [];
+    for (let r=0; r<5; r++){
+      for (let c=0; c<5; c++){
+        const v = normCell(grid?.[r]?.[c] ?? "");
+        const s = String(v);
+        if (!s || isFree(s) || !/^\d+$/.test(s)) continue;
+        counts.set(s, (counts.get(s) || 0) + 1);
+        cells.push({r,c,s});
+      }
+    }
+    const dupVals = new Set([...counts.entries()].filter(([,n]) => n > 1).map(([k]) => k));
+    const dupPos = new Set(cells.filter(x => dupVals.has(x.s)).map(x => `${x.r}-${x.c}`));
+    return { dupVals, dupPos };
+  };
+
+  const findFixInvalidSlots = (grid) => {
+    const invalidPos = new Set();
+    const ranges = [
+      [1, 15],   // B
+      [16, 30],  // I
+      [31, 45],  // N
+      [46, 60],  // G
+      [61, 75]   // O
+    ];
+    for (let r=0; r<5; r++){
+      for (let c=0; c<5; c++){
+        const v = normCell(grid?.[r]?.[c] ?? "");
+        const s = String(v);
+        if (!s || isFree(s) || !/^\d+$/.test(s)) continue;
+        const n = parseInt(s, 10);
+        const [min, max] = ranges[c] || [1, 75];
+        if (!(n >= min && n <= max)) invalidPos.add(`${r}-${c}`);
+      }
+    }
+    return { invalidPos };
+  };
+
   const renderPreview = () => {
     if (!fixPreview) return;
 
@@ -3461,10 +3772,14 @@ const fixModal = byId("fixBoletoModal");
 
     const calledSet = new Set((fixState.stack||[]).map(x => String(x)));
     const lastStr = fixState.last != null ? String(fixState.last) : "";
+    const dupInfo = findFixDuplicates(g);
+    const dupPos = dupInfo.dupPos;
+    const invalidInfo = findFixInvalidSlots(g);
+    const invalidPos = invalidInfo.invalidPos;
 
     // Limpia clases de inputs y aplica según modo
     $$("input", fixGrid).forEach(inp => {
-      inp.classList.remove("req","notout","lastwin","free","need","off");
+      inp.classList.remove("req","notout","lastwin","free","need","off","dup","invalidslot");
     });
 
     // Si hay figura seleccionada y shape cargado => modo FIGURA
@@ -3535,12 +3850,265 @@ const fixModal = byId("fixBoletoModal");
           }
         }
 
+        const posKey = `${r}-${c}`;
+        if (invalidPos.has(posKey)){
+          d.classList.add("invalidslot");
+          if (inp) inp.classList.add("invalidslot");
+        } else if (dupPos.has(posKey)){
+          d.classList.add("dup");
+          if (inp) inp.classList.add("dup");
+        }
+
         fixPreview.appendChild(d);
       }
     }
 
     const f = fixState.fecha ? `Fecha: ${fixState.fecha}` : "";
     fixInfo.textContent = `${f} · Marcadas: ${fixState.total || (fixState.stack||[]).length} · Última: ${fixState.last || 0}`;
+  };
+
+  const setFixWinnerVisible = (on) => {
+    if (!fixWinnerWrap) return;
+    fixWinnerWrap.classList.toggle("hidden", !on);
+  };
+
+  const clearFixWinnerPanel = () => {
+    fixWinnerList = [];
+    fixWinnerIndex = 0;
+    fixCurrentWinner = null;
+    setFixWinnerVisible(false);
+    if (fwQuick) fwQuick.innerHTML = "";
+    if (fwGrid) fwGrid.innerHTML = "";
+    if (fwCounter) fwCounter.textContent = "0";
+    if (fwBoletinTxt) fwBoletinTxt.value = "";
+    if (fwPremioTxt) fwPremioTxt.value = "";
+    if (fwNext) fwNext.disabled = true;
+  };
+
+  const cleanFixSerie = (v) => String(v || "").trim().toLowerCase().split(/[\/]/).pop();
+  const fixWinnerSerieOf = (w) => cleanFixSerie(w?.serie ?? w?.serie_archivo ?? w?.archivo ?? "");
+  const sameFixSerie = (a,b) => {
+    const aa = cleanFixSerie(a);
+    const bb = cleanFixSerie(b);
+    if (!aa || !bb) return true;
+    if (aa === bb) return true;
+    const aa0 = aa.replace(/\.(xlsx|xls|csv)$/i, "");
+    const bb0 = bb.replace(/\.(xlsx|xls|csv)$/i, "");
+    return aa0 === bb0;
+  };
+
+  const winnerMatchesFixTicket = (w) => {
+    const carton = normCell(fixCarton?.value);
+    const serie = normCell(fixSerie?.value);
+    const boleto = String(w?.tabla ?? w?.boleto ?? "").trim();
+    if (!carton || !boleto || boleto !== carton) return false;
+    return sameFixSerie(serie, fixWinnerSerieOf(w));
+  };
+
+  const renderFixWinnerGrid = (w) => {
+    if (!fwGrid) return;
+    fwGrid.innerHTML = "";
+
+    const cols = ["B", "I", "N", "G", "O"];
+    const required = new Set((w?.required_pos || []).map(String));
+    const markedNums = new Set((w?.marcados_nums || []).map(n => String(n)));
+    const lastWin = (w?.ultima_bola != null ? String(w.ultima_bola) : '');
+    const grid = w?.grid || [];
+
+    for (let r = 0; r < 5; r++) {
+      for (let c = 0; c < 5; c++) {
+        const pos = cols[c] + String(r + 1);
+        const num = (grid[r] || [])[c];
+
+        const cell = document.createElement("div");
+        cell.className = "wcell";
+
+        const isFree = (pos === "N3") && (!num || Number(num) === 0);
+        if (isFree) {
+          cell.classList.add("free");
+          cell.textContent = "QR";
+        } else {
+          cell.textContent = (num === null || num === undefined) ? "" : String(num);
+        }
+
+        if (required.has(pos)) cell.classList.add("req");
+        if (!isFree && num && markedNums.has(String(num))) cell.classList.add("marked");
+        if (!isFree && lastWin && String(num) === lastWin) cell.classList.add("lastwin");
+
+        fwGrid.appendChild(cell);
+      }
+    }
+  };
+
+  const updateFixWinnerCounter = () => {
+    const pending = Math.max(0, (fixWinnerList?.length || 0) - 1);
+    if (fwCounter) fwCounter.textContent = String(pending);
+    if (fwNext) fwNext.disabled = (fixWinnerList.length <= 1);
+  };
+
+  const renderFixWinnerQuick = () => {
+    if (!fwQuick) return;
+    fwQuick.innerHTML = "";
+    (fixWinnerList || []).forEach((w, idx) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "wchip" + (idx === fixWinnerIndex ? " active" : "");
+      const fig = String(w?.figura || "").trim();
+      const tab = String(w?.tabla || w?.boleto || "").trim();
+      b.textContent = `${fig} • #${tab}`;
+      b.addEventListener("click", () => {
+        fixWinnerIndex = idx;
+        renderFixWinnerCurrent();
+      });
+      fwQuick.appendChild(b);
+    });
+  };
+
+  const syncFixWinnerEditor = () => {
+    if (!fwBoletinTxt || !fwPremioTxt || !fixCurrentWinner) return;
+    const fig = String(fixCurrentWinner.figura || "").trim();
+    const boleto = String(fixCurrentWinner.tabla || fixCurrentWinner.boleto || "").trim();
+    const row = _findResRow(fig, boleto);
+    if (row) {
+      fwBoletinTxt.value = row.querySelector(".res-nombre")?.value ?? "";
+      fwPremioTxt.value = row.querySelector(".res-premio")?.value ?? "";
+    } else {
+      fwBoletinTxt.value = String(fixCurrentWinner.nota || fixCurrentWinner.nombre || "");
+      const vv = (fixCurrentWinner.valor !== undefined && fixCurrentWinner.valor !== null) ? fixCurrentWinner.valor : "";
+      fwPremioTxt.value = (vv === "" ? "" : String(vv));
+    }
+  };
+  window.syncFixWinnerEditor = syncFixWinnerEditor;
+
+  const applyFixWinnerEditorToRow = () => {
+    if (!fwBoletinTxt || !fwPremioTxt || !fixCurrentWinner) return null;
+    const fig = String(fixCurrentWinner.figura || "").trim();
+    const boleto = String(fixCurrentWinner.tabla || fixCurrentWinner.boleto || "").trim();
+    const row = _findResRow(fig, boleto);
+    if (!row) return null;
+
+    const inNombre = row.querySelector(".res-nombre");
+    const inPremio = row.querySelector(".res-premio");
+    if (inNombre) inNombre.value = fwBoletinTxt.value;
+    if (inPremio) inPremio.value = fwPremioTxt.value;
+
+    row.classList.add("flash");
+    setTimeout(() => row.classList.remove("flash"), 900);
+    return row;
+  };
+  window.__reapplyFixWinnerEditorToRow = applyFixWinnerEditorToRow;
+
+  const bindFixWinnerEditorLive = () => {
+    if (fwBoletinTxt && !fwBoletinTxt.dataset.liveMirror){
+      fwBoletinTxt.addEventListener("input", () => { try{ applyFixWinnerEditorToRow(); }catch(_){ } });
+      fwBoletinTxt.dataset.liveMirror = "1";
+    }
+    if (fwPremioTxt && !fwPremioTxt.dataset.liveMirror){
+      fwPremioTxt.addEventListener("input", () => { try{ applyFixWinnerEditorToRow(); }catch(_){ } });
+      fwPremioTxt.dataset.liveMirror = "1";
+    }
+  };
+
+  const saveFixWinnerEditorDirect = async () => {
+    if (!fixCurrentWinner || !fwBoletinTxt || !fwPremioTxt) {
+      alert("No hay ganador detectado para este boleto.");
+      return false;
+    }
+
+    applyFixWinnerEditorToRow();
+
+    try {
+      const fd = new FormData();
+      fd.append("figura", String(fixCurrentWinner.figura || ""));
+      fd.append("boleto", String(fixCurrentWinner.tabla || fixCurrentWinner.boleto || ""));
+      fd.append("nombre", String(fwBoletinTxt.value || ""));
+      fd.append("premio", String(fwPremioTxt.value || ""));
+
+      const r = await fetch('/api/resultados/upsert-ganador', { method:'POST', body: fd });
+      const j = await r.json().catch(()=>({ok:false,msg:'Respuesta inválida'}));
+      if (!j.ok) throw new Error(j.msg || 'No se pudo guardar');
+
+      if (typeof window.refreshResultadosPanel === 'function') {
+        try { await window.refreshResultadosPanel(); } catch(_){ }
+      }
+      try { await refreshFixWinnerPanel({keepCurrent:true}); } catch(_){ }
+      try { await pollGanadores(); } catch(_){ }
+
+      applyFixWinnerEditorToRow();
+      return true;
+    } catch (e) {
+      try {
+        if (typeof guardarResultadosPanel === 'function') {
+          await guardarResultadosPanel();
+          return true;
+        }
+      } catch(_){ }
+      alert(e?.message || 'No se pudo sincronizar el ganador.');
+      return false;
+    }
+  };
+
+  const renderFixWinnerCurrent = () => {
+    if (!Array.isArray(fixWinnerList) || !fixWinnerList.length) {
+      clearFixWinnerPanel();
+      return;
+    }
+
+    if (fixWinnerIndex < 0) fixWinnerIndex = 0;
+    if (fixWinnerIndex >= fixWinnerList.length) fixWinnerIndex = 0;
+
+    const w = fixWinnerList[fixWinnerIndex];
+    fixCurrentWinner = w;
+    setFixWinnerVisible(true);
+
+    const val = (w?.valor !== undefined && w?.valor !== null) ? ` ($${w.valor})` : "";
+    if (fwFigura) fwFigura.textContent = `${w?.figura || ""}${val}`;
+    if (fwTabla) fwTabla.textContent = `#${w?.tabla || w?.boleto || ""}`;
+    if (fwVend) fwVend.textContent = (w?.vendedor || "—");
+    if (fwPlan) fwPlan.textContent = (w?.planilla || w?.rango || w?.sector || "—");
+    if (fwSerie) fwSerie.textContent = (w?.serie || w?.serie_archivo || "");
+    if (fwUltimo) fwUltimo.textContent = String(w?.ultima_bola ?? "");
+    if (fwNums) fwNums.textContent = ((w?.numeros_figura || []).map(String).join(", ")) || "";
+
+    renderFixWinnerGrid(w);
+    syncFixWinnerEditor();
+    updateFixWinnerCounter();
+    renderFixWinnerQuick();
+  };
+
+  const refreshFixWinnerPanel = async (opts = {}) => {
+    const carton = normCell(fixCarton?.value);
+    const serie = normCell(fixSerie?.value);
+    if (!carton || !serie) {
+      clearFixWinnerPanel();
+      return [];
+    }
+
+    let wins = Array.isArray(opts.list) ? opts.list : null;
+    if (!wins) {
+      const j = await safeFetch('/juego/ganadores' + bust());
+      wins = (j && Array.isArray(j.ganadores)) ? j.ganadores : (Array.isArray(window.__ganadoresCache) ? window.__ganadoresCache : []);
+      if (Array.isArray(wins)) window.__ganadoresCache = wins;
+    }
+
+    const matches = (wins || []).filter(w => winnerMatchesFixTicket(w));
+    if (!matches.length) {
+      clearFixWinnerPanel();
+      return [];
+    }
+
+    const currentKey = opts.keepCurrent && fixCurrentWinner ? makeKey(fixCurrentWinner) : "";
+    fixWinnerList = matches;
+
+    if (currentKey) {
+      const idx = matches.findIndex(w => makeKey(w) === currentKey);
+      fixWinnerIndex = idx >= 0 ? idx : 0;
+    } else {
+      fixWinnerIndex = 0;
+    }
+
+    renderFixWinnerCurrent();
+    return matches;
   };
 
   const refreshFixEstado = async () => {
@@ -3559,6 +4127,7 @@ const fixModal = byId("fixBoletoModal");
     }catch(_){ }
     try{ renderFixBoard75(); }catch(_){ }
     try{ renderPreview(); }catch(_){ }
+    try{ await refreshFixWinnerPanel({keepCurrent:true}); }catch(_){ }
   };
 
   const renderFixBoard75 = () => {
@@ -3690,6 +4259,7 @@ const fixModal = byId("fixBoletoModal");
     applyFixPanelPayload(j);
     renderFixBoard75();
     renderPreview();
+    await refreshFixWinnerPanel({keepCurrent:false});
     if (j.has_correction) {
       fixInfo.textContent = `${fixInfo.textContent} · ⚠ Este boleto ya tenía una corrección guardada.`;
     }
@@ -3705,18 +4275,43 @@ const fixModal = byId("fixBoletoModal");
     if (!carton_id) throw new Error("Ingresa el # de boleto/cartón.");
 
     const grid = readGridInputs();
+    const dupInfo = findFixDuplicates(grid);
+    if (dupInfo.dupVals.size){
+      renderPreview();
+      alert(`⚠ Hay números repetidos en verde. Corrígelos antes de guardar: ${Array.from(dupInfo.dupVals).join(", ")}`);
+      return;
+    }
+
     const j = await postJSON("/juego/admin/boletos/save", {key, serie_archivo, carton_id, motivo, grid});
     await refreshFixEstado();
     renderPreview();
 
     // refresca ganadores/resultados si existe
-    try{ if (typeof pollGanadores === "function") pollGanadores(); }catch(_){}
-    try{ if (typeof window.refreshResultadosPanel === "function") window.refreshResultadosPanel(); }catch(_){}
+    try{ if (typeof pollGanadores === "function") await pollGanadores(); }catch(_){ }
+    try{ if (typeof window.refreshResultadosPanel === "function") await window.refreshResultadosPanel(); }catch(_){ }
+    try{ await refreshFixWinnerPanel({keepCurrent:true}); }catch(_){ }
 
     alert("✅ Corrección guardada y motor recalculado.");
   };
 
   const bindFixBoleto = () => {
+    bindFixWinnerEditorLive();
+
+    if (fwSaveRes) fwSaveRes.addEventListener("click", async () => {
+      await saveFixWinnerEditorDirect();
+    });
+    if (fwGoRes) fwGoRes.addEventListener("click", () => {
+      const row = applyFixWinnerEditorToRow() || null;
+      const panel = document.getElementById("panelResultados") || document.querySelector(".results");
+      if (panel) panel.scrollIntoView({behavior:"smooth", block:"start"});
+      if (row) row.scrollIntoView({behavior:"smooth", block:"center"});
+    });
+    if (fwNext) fwNext.addEventListener("click", () => {
+      if (!fixWinnerList.length) return;
+      fixWinnerIndex = (fixWinnerIndex + 1) % fixWinnerList.length;
+      renderFixWinnerCurrent();
+    });
+
     if (fixBtnOpen) fixBtnOpen.addEventListener("click", () => {
       // abrir inmediato: primero pide clave, luego despliega el modal de corrección
       showFixAuth();
@@ -4395,18 +4990,18 @@ const applyFiguraView = async (opts = {}) => {
 
 </script>
 
-  <!-- MODAL: PROGRAMAR TL POR CANTIDAD DE BALOTAS -->
+  <!-- MODAL: PROGRAMACIÓN TL DEL SORTEO ACTIVO -->
   <div id="progTlModal" class="modal hidden" aria-hidden="true">
     <div class="modal-backdrop" data-close-progtl></div>
     <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="mdlTitleProgTl">
       <div class="modal-head">
-        <h3 id="mdlTitleProgTl">🎯 <span class="spn-red">PROGRAMAR</span> TL POR CANTIDAD</h3>
+        <h3 id="mdlTitleProgTl">🎯 <span class="spn-red">PROGRAMACIÓN</span> TL DEL SORTEO ACTIVO</h3>
         <button class="iconbtn" title="Cerrar" data-close-progtl type="button">&times;</button>
       </div>
 
       <div class="modal-body">
         <div class="winner-editor" style="margin-top:0">
-          <div class="we-title">🔐 Clave SuperAdmin</div>
+          <div class="we-title">🔐 Acceso protegido</div>
           <div class="we-grid">
             <div class="we-field small">
               <label>Clave</label>
@@ -4425,42 +5020,64 @@ const applyFiguraView = async (opts = {}) => {
         </div>
 
         <div class="winner-editor" style="margin-top:10px">
-          <div class="we-title">⚙️ Programación manual</div>
+          <div class="we-title">⚙️ Mismo control que Sorteo</div>
           <div class="we-grid">
             <div class="we-field small">
-              <label>Serie (archivo)</label>
-              <select id="progTlSerie"></select>
-            </div>
-            <div class="we-field small">
-              <label>Boleto / Cartón #</label>
-              <input id="progTlCarton" type="text" placeholder="Ej: 477">
-            </div>
-            <div class="we-field small">
-              <label>Figura TL</label>
-              <select id="progTlFigura">
-                <option value="TL1">TL1 · LLENA</option>
-                <option value="TL2">TL2 · RELLENA</option>
-                <option value="TL3">TL3 · YAPA</option>
-                <option value="TL4">TL4 · SUPER YAPA</option>
-              </select>
-            </div>
-            <div class="we-field small">
-              <label>Activar cuando hayan salido</label>
-              <input id="progTlTrigger" type="number" min="1" max="75" step="1" placeholder="Ej: 48">
-            </div>
-            <div class="we-field small">
-              <label>Disparar después del cierre</label>
-              <input id="progTlGap" type="number" min="0" max="75" step="1" placeholder="Ej: 2">
+              <label>Programación activa</label>
+              <div style="display:flex;align-items:center;gap:10px;height:44px;padding:0 12px;border:1px solid rgba(255,255,255,.14);border-radius:12px;background:rgba(255,255,255,.03)">
+                <input id="progTlActivas" type="checkbox">
+                <span>Usar LLENA, RELLENA y YAPA programadas</span>
+              </div>
             </div>
             <div class="we-field">
-              <label>Nota</label>
-              <input id="progTlNota" type="text" placeholder="Opcional">
+              <label>Sorteo</label>
+              <input id="progTlSorteo" type="text" readonly placeholder="Sorteo activo del día">
             </div>
           </div>
+
+          <div class="we-grid" style="margin-top:12px">
+            <div class="we-field small">
+              <label>Serie LLENA</label>
+              <select id="progTlSerieLlena"></select>
+            </div>
+            <div class="we-field small">
+              <label>Cartón LLENA</label>
+              <input id="progTlCartonLlena" type="text" placeholder="Ej: 45">
+            </div>
+            <div class="we-field small">
+              <label>Balota LLENA</label>
+              <input id="progTlObjetivoLlena" type="number" min="1" max="75" step="1" placeholder="48">
+            </div>
+
+            <div class="we-field small">
+              <label>Serie RELLENA</label>
+              <select id="progTlSerieRellena"></select>
+            </div>
+            <div class="we-field small">
+              <label>Cartón RELLENA</label>
+              <input id="progTlCartonRellena" type="text" placeholder="Ej: 52">
+            </div>
+            <div class="we-field small">
+              <label>Balota RELLENA</label>
+              <input id="progTlObjetivoRellena" type="number" min="1" max="75" step="1" placeholder="52">
+            </div>
+
+            <div class="we-field small">
+              <label>Serie YAPA</label>
+              <select id="progTlSerieYapa"></select>
+            </div>
+            <div class="we-field small">
+              <label>Cartón YAPA</label>
+              <input id="progTlCartonYapa" type="text" placeholder="Ej: 60">
+            </div>
+            <div class="we-field small">
+              <label>Balota YAPA</label>
+              <input id="progTlObjetivoYapa" type="number" min="1" max="75" step="1" placeholder="56">
+            </div>
+          </div>
+
           <div class="hint" style="margin-top:10px">
-            Se programa por <b>cantidad de balotas marcadas</b>, no por número específico.
-            Si al llegar al umbral aún faltan figuras del día, el sistema espera a que cierren todas
-            y recién desde ahí cuenta el segundo valor.
+            Lo que guardes aquí queda en el <b>sorteo activo</b>. El juego y Sorteo leen la misma programación.
           </div>
           <div class="we-actions" style="margin-top:12px">
             <button id="progTlSave" class="btn gold" type="button">💾 Guardar programación</button>
@@ -4480,15 +5097,17 @@ const applyFiguraView = async (opts = {}) => {
   const keyEl = $("progTlKey");
   const estadoEl = $("progTlEstado");
   const infoEl = $("progTlInfo");
-  const serieEl = $("progTlSerie");
-  const cartonEl = $("progTlCarton");
-  const figuraEl = $("progTlFigura");
-  const triggerEl = $("progTlTrigger");
-  const gapEl = $("progTlGap");
-  const notaEl = $("progTlNota");
+  const sorteoEl = $("progTlSorteo");
+  const activasEl = $("progTlActivas");
   const btnMeta = $("progTlMeta");
   const btnSave = $("progTlSave");
   const btnClear = $("progTlClear");
+
+  const fields = {
+    llena: { serie: $("progTlSerieLlena"), carton: $("progTlCartonLlena"), objetivo: $("progTlObjetivoLlena") },
+    rellena: { serie: $("progTlSerieRellena"), carton: $("progTlCartonRellena"), objetivo: $("progTlObjetivoRellena") },
+    yapa: { serie: $("progTlSerieYapa"), carton: $("progTlCartonYapa"), objetivo: $("progTlObjetivoYapa") },
+  };
 
   const norm = (v) => (v == null ? "" : String(v).trim());
 
@@ -4500,7 +5119,7 @@ const applyFiguraView = async (opts = {}) => {
     });
     const j = await r.json().catch(() => ({}));
     if (!r.ok || j.ok === false){
-      throw new Error(j.error || r.statusText || "Error");
+      throw new Error(j.error || j.mensaje || r.statusText || "Error");
     }
     return j;
   };
@@ -4511,12 +5130,84 @@ const applyFiguraView = async (opts = {}) => {
     infoEl.style.color = bad ? "#ff8c8c" : "";
   };
 
+  const setDisabled = (on) => {
+    Object.values(fields).forEach((grp) => {
+      [grp.serie, grp.carton, grp.objetivo].forEach((el) => {
+        if (!el) return;
+        el.disabled = !on;
+      });
+    });
+  };
+
+  const fillSeriesSelect = (selectEl, series, currentValue) => {
+    if (!selectEl) return;
+    const current = norm(currentValue);
+    const list = Array.isArray(series) ? series.filter(Boolean) : [];
+    selectEl.innerHTML = "";
+
+    const empty = document.createElement("option");
+    empty.value = "";
+    empty.textContent = list.length ? "(Auto detectar)" : "(Sin series)";
+    selectEl.appendChild(empty);
+
+    list.forEach((s) => {
+      const opt = document.createElement("option");
+      opt.value = s;
+      opt.textContent = s;
+      selectEl.appendChild(opt);
+    });
+
+    if (current && list.includes(current)) {
+      selectEl.value = current;
+    } else {
+      selectEl.value = "";
+    }
+  };
+
+  const applyProgramacion = (programacion, series, sorteo) => {
+    const prog = programacion || {};
+    activasEl.checked = String(prog.activas || "0") === "1";
+    const estadoTxt = activasEl.checked ? "ACTIVO" : "INACTIVO";
+    const sorteoNombre = norm((sorteo && sorteo.nombre_sorteo) || "");
+    const sorteoEstado = norm((sorteo && sorteo.estado) || "");
+    if (estadoEl) {
+      estadoEl.value = [estadoTxt, sorteoEstado].filter(Boolean).join(" · ") || "Sin cargar";
+    }
+    if (sorteoEl) {
+      sorteoEl.value = [sorteoNombre, sorteoEstado].filter(Boolean).join(" · ") || "Sorteo activo del día";
+    }
+
+    ["llena", "rellena", "yapa"].forEach((name) => {
+      const grp = fields[name];
+      const item = prog[name] || {};
+      fillSeriesSelect(grp.serie, series, norm(item.serie_archivo));
+      if (grp.carton) grp.carton.value = norm(item.carton_id || item.carton_resuelto);
+      if (grp.objetivo) grp.objetivo.value = Number(item.objetivo || 0) || "";
+    });
+    setDisabled(activasEl.checked);
+  };
+
+  const collectPayload = () => ({
+    key: norm(keyEl && keyEl.value),
+    activas: activasEl && activasEl.checked ? "1" : "0",
+    llena_serie: norm(fields.llena.serie && fields.llena.serie.value),
+    llena_carton: norm(fields.llena.carton && fields.llena.carton.value),
+    llena_objetivo: norm(fields.llena.objetivo && fields.llena.objetivo.value),
+    rellena_serie: norm(fields.rellena.serie && fields.rellena.serie.value),
+    rellena_carton: norm(fields.rellena.carton && fields.rellena.carton.value),
+    rellena_objetivo: norm(fields.rellena.objetivo && fields.rellena.objetivo.value),
+    yapa_serie: norm(fields.yapa.serie && fields.yapa.serie.value),
+    yapa_carton: norm(fields.yapa.carton && fields.yapa.carton.value),
+    yapa_objetivo: norm(fields.yapa.objetivo && fields.yapa.objetivo.value),
+  });
+
   const openModal = () => {
     modal.classList.remove("hidden");
     modal.setAttribute("aria-hidden", "false");
     setInfo("");
     if (estadoEl) estadoEl.value = "Sin cargar";
-    try{ keyEl && keyEl.focus(); }catch(_){}
+    if (sorteoEl) sorteoEl.value = "";
+    try{ keyEl && keyEl.focus(); }catch(_){ }
   };
 
   const closeModal = () => {
@@ -4524,83 +5215,31 @@ const applyFiguraView = async (opts = {}) => {
     modal.setAttribute("aria-hidden", "true");
   };
 
-  const fillSeries = (series, currentValue) => {
-    if (!serieEl) return;
-    serieEl.innerHTML = "";
-    const list = Array.isArray(series) ? series : [];
-    if (!list.length){
-      const opt = document.createElement("option");
-      opt.value = "";
-      opt.textContent = "(No hay series en juego)";
-      serieEl.appendChild(opt);
-      return;
-    }
-    list.forEach((s) => {
-      const opt = document.createElement("option");
-      opt.value = s;
-      opt.textContent = s;
-      serieEl.appendChild(opt);
-    });
-    if (currentValue && list.includes(currentValue)){
-      serieEl.value = currentValue;
-    }
-  };
-
   const loadMeta = async () => {
     const key = norm(keyEl && keyEl.value);
-    if (!key) throw new Error("Ingresa la clave SuperAdmin.");
+    if (!key) throw new Error("Ingresa la clave.");
     const j = await postJSONLocal("/juego/admin/programacion_manual/meta", {key});
-    const item = j.item || {};
-    fillSeries(j.series || [], norm(item.serie_archivo));
-    if (cartonEl) cartonEl.value = norm(item.carton_id);
-    if (figuraEl) figuraEl.value = norm(item.fig_code || "TL1") || "TL1";
-    if (triggerEl) triggerEl.value = Number(item.trigger_count || 48);
-    if (gapEl) gapEl.value = Number(item.gap_after_close || 0);
-    if (notaEl) notaEl.value = norm(item.nota);
-    if (estadoEl){
-      const base = Number(item.base_after_close || 0);
-      const extra = [];
-      if (base > 0) extra.push("base " + base);
-      if (Number(item.last_fired_count || 0) > 0) extra.push("disparó en " + item.last_fired_count);
-      estadoEl.value = [norm(item.status || "programado"), extra.join(" · ")].filter(Boolean).join(" · ");
-    }
+    applyProgramacion(j.programacion || {}, j.series || [], j.sorteo || {});
     setInfo("Programación cargada.");
     return j;
   };
 
   const saveProg = async () => {
-    const key = norm(keyEl && keyEl.value);
-    if (!key) throw new Error("Ingresa la clave SuperAdmin.");
-    const serie_archivo = norm(serieEl && serieEl.value);
-    const carton_id = norm(cartonEl && cartonEl.value);
-    const fig_code = norm(figuraEl && figuraEl.value) || "TL1";
-    const trigger_count = Number(triggerEl && triggerEl.value || 0);
-    const gap_after_close = Number(gapEl && gapEl.value || 0);
-    const nota = norm(notaEl && notaEl.value);
-
-    if (!serie_archivo) throw new Error("Selecciona la serie.");
-    if (!carton_id) throw new Error("Ingresa el boleto/cartón.");
-    if (!trigger_count || trigger_count < 1) throw new Error("Ingresa el umbral inicial.");
-    if (gap_after_close < 0) throw new Error("El valor después del cierre no puede ser negativo.");
-
-    await postJSONLocal("/juego/admin/programacion_manual/save", {
-      key, serie_archivo, carton_id, fig_code, trigger_count, gap_after_close, nota
-    });
-    await loadMeta();
+    const payload = collectPayload();
+    if (!payload.key) throw new Error("Ingresa la clave.");
+    const anyCarton = [payload.llena_carton, payload.rellena_carton, payload.yapa_carton].some(Boolean);
+    if ((payload.activas === "1") && !anyCarton) throw new Error("Ingresa al menos un cartón programado o desactiva la programación.");
+    const j = await postJSONLocal("/juego/admin/programacion_manual/save", payload);
+    applyProgramacion(j.programacion || {}, j.series || [], j.sorteo || {});
     setInfo("Programación guardada correctamente.");
   };
 
   const clearProg = async () => {
     const key = norm(keyEl && keyEl.value);
-    if (!key) throw new Error("Ingresa la clave SuperAdmin.");
-    if (!confirm("¿Limpiar la programación manual de TL del día?")) return;
-    await postJSONLocal("/juego/admin/programacion_manual/clear", {key});
-    if (cartonEl) cartonEl.value = "";
-    if (notaEl) notaEl.value = "";
-    if (triggerEl) triggerEl.value = 48;
-    if (gapEl) gapEl.value = 2;
-    if (figuraEl) figuraEl.value = "TL1";
-    if (estadoEl) estadoEl.value = "Sin programación";
+    if (!key) throw new Error("Ingresa la clave.");
+    if (!confirm("¿Limpiar la programación TL del sorteo activo?")) return;
+    const j = await postJSONLocal("/juego/admin/programacion_manual/clear", {key});
+    applyProgramacion(j.programacion || {}, j.series || [], j.sorteo || {});
     setInfo("Programación eliminada.");
   };
 
@@ -4608,6 +5247,10 @@ const applyFiguraView = async (opts = {}) => {
 
   modal.querySelectorAll("[data-close-progtl]").forEach((el) => {
     el.addEventListener("click", closeModal);
+  });
+
+  activasEl && activasEl.addEventListener("change", () => {
+    setDisabled(!!activasEl.checked);
   });
 
   btnMeta && btnMeta.addEventListener("click", async () => {
@@ -4641,6 +5284,42 @@ const applyFiguraView = async (opts = {}) => {
     if (ev.key === "Escape" && modal && !modal.classList.contains("hidden")){
       closeModal();
     }
+  });
+})();
+</script>
+
+<script>
+(function(){
+  document.addEventListener("keydown", function(ev){
+    try{
+      const target = ev.target;
+      const tag = String((target && target.tagName) || "").toUpperCase();
+      const writing = target && (target.isContentEditable || tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT");
+      if (writing) return;
+
+      if (ev.ctrlKey && ev.shiftKey && String(ev.key || "").toLowerCase() === "b") {
+        ev.preventDefault();
+        if (window.__openFixBoleto) window.__openFixBoleto();
+      }
+    }catch(e){ console.error(e); }
+  });
+})();
+</script>
+
+<script>
+(function(){
+  document.addEventListener("keydown", function(ev){
+    try{
+      const target = ev.target;
+      const tag = String((target && target.tagName) || "").toUpperCase();
+      const writing = target && (target.isContentEditable || tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT");
+      if (writing) return;
+
+      if (ev.ctrlKey && ev.altKey && String(ev.key || "").toLowerCase() === "l") {
+        ev.preventDefault();
+        if (window.__openProgManualTL) window.__openProgManualTL();
+      }
+    }catch(e){ console.error(e); }
   });
 })();
 </script>

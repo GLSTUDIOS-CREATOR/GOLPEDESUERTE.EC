@@ -217,15 +217,21 @@
                   </div>
                   <div class="row g-2 small">
                     <div class="col-md-3"><span class="text-secondary">Estado</span><br><b id="tl-prog-estado">{{ 'ACTIVO' if (tl_programadas_activas|string) in ['1','true','True','si','SI','sí','Sí'] else 'INACTIVO' }}</b></div>
-                    <div class="col-md-3"><span class="text-secondary">LLENA</span><br><b id="tl-prog-resumen-llena">{{ tl_programada_llena or '—' }}</b></div>
-                    <div class="col-md-3"><span class="text-secondary">RELLENA</span><br><b id="tl-prog-resumen-rellena">{{ tl_programada_rellena or '—' }}</b></div>
-                    <div class="col-md-3"><span class="text-secondary">YAPA</span><br><b id="tl-prog-resumen-yapa">{{ tl_programada_yapa or '—' }}</b></div>
+                    <div class="col-md-3"><span class="text-secondary">LLENA</span><br><b id="tl-prog-resumen-llena">{{ tl_programada_llena or '—' }}</b><div class="small text-secondary mt-1">Balota: <span id="tl-prog-resumen-llena-obj">{{ tl_objetivo_llena or '—' }}</span></div></div>
+                    <div class="col-md-3"><span class="text-secondary">RELLENA</span><br><b id="tl-prog-resumen-rellena">{{ tl_programada_rellena or '—' }}</b><div class="small text-secondary mt-1">Balota: <span id="tl-prog-resumen-rellena-obj">{{ tl_objetivo_rellena or '—' }}</span></div></div>
+                    <div class="col-md-3"><span class="text-secondary">YAPA</span><br><b id="tl-prog-resumen-yapa">{{ tl_programada_yapa or '—' }}</b><div class="small text-secondary mt-1">Balota: <span id="tl-prog-resumen-yapa-obj">{{ tl_objetivo_yapa or '—' }}</span></div></div>
                   </div>
                 </div>
-                <input type="hidden" id="tl_programadas_activas" {{ 'checked' if (tl_programadas_activas|string) in ['1','true','True','si','SI','sí','Sí'] else '' }}>
+                <input type="checkbox" id="tl_programadas_activas" hidden {{ 'checked' if (tl_programadas_activas|string) in ['1','true','True','si','SI','sí','Sí'] else '' }}>
                 <input type="hidden" id="tl_programada_llena" value="{{ tl_programada_llena }}">
                 <input type="hidden" id="tl_programada_rellena" value="{{ tl_programada_rellena }}">
                 <input type="hidden" id="tl_programada_yapa" value="{{ tl_programada_yapa }}">
+                <input type="hidden" id="tl_objetivo_llena" value="{{ tl_objetivo_llena }}">
+                <input type="hidden" id="tl_objetivo_rellena" value="{{ tl_objetivo_rellena }}">
+                <input type="hidden" id="tl_objetivo_yapa" value="{{ tl_objetivo_yapa }}">
+                <input type="hidden" id="tl_serie_llena" value="{{ tl_serie_llena }}">
+                <input type="hidden" id="tl_serie_rellena" value="{{ tl_serie_rellena }}">
+                <input type="hidden" id="tl_serie_yapa" value="{{ tl_serie_yapa }}">
                 <input type="hidden" id="tl_programadas_cartones" value="{{ tl_programadas_cartones }}">
               </div>
             </div>
@@ -401,19 +407,31 @@
           <input class="form-check-input" type="checkbox" id="tl_programadas_activas_modal" {{ 'checked' if (tl_programadas_activas|string) in ['1','true','True','si','SI','sí','Sí'] else '' }}>
           <label class="form-check-label fw-semibold" for="tl_programadas_activas_modal">Programar figuras automáticas</label>
         </div>
-        <div class="form-text mb-3">Si activas esta opción, el juego podrá disparar <b>LLENA</b>, <b>RELLENA</b> y <b>YAPA</b> para los cartones que programes aquí.</div>
-        <div class="row g-3">
+        <div class="form-text mb-3">Define el <b>cartón</b> y la <b>balota objetivo</b> para LLENA, RELLENA y YAPA. Si la natural sale antes, el sistema intentará meter también el cartón programado en ese mismo evento.</div>
+        <div class="row g-3 align-items-end">
           <div class="col-md-4">
             <label class="small-label">LLENA programada</label>
-            <input id="tl_programada_llena_modal" class="form-control mono" value="{{ tl_programada_llena }}" placeholder="Ej. 45">
+            <input id="tl_programada_llena_modal" class="form-control mono" value="{{ tl_programada_llena }}" placeholder="Cartón ej. 45">
+          </div>
+          <div class="col-md-2">
+            <label class="small-label">Balota LLENA</label>
+            <input id="tl_objetivo_llena_modal" class="form-control mono" value="{{ tl_objetivo_llena }}" placeholder="48">
           </div>
           <div class="col-md-4">
             <label class="small-label">RELLENA programada</label>
-            <input id="tl_programada_rellena_modal" class="form-control mono" value="{{ tl_programada_rellena }}" placeholder="Ej. 52">
+            <input id="tl_programada_rellena_modal" class="form-control mono" value="{{ tl_programada_rellena }}" placeholder="Cartón ej. 52">
+          </div>
+          <div class="col-md-2">
+            <label class="small-label">Balota RELLENA</label>
+            <input id="tl_objetivo_rellena_modal" class="form-control mono" value="{{ tl_objetivo_rellena }}" placeholder="52">
           </div>
           <div class="col-md-4">
             <label class="small-label">YAPA programada</label>
-            <input id="tl_programada_yapa_modal" class="form-control mono" value="{{ tl_programada_yapa }}" placeholder="Ej. 60">
+            <input id="tl_programada_yapa_modal" class="form-control mono" value="{{ tl_programada_yapa }}" placeholder="Cartón ej. 60">
+          </div>
+          <div class="col-md-2">
+            <label class="small-label">Balota YAPA</label>
+            <input id="tl_objetivo_yapa_modal" class="form-control mono" value="{{ tl_objetivo_yapa }}" placeholder="56">
           </div>
         </div>
       </div>
@@ -500,16 +518,19 @@
     $('#tl-prog-resumen-llena').textContent = ($('#tl_programada_llena').value||'').trim() || '—';
     $('#tl-prog-resumen-rellena').textContent = ($('#tl_programada_rellena').value||'').trim() || '—';
     $('#tl-prog-resumen-yapa').textContent = ($('#tl_programada_yapa').value||'').trim() || '—';
+    $('#tl-prog-resumen-llena-obj').textContent = ($('#tl_objetivo_llena').value||'').trim() || '—';
+    $('#tl-prog-resumen-rellena-obj').textContent = ($('#tl_objetivo_rellena').value||'').trim() || '—';
+    $('#tl-prog-resumen-yapa-obj').textContent = ($('#tl_objetivo_yapa').value||'').trim() || '—';
   }
 
   function syncTLProgramadasUI(){
     const on = $('#tl_programadas_activas').checked;
     const modalCheck = $('#tl_programadas_activas_modal');
     if(modalCheck) modalCheck.checked = on;
-    ['#tl_programada_llena','#tl_programada_rellena','#tl_programada_yapa'].forEach(id => {
+    ['#tl_programada_llena','#tl_programada_rellena','#tl_programada_yapa','#tl_objetivo_llena','#tl_objetivo_rellena','#tl_objetivo_yapa'].forEach(id => {
       if($(id)) $(id).disabled = !on;
     });
-    ['#tl_programada_llena_modal','#tl_programada_rellena_modal','#tl_programada_yapa_modal'].forEach(id => {
+    ['#tl_programada_llena_modal','#tl_programada_rellena_modal','#tl_programada_yapa_modal','#tl_objetivo_llena_modal','#tl_objetivo_rellena_modal','#tl_objetivo_yapa_modal'].forEach(id => {
       if($(id)){
         $(id).disabled = !on;
         $(id).classList.toggle('readonly', !on);
@@ -550,6 +571,12 @@
       tl_programada_llena: ($('#tl_programada_llena').value||'').trim(),
       tl_programada_rellena: ($('#tl_programada_rellena').value||'').trim(),
       tl_programada_yapa: ($('#tl_programada_yapa').value||'').trim(),
+      tl_objetivo_llena: ($('#tl_objetivo_llena').value||'').trim(),
+      tl_objetivo_rellena: ($('#tl_objetivo_rellena').value||'').trim(),
+      tl_objetivo_yapa: ($('#tl_objetivo_yapa').value||'').trim(),
+      tl_serie_llena: ($('#tl_serie_llena').value||'').trim(),
+      tl_serie_rellena: ($('#tl_serie_rellena').value||'').trim(),
+      tl_serie_yapa: ($('#tl_serie_yapa').value||'').trim(),
       tl_programadas_cartones: ($('#tl_programadas_cartones').value||'').trim(),
       premios_a_pagar_cantidad: cleanInt('#premios_a_pagar_cantidad'),
       premios_a_pagar_monto: cleanMoney('#premios_a_pagar_monto'),
@@ -638,6 +665,9 @@
     $('#tl_programada_llena_modal').value = $('#tl_programada_llena').value || '';
     $('#tl_programada_rellena_modal').value = $('#tl_programada_rellena').value || '';
     $('#tl_programada_yapa_modal').value = $('#tl_programada_yapa').value || '';
+    $('#tl_objetivo_llena_modal').value = $('#tl_objetivo_llena').value || '';
+    $('#tl_objetivo_rellena_modal').value = $('#tl_objetivo_rellena').value || '';
+    $('#tl_objetivo_yapa_modal').value = $('#tl_objetivo_yapa').value || '';
     syncTLProgramadasUI();
   }
 
@@ -646,6 +676,9 @@
     $('#tl_programada_llena').value = ($('#tl_programada_llena_modal').value||'').trim();
     $('#tl_programada_rellena').value = ($('#tl_programada_rellena_modal').value||'').trim();
     $('#tl_programada_yapa').value = ($('#tl_programada_yapa_modal').value||'').trim();
+    $('#tl_objetivo_llena').value = ($('#tl_objetivo_llena_modal').value||'').trim();
+    $('#tl_objetivo_rellena').value = ($('#tl_objetivo_rellena_modal').value||'').trim();
+    $('#tl_objetivo_yapa').value = ($('#tl_objetivo_yapa_modal').value||'').trim();
     syncTLProgramadasCombinedFromLines();
     syncTLProgramadasUI();
   }
@@ -682,11 +715,14 @@
     $('#tl_programadas_activas').checked = $('#tl_programadas_activas_modal').checked;
     syncTLProgramadasUI();
   });
-  ['#tl_programada_llena_modal','#tl_programada_rellena_modal','#tl_programada_yapa_modal'].forEach(id => {
+  ['#tl_programada_llena_modal','#tl_programada_rellena_modal','#tl_programada_yapa_modal','#tl_objetivo_llena_modal','#tl_objetivo_rellena_modal','#tl_objetivo_yapa_modal'].forEach(id => {
     $(id).addEventListener('input', ()=>{
       $('#tl_programada_llena').value = ($('#tl_programada_llena_modal').value||'').trim();
       $('#tl_programada_rellena').value = ($('#tl_programada_rellena_modal').value||'').trim();
       $('#tl_programada_yapa').value = ($('#tl_programada_yapa_modal').value||'').trim();
+      $('#tl_objetivo_llena').value = ($('#tl_objetivo_llena_modal').value||'').trim();
+      $('#tl_objetivo_rellena').value = ($('#tl_objetivo_rellena_modal').value||'').trim();
+      $('#tl_objetivo_yapa').value = ($('#tl_objetivo_yapa_modal').value||'').trim();
       syncTLProgramadasCombinedFromLines();
       updateTLProgramadasSummary();
     });

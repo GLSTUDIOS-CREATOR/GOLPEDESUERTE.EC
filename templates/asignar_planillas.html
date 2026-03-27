@@ -358,37 +358,53 @@
     }
   });
 
-  // Cambios de fecha/serie en la vista ⇒ recargar con QS
-  function recargarVista(fecha, serie=''){
-    if(!fecha) return;
-    const qs = new URLSearchParams();
-    qs.set('fecha', fecha);
-    if(serie) qs.set('serie', serie);
-    location.href = `?${qs.toString()}`;
+  // Cambios de fecha/serie ⇒ siempre sincronizar arriba y abajo antes de recargar con QS
+  function goToFechaSerie(fecha, serie){
+    const f = fecha || document.getElementById('fecha-input')?.value || document.getElementById('fecha-select')?.value || '';
+    const s = serie || document.getElementById('serie-select')?.value || document.getElementById('serie-select-view')?.value || '';
+    location.href = `?fecha=${encodeURIComponent(f)}&serie=${encodeURIComponent(s)}`;
   }
 
-  document.getElementById('fecha-select')?.addEventListener('change', ()=>{
+  document.getElementById('fecha-select').addEventListener('change', ()=>{
     const f = document.getElementById('fecha-select').value;
     const s = document.getElementById('serie-select-view').value;
-    recargarVista(f, s);
+    goToFechaSerie(f, s);
   });
 
-  document.getElementById('serie-select-view')?.addEventListener('change', ()=>{
+  document.getElementById('serie-select-view').addEventListener('change', ()=>{
     const f = document.getElementById('fecha-select').value;
     const s = document.getElementById('serie-select-view').value;
-    recargarVista(f, s);
+    goToFechaSerie(f, s);
   });
 
+  // IMPORTANTE: si cambias la fecha/serie de arriba, también debe recargar la vista completa
   document.getElementById('fecha-input')?.addEventListener('change', ()=>{
     const f = document.getElementById('fecha-input').value;
-    const s = document.getElementById('serie-select')?.value || '';
-    recargarVista(f, s);
+    const s = document.getElementById('serie-select').value || '';
+    goToFechaSerie(f, s);
   });
 
   document.getElementById('serie-select')?.addEventListener('change', ()=>{
-    const f = document.getElementById('fecha-input')?.value || '';
+    const f = document.getElementById('fecha-input').value || '';
     const s = document.getElementById('serie-select').value;
-    recargarVista(f, s);
+    goToFechaSerie(f, s);
+  });
+
+
+  // Al cargar, sincroniza los selectores de arriba y abajo para evitar vistas viejas
+  window.addEventListener('DOMContentLoaded', ()=>{
+    const fechaInput = document.getElementById('fecha-input');
+    const fechaView = document.getElementById('fecha-select');
+    const serieInput = document.getElementById('serie-select');
+    const serieView = document.getElementById('serie-select-view');
+
+    if(fechaInput && fechaView && fechaInput.value){
+      fechaView.value = fechaInput.value;
+    }
+
+    if(serieInput && serieView && serieInput.value){
+      serieView.value = serieInput.value;
+    }
   });
 
   // Acciones rápidas: elegir vendedor / agregar planillas disponibles

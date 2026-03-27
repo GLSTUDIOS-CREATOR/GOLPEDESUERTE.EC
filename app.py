@@ -1697,7 +1697,8 @@ def _try_draw_qr_on_canvas(c, data, x, y, size):
         if total <= 0:
             return False
 
-        module = max(1.0, float(size) / float(total))
+        size = max(float(size), 1.0)
+        module = size / float(total)
         qr_size = module * total
         ox = x + (size - qr_size) / 2.0
         oy = y + (size - qr_size) / 2.0
@@ -3894,6 +3895,25 @@ def _read_tree_with_root(path: str, root_tag: str = 'vendedores'):
     return tree, root
 
 
+def _vendor_commission_info_from_node(v):
+    try:
+        mode = ((v.findtext('modo_comision') or 'normal').strip().lower())
+    except Exception:
+        mode = 'normal'
+    try:
+        manual = float(str(v.findtext('comision_manual') or '0').replace(',', '.').strip() or 0)
+    except Exception:
+        manual = 0.0
+    manual = max(0.0, min(100.0, manual))
+    if mode != 'manual' or manual <= 0:
+        mode = 'normal'
+        manual = 0.0
+    return {
+        'modo_comision': mode,
+        'comision_manual': round(manual, 2),
+    }
+
+
 def _indent_tree_if_possible(tree: ET.ElementTree):
     """
     Intenta indentar (Python 3.9+) para que el XML quede legible.
@@ -3918,26 +3938,40 @@ def _write_xml_atomic(tree: ET.ElementTree, path: str):
 # ============================================================
 #  CRUD DE VENDEDORES (robusto; respeta tu API)
 # ============================================================
+
+
 def cargar_vendedores_xml():
     vendedores = []
     # Lee de forma segura (crea el archivo si no existe)
     tree, root = _read_tree_with_root(VENDEDORES_XML, 'vendedores')
 
     for idx, v in enumerate(root.findall('vendedor')):
+        info_com = _vendor_commission_info_from_node(v)
         vendedores.append({
             'id': idx,  # mantener índice para editar/eliminar
             'nombre'  : (v.findtext('nombre') or '').strip(),
             'apellido': (v.findtext('apellido') or '').strip(),
             'seudonimo': (v.findtext('seudonimo') or '').strip(),
+            'modo_comision': info_com['modo_comision'],
+            'comision_manual': info_com['comision_manual'],
         })
     return vendedores
 
 
-def guardar_vendedor(nombre, apellido, seudonimo):
+def guardar_vendedor(nombre, apellido, seudonimo, modo_comision='normal', comision_manual=0.0):
     # Normaliza strings
     nombre = (nombre or '').strip()
     apellido = (apellido or '').strip()
     seudonimo = (seudonimo or '').strip()
+    modo = 'manual' if str(modo_comision or '').strip().lower() == 'manual' else 'normal'
+    try:
+        manual = float(str(comision_manual or 0).replace(',', '.').strip() or 0)
+    except Exception:
+        manual = 0.0
+    manual = max(0.0, min(100.0, manual))
+    if modo != 'manual' or manual <= 0:
+        modo = 'normal'
+        manual = 0.0
 
     tree, root = _read_tree_with_root(VENDEDORES_XML, 'vendedores')
 
@@ -3946,11 +3980,13 @@ def guardar_vendedor(nombre, apellido, seudonimo):
     ET.SubElement(v, 'nombre').text = nombre
     ET.SubElement(v, 'apellido').text = apellido
     ET.SubElement(v, 'seudonimo').text = seudonimo
+    ET.SubElement(v, 'modo_comision').text = modo
+    ET.SubElement(v, 'comision_manual').text = f"{manual:.2f}"
 
     _write_xml_atomic(tree, VENDEDORES_XML)
 
 
-def editar_vendedor(idx, nombre, apellido, seudonimo):
+def editar_vendedor(idx, nombre, apellido, seudonimo, modo_comision=None, comision_manual=None):
     nombre = (nombre or '').strip()
     apellido = (apellido or '').strip()
     seudonimo = (seudonimo or '').strip()
@@ -3970,6 +4006,19 @@ def editar_vendedor(idx, nombre, apellido, seudonimo):
         _set('nombre', nombre)
         _set('apellido', apellido)
         _set('seudonimo', seudonimo)
+
+        if modo_comision is not None or comision_manual is not None:
+            modo = 'manual' if str(modo_comision or '').strip().lower() == 'manual' else 'normal'
+            try:
+                manual = float(str(comision_manual or 0).replace(',', '.').strip() or 0)
+            except Exception:
+                manual = 0.0
+            manual = max(0.0, min(100.0, manual))
+            if modo != 'manual' or manual <= 0:
+                modo = 'normal'
+                manual = 0.0
+            _set('modo_comision', modo)
+            _set('comision_manual', f"{manual:.2f}")
 
         _write_xml_atomic(tree, VENDEDORES_XML)
 
@@ -4025,6 +4074,49 @@ def vendedores():
     )
 
 
+@app.post('/api/vendedores/comision/<seudonimo>')
+def api_vendedor_comision_guardar(seudonimo):
+    if 'usuario' not in session:
+        return jsonify(ok=False, error='no-auth'), 401
+    if not _is_superadmin():
+        return jsonify(ok=False, error='solo-superadmin'), 403
+
+    seudonimo = (seudonimo or '').strip()
+    if not seudonimo:
+        return jsonify(ok=False, error='Seudónimo inválido'), 400
+
+    data = request.get_json(force=True) or {}
+    modo = 'manual' if str(data.get('modo_comision') or '').strip().lower() == 'manual' else 'normal'
+    try:
+        manual = float(str(data.get('comision_manual') or '0').replace(',', '.').strip() or 0)
+    except Exception:
+        manual = 0.0
+    manual = max(0.0, min(100.0, manual))
+    if modo != 'manual' or manual <= 0:
+        modo = 'normal'
+        manual = 0.0
+
+    tree, root = _read_tree_with_root(VENDEDORES_XML, 'vendedores')
+    nodo = None
+    for v in root.findall('vendedor'):
+        if (v.findtext('seudonimo') or '').strip() == seudonimo:
+            nodo = v
+            break
+    if nodo is None:
+        return jsonify(ok=False, error='Vendedor no encontrado'), 404
+
+    def _set(tag, val):
+        el = nodo.find(tag)
+        if el is None:
+            el = ET.SubElement(nodo, tag)
+        el.text = val
+
+    _set('modo_comision', modo)
+    _set('comision_manual', f"{manual:.2f}")
+    _write_xml_atomic(tree, VENDEDORES_XML)
+
+    return jsonify(ok=True, seudonimo=seudonimo, modo_comision=modo, comision_manual=round(manual, 2))
+
 
 # ----------- FUNCIONES PARA ASIGNACIONES -----------
 
@@ -4059,18 +4151,24 @@ def _parse_or_none(path):
     except ET.ParseError:
         return None, None
 
+
+
 def cargar_vendedores():
     vendedores = []
     t, r = _parse_or_none(VENDEDORES_XML)
     if r is None:
         return vendedores
     for v in r.findall('vendedor'):
+        info_com = _vendor_commission_info_from_node(v)
         vendedores.append({
             'nombre': (v.findtext('nombre') or ""),
             'apellido': (v.findtext('apellido') or ""),
-            'seudonimo': (v.findtext('seudonimo') or "")
+            'seudonimo': (v.findtext('seudonimo') or ""),
+            'modo_comision': info_com['modo_comision'],
+            'comision_manual': info_com['comision_manual'],
         })
     return vendedores
+
 
 def leer_asignaciones():
     t, r = _parse_or_none(ASIGNACIONES_XML)
@@ -4655,18 +4753,23 @@ def set_configuracion_dia(fecha_str: str, data: dict):
     _guardar_xml(t, CAJA_XML)
 
 # ─── VENDEDORES y ASIGNACIONES (lectura) ────────────────────────────────────
+
+
 def _cargar_vendedores_base():
-    """Devuelve dict por seudónimo: { seudonimo: {nombre, apellido, seudonimo} }"""
+    """Devuelve dict por seudónimo con datos base y comisión manual opcional."""
     vendedores = {}
     if os.path.exists(VENDEDORES_XML):
         _, r = _leer_xml(VENDEDORES_XML)
         for v in r.findall('vendedor'):
             seud = (v.findtext('seudonimo', '') or '').strip()
             if seud:
+                info_com = _vendor_commission_info_from_node(v)
                 vendedores[seud] = {
                     "nombre":   (v.findtext('nombre', '') or '').strip(),
                     "apellido": (v.findtext('apellido', '') or '').strip(),
-                    "seudonimo": seud
+                    "seudonimo": seud,
+                    "modo_comision": info_com["modo_comision"],
+                    "comision_manual": info_com["comision_manual"],
                 }
     return vendedores
 
@@ -4842,14 +4945,26 @@ def _cobro_qr_normalizar_lista(fecha: str, seudonimo: str, items):
     out.sort(key=lambda x: _safe_int_local(x.get('idx', 0), 0))
     return out
 
-def _calc_cobro_detalle(vendidos: int, cfg: dict):
+
+
+def _calc_cobro_detalle(vendidos: int, cfg: dict, vendor_override: dict | None = None):
     vendidos = max(0, int(vendidos or 0))
     valor = max(0.0, _safe_float_local(cfg.get("valor_boleto"), 0.0))
     pct_base = max(0.0, min(100.0, _safe_float_local(cfg.get("comision_vendedor"), 0.0)))
     pct_extra = max(0.0, min(100.0, _safe_float_local(cfg.get("comision_extra_meta"), 0.0)))
     meta = max(0, _safe_int_local(cfg.get("meta_boletos"), 0))
 
-    pct = pct_base + (pct_extra if (meta > 0 and vendidos >= meta) else 0.0)
+    ov = vendor_override if isinstance(vendor_override, dict) else (cfg if isinstance(cfg, dict) else {})
+    modo_comision = str((ov.get("modo_comision") or ov.get("_modo_comision") or "normal")).strip().lower()
+    comision_manual = max(0.0, min(100.0, _safe_float_local(ov.get("comision_manual", ov.get("_comision_manual", 0)), 0.0)))
+
+    if modo_comision == "manual" and comision_manual > 0:
+        pct = comision_manual
+    else:
+        modo_comision = "normal"
+        comision_manual = 0.0
+        pct = pct_base + (pct_extra if (meta > 0 and vendidos >= meta) else 0.0)
+
     pct = max(0.0, min(100.0, pct))
 
     total_venta = round(vendidos * valor, 2)
@@ -4861,6 +4976,8 @@ def _calc_cobro_detalle(vendidos: int, cfg: dict):
         "comision_vendedor": round(pct_base, 4),
         "comision_extra_meta": round(pct_extra, 4),
         "meta_boletos": meta,
+        "modo_comision": modo_comision,
+        "comision_manual": round(comision_manual, 4),
         "pct_aplicado": round(pct, 4),
         "valor_total_venta": total_venta,
         "gan_vendedor": gan_vendedor,
@@ -4888,6 +5005,8 @@ def _leer_cobros(fecha_str: str):
             "comision_vendedor": _safe_float_local(c.attrib.get('comision_vendedor', 0), 0.0),
             "comision_extra_meta": _safe_float_local(c.attrib.get('comision_extra_meta', 0), 0.0),
             "meta_boletos": _safe_int_local(c.attrib.get('meta_boletos', 0), 0),
+            "modo_comision": (c.attrib.get('modo_comision', 'normal') or 'normal'),
+            "comision_manual": _safe_float_local(c.attrib.get('comision_manual', 0), 0.0),
             # montos calculados guardados (si existen)
             "pct_aplicado": _safe_float_local(c.attrib.get('pct_aplicado', ''), None),
             "valor_total_venta": _safe_float_local(c.attrib.get('valor_total_venta', ''), None),
@@ -4942,6 +5061,7 @@ def _upsert_cobro(fecha_str: str, seudonimo: str, datos: dict):
     # Snapshot + montos guardados (para mantener consistencia histórica)
     for k in (
         "valor_boleto", "comision_vendedor", "comision_extra_meta", "meta_boletos",
+        "modo_comision", "comision_manual",
         "pct_aplicado", "valor_total_venta", "gan_vendedor", "a_pagar_caja", "vuelto"
     ):
         if k in datos and datos.get(k) is not None:
@@ -5069,6 +5189,13 @@ def cobro():
                 cfg_row["comision_extra_meta"] = c.get("comision_extra_meta")
             if c.get("meta_boletos") is not None:
                 cfg_row["meta_boletos"] = c.get("meta_boletos")
+            if str(c.get("modo_comision") or 'normal').strip().lower() == 'manual' and float(c.get("comision_manual") or 0) > 0:
+                cfg_row["modo_comision"] = 'manual'
+                cfg_row["comision_manual"] = float(c.get("comision_manual") or 0)
+        else:
+            if str(base_info.get("modo_comision") or 'normal').strip().lower() == 'manual' and float(base_info.get("comision_manual") or 0) > 0:
+                cfg_row["modo_comision"] = 'manual'
+                cfg_row["comision_manual"] = float(base_info.get("comision_manual") or 0)
 
         detalle = _calc_cobro_detalle(vendidos, cfg_row)
 
@@ -5095,6 +5222,8 @@ def cobro():
 
             # Detalle ya calculado (para evitar inconsistencias en plantilla)
             "valor_boleto_aplicado": float(cfg_row.get("valor_boleto", 0.0) or 0.0),
+            "modo_comision": str((cfg_row.get('modo_comision') or 'normal')).strip().lower(),
+            "comision_manual": round(float(cfg_row.get('comision_manual', 0.0) or 0.0), 2),
             "pct_aplicado": round(float(pct_aplicado_calc or 0.0), 2),
             "total_venta_calc": round(float(total_venta_calc or 0.0), 2),
             "gan_vendedor_calc": round(float(gan_vendedor_calc or 0.0), 2),
@@ -5112,7 +5241,9 @@ def cobro():
         config=config,
         fecha_actual=fecha_actual,
         vendedores=vendedores_ui,
-        paid_totals=paid_totals
+        paid_totals=paid_totals,
+        can_edit_vendor_commission=_is_superadmin(),
+        user_role=session.get('rol', '')
     )
 
 
@@ -5210,7 +5341,12 @@ def guardar_cobro(seudonimo):
         if transferencia < 0 or efectivo < 0:
             return jsonify(ok=False, error="Transferencia y efectivo no pueden ser negativos."), 400
 
-        cfg = get_configuracion_dia(fecha_actual)
+        base_vendedores = _cargar_vendedores_base()
+        vendor_info = base_vendedores.get(seudonimo, {})
+        cfg = dict(get_configuracion_dia(fecha_actual))
+        if str(vendor_info.get('modo_comision') or 'normal').strip().lower() == 'manual' and float(vendor_info.get('comision_manual') or 0) > 0:
+            cfg['modo_comision'] = 'manual'
+            cfg['comision_manual'] = float(vendor_info.get('comision_manual') or 0)
         detalle = _calc_cobro_detalle(vendidos, cfg)
 
         a_pagar_caja = detalle["a_pagar_caja"]
@@ -5237,6 +5373,8 @@ def guardar_cobro(seudonimo):
                 "comision_vendedor": detalle["comision_vendedor"],
                 "comision_extra_meta": detalle["comision_extra_meta"],
                 "meta_boletos": detalle["meta_boletos"],
+                "modo_comision": detalle["modo_comision"],
+                "comision_manual": detalle["comision_manual"],
                 "pct_aplicado": detalle["pct_aplicado"],
                 "valor_total_venta": detalle["valor_total_venta"],
                 "gan_vendedor": detalle["gan_vendedor"],
@@ -5269,6 +5407,8 @@ def guardar_cobro(seudonimo):
                 "transferencia": transferencia,
                 "efectivo": efectivo,
                 "pago": pago_recibido,
+                "modo_comision": detalle["modo_comision"],
+                "comision_manual": round(detalle["comision_manual"], 2),
                 "pct_aplicado": round(detalle["pct_aplicado"], 2),
                 "total_venta": round(detalle["valor_total_venta"], 2),
                 "gan_vendedor": round(detalle["gan_vendedor"], 2),
@@ -5280,6 +5420,97 @@ def guardar_cobro(seudonimo):
         )
     except Exception as e:
         return jsonify(ok=False, error=str(e)), 400
+
+
+
+@app.get('/cobro/recibo/<seudonimo>.pdf')
+def cobro_recibo_pdf(seudonimo):
+    if 'usuario' not in session:
+        return redirect(_login_url())
+
+    fecha_actual = (request.args.get('fecha') or date.today().isoformat()).strip()
+    base = _cargar_vendedores_base().get(seudonimo, {"nombre":"", "apellido":"", "seudonimo": seudonimo})
+    asign = _cargar_asignaciones_por_fecha(fecha_actual).get(seudonimo, {})
+    cobros = _leer_cobros(fecha_actual)
+    c = cobros.get(seudonimo)
+    if not c:
+        return Response('Cobro no encontrado', 404, mimetype='text/plain')
+
+    entregados = int(asign.get('boletos_entregados', 0) or 0)
+    devueltos = int(c.get('devueltos', 0) or 0)
+    vendidos = int(c.get('vendidos', 0) or 0)
+    planillas = asign.get('planillas', []) or []
+    nombre = (str(base.get('nombre','')) + ' ' + str(base.get('apellido',''))).strip() or seudonimo
+    modo_comision = str(c.get('modo_comision') or 'normal').strip().lower()
+    com_manual = float(c.get('comision_manual') or 0)
+
+    detalle = {
+        'valor_boleto': float(c.get('valor_boleto') or 0),
+        'pct_aplicado': float(c.get('pct_aplicado') or 0),
+        'valor_total_venta': float(c.get('valor_total_venta') or 0),
+        'gan_vendedor': float(c.get('gan_vendedor') or 0),
+        'a_pagar_caja': float(c.get('a_pagar_caja') or 0),
+    }
+
+    buf = io.BytesIO()
+    pdf = canvas.Canvas(buf, pagesize=A4)
+    w, h = A4
+    y = h - 35
+
+    pdf.setTitle(f"cobro_{fecha_actual}_{seudonimo}")
+    pdf.setFont('Helvetica-Bold', 18)
+    pdf.drawString(35, y, 'Comprobante de Cobro de Caja')
+    y -= 18
+    pdf.setFont('Helvetica', 10)
+    pdf.drawString(35, y, f'Fecha: {fecha_actual}')
+    pdf.drawRightString(w - 35, y, f'Generado por: {session.get("usuario", "") or "Sistema"}')
+
+    y -= 22
+    pdf.roundRect(30, y-92, w-60, 88, 10, stroke=1, fill=0)
+    pdf.setFont('Helvetica-Bold', 12)
+    pdf.drawString(40, y-16, f'Vendedor: {nombre}')
+    pdf.setFont('Helvetica', 10)
+    pdf.drawString(40, y-34, f'Seudónimo: {seudonimo}')
+    pdf.drawString(40, y-50, f'Planillas: {", ".join(planillas) if planillas else "—"}')
+    pdf.drawString(40, y-66, f'Modo comisión: {'Manual' if modo_comision == 'manual' and com_manual > 0 else 'Normal del día'}')
+    if modo_comision == 'manual' and com_manual > 0:
+        pdf.drawString(250, y-66, f'Comisión manual: {com_manual:.2f}%')
+    y -= 110
+
+    rows = [
+        ('Boletos entregados', str(entregados)),
+        ('Boletos devueltos', str(devueltos)),
+        ('Boletos vendidos', str(vendidos)),
+        ('Valor total venta', f"${detalle['valor_total_venta']:.2f}"),
+        ('% comisión aplicado', f"{detalle['pct_aplicado']:.2f}%"),
+        ('Ganancia vendedor', f"${detalle['gan_vendedor']:.2f}"),
+        ('A pagar caja', f"${detalle['a_pagar_caja']:.2f}"),
+        ('Transferencia', f"${float(c.get('transferencia') or 0):.2f}"),
+        ('Efectivo', f"${float(c.get('efectivo') or 0):.2f}"),
+        ('Pago recibido', f"${float(c.get('total_pagar') or 0):.2f}"),
+        ('Vuelto', f"${float(c.get('vuelto') or 0):.2f}"),
+    ]
+    tbl = Table(rows, colWidths=[170, 150])
+    tbl.setStyle(TableStyle([
+        ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#EEF2FF')),
+        ('TEXTCOLOR', (0,0), (-1,-1), colors.black),
+        ('FONTNAME', (0,0), (-1,-1), 'Helvetica-Bold'),
+        ('FONTNAME', (1,0), (1,-1), 'Helvetica'),
+        ('GRID', (0,0), (-1,-1), .5, colors.HexColor('#CBD5E1')),
+        ('ROWBACKGROUNDS', (0,0), (-1,-1), [colors.white, colors.HexColor('#F8FAFC')]),
+        ('PADDING', (0,0), (-1,-1), 6),
+    ]))
+    tw, th = tbl.wrapOn(pdf, w-70, h)
+    tbl.drawOn(pdf, 35, y-th)
+    y = y - th - 22
+
+    pdf.setFont('Helvetica', 9)
+    pdf.setFillColor(colors.HexColor('#334155'))
+    pdf.drawString(35, max(24, y), 'Documento generado por GL Bingo. Este comprobante resume el cobro liquidado para el vendedor en la fecha indicada.')
+    pdf.showPage()
+    pdf.save()
+    buf.seek(0)
+    return send_file(buf, mimetype='application/pdf', as_attachment=True, download_name=f'cobro_{fecha_actual}_{seudonimo}.pdf')
 
 # ─── RUTAS DE APOYO (no interfieren con tu app) ─────────────────────────────
 @app.route("/_login_demo")
@@ -6419,6 +6650,52 @@ def _sync_resultados_from_juego(fecha_iso, ganadores):
     except Exception:
         return False
 
+def _resultado_meta_para_ganador(fecha_iso, figura, boleto):
+    """
+    Resuelve metadatos editables del ganador (nombre/premio) y de planilla
+    (vendedor/sector) para mantener UI + XML de vMix en concordancia.
+    """
+    figura_s = str(figura or "").strip()
+    boleto_s = _norm_tabla_id(boleto or "")
+    meta = {
+        "nombre": "",
+        "premio": 0.0,
+        "vendedor": "",
+        "sector": "",
+    }
+
+    try:
+        actual = _cargar_resultados(fecha_iso) or {"items": []}
+        for item in (actual.get("items") or []):
+            if str(item.get("figura") or "").strip().lower() != figura_s.lower():
+                continue
+            for g in (item.get("ganadores") or []):
+                if _norm_tabla_id(g.get("boleto") or "") != boleto_s:
+                    continue
+                meta["nombre"] = str(g.get("nombre") or "").strip()
+                meta["premio"] = _safe_float(g.get("premio"), 0.0)
+                meta["vendedor"] = str(g.get("vendedor") or "").strip()
+                meta["sector"] = str(g.get("sector") or "").strip()
+                raise StopIteration
+    except StopIteration:
+        pass
+    except Exception:
+        pass
+
+    try:
+        info = buscar_info_por_boleto(fecha_iso, boleto_s) or {}
+    except Exception:
+        info = {}
+
+    if not str(meta.get("vendedor") or "").strip():
+        meta["vendedor"] = str(info.get("vendedor") or "").strip()
+    if not str(meta.get("sector") or "").strip():
+        meta["sector"] = str(info.get("planilla") or info.get("rango") or info.get("sector") or "").strip()
+
+    meta["boleto"] = boleto_s
+    meta["figura"] = figura_s
+    return meta
+
 # ------------------ Reintegro desde LOGS ------------------
 def _find_image_case_insensitive(dirs, filename):
     base = (filename or "").strip()
@@ -6631,6 +6908,29 @@ def _draw_ultrablack(c, text, x, y, size, font):
         c.drawRightString(x+dx, y+dy, text)
 
 # --------- Helpers de SPINNERS (Extras) ----------
+def _sanitize_spinner_list(values):
+    """Filtra placeholders como 0000 y deja solo spinners realmente lanzados."""
+    out = []
+    seen = set()
+    for raw in (values or []):
+        s = str(raw or "").strip()
+        if not s:
+            continue
+        s = re.sub(r"\D", "", s)
+        if not s:
+            continue
+        s = s[:4].zfill(4)
+        if s in {"0000", "000", "00", "0"}:
+            continue
+        if int(s) <= 0:
+            continue
+        if s in seen:
+            continue
+        seen.add(s)
+        out.append(s)
+    return out[:20]
+
+
 def _parse_spinners(extras: dict):
     """
     Lee extras y extrae lista de spinners (hasta 20) y el valor por spinner.
@@ -6647,7 +6947,7 @@ def _parse_spinners(extras: dict):
     raw_val  = (block.get("valor") or (block.get("texto") or "")).strip()
 
     tokens = re.findall(r"\d{1,4}", raw_nums)
-    nums = [t.zfill(4) for t in tokens][:20]
+    nums = _sanitize_spinner_list(tokens)
 
     m = re.search(r"(\d+(?:[.,]\d{1,2})?)", raw_val)
     valor = None
@@ -6710,7 +7010,7 @@ def _spinners_from_sources_for_date(fecha_iso: str, extras: dict | None = None):
             nums = [str(x).strip() for x in (_load_spinners_for_fecha(fecha_iso) or []) if str(x).strip()]
     except Exception:
         nums = []
-    nums = nums[:20]
+    nums = _sanitize_spinner_list(nums)
     return {"nums": nums, "valor": data.get("valor"), "texto": data.get("texto") or ""}
 
 
@@ -6767,98 +7067,98 @@ def _reintegro_from_sources_for_date(fecha_iso: str):
 
 
 def _draw_spinners_card(c, x, y, w, h, nums, valor, font):
-    """
-    Tarjeta SPINNERS con 'pastillas' de 4 cuadritos.
-    - Las filas se **CENTRAN** horizontalmente.
-    - Se ajusta tamaño para encajar sin recortar.
-    """
-    # Tarjeta
-    c.setFillColor(colors.HexColor("#F8FAFF"))
+    """Tarjeta SPINNERS con mejor estética y solo números realmente jugados."""
+    nums = _sanitize_spinner_list(nums)
+
+    c.setFillColor(colors.HexColor("#FFFFFF"))
     c.setStrokeColor(colors.HexColor("#CBD5F1"))
     c.roundRect(x, y, w, h, 10, stroke=1, fill=1)
 
+    header_h = 22
+    c.setFillColor(colors.HexColor("#243C94"))
+    c.roundRect(x, y + h - header_h, w, header_h, 10, stroke=0, fill=1)
+    c.setFillColor(colors.white)
+    c.setFont(font, 10)
+    c.drawCentredString(x + w/2, y + h - 15, "SPINNERS JUGADOS")
+
     pad = 10
     inner_x = x + pad
-    inner_y = y + pad
-    inner_w = w - 2*pad
-    inner_h = h - 2*pad
+    inner_w = w - 2 * pad
+    top_y = y + h - header_h - 12
 
-    # Título + valor
-    c.setFillColor(colors.HexColor("#0F172A")); c.setFont(font, 10)
-    c.drawString(inner_x, y + h - pad - 6, "SPINNERS")
     if valor is not None:
-        c.setFillColor(colors.HexColor("#334155")); c.setFont(font, 9)
-        c.drawRightString(x + w - pad, y + h - pad - 6, f"Valor c/u: {_money(valor)}")
+        badge_w = min(88, inner_w * 0.34)
+        c.setFillColor(colors.HexColor("#E8F3FF"))
+        c.setStrokeColor(colors.HexColor("#BFDBFE"))
+        c.roundRect(inner_x, top_y - 4, badge_w, 16, 7, stroke=1, fill=1)
+        c.setFillColor(colors.HexColor("#1D4ED8"))
+        c.setFont(font, 8)
+        c.drawCentredString(inner_x + badge_w/2, top_y + 1, f"C/U {_money(valor)}")
 
-    # Parámetros visuales
-    title_h     = 18          # espacio reservado para el título
-    spinner_gap = 12          # separación entre spinners
-    row_gap     = 8           # separación entre filas
-    box_gap     = 3           # separación entre dígitos
-    pill_pad    = 6           # padding interno de la pastilla
-    grid_h      = max(10, inner_h - title_h)
-
-    n = len(nums)
-    if n == 0:
+    if not nums:
+        c.setFillColor(colors.HexColor("#94A3B8"))
+        c.setFont(font, 10)
+        c.drawCentredString(x + w/2, y + h/2 - 8, "SIN SPINNERS JUGADOS")
         return
 
-    # Elegimos per_row y tamaño de box maximizando el encaje
-    best = None  # (box_size, per_row, rows)
-    max_per_row = min(n, 8)
+    title_gap = 18 if valor is not None else 6
+    body_top = y + h - header_h - title_gap
+    body_h = max(32, body_top - y - 10)
+
+    spinner_gap = 10
+    row_gap = 8
+    box_gap = 2.5
+    pill_pad_x = 6
+    pill_pad_y = 5
+
+    n = len(nums)
+    best = None
+    max_per_row = min(n, 6)
     for per_row in range(max_per_row, 0, -1):
         rows = math.ceil(n / per_row)
-
-        # Ancho disponible -> box por ancho
-        max_box_w = ((inner_w - (per_row - 1) * spinner_gap) / per_row - 2 * pill_pad - 3 * box_gap) / 4.0
-        # Alto disponible -> box por alto
-        max_box_h = ((grid_h - (rows - 1) * row_gap) / rows - 2 * pill_pad)
-
-        box = min(max_box_w, max_box_h, 18)  # límite superior estético
-        if box >= 10:  # mínimo legible
+        max_box_w = ((inner_w - (per_row - 1) * spinner_gap) / per_row - 2 * pill_pad_x - 3 * box_gap) / 4.0
+        max_box_h = ((body_h - (rows - 1) * row_gap) / rows - 2 * pill_pad_y)
+        box = min(max_box_w, max_box_h, 15)
+        if box >= 8.5:
             if best is None or box > best[0]:
                 best = (box, per_row, rows)
 
     if best is None:
-        best = (8.0, min(n, 6), math.ceil(n / min(n, 6)))
+        best = (8.5, min(n, 4), math.ceil(n / max(1, min(n, 4))))
 
     box, per_row, rows = best
-    fs = max(9, min(14, box * 0.70))
+    pill_h = 2 * pill_pad_y + box
+    pill_w = 2 * pill_pad_x + 4 * box + 3 * box_gap
+    fs = max(8.0, min(11.0, box * 0.72))
 
-    pill_h = 2 * pill_pad + box
-    pill_w = 2 * pill_pad + 4 * box + 3 * box_gap
-
-    # Dibujo centrado por fila
-    c.setFont(font, fs)
     idx = 0
+    grid_top = y + 10 + body_h - pill_h
     for r in range(rows):
         remaining = n - idx
         count = min(per_row, remaining)
         row_w = count * pill_w + (count - 1) * spinner_gap
-        start_x = inner_x + max(0, (inner_w - row_w) / 2.0)  # <-- centrado
-        y_row = inner_y + grid_h - pill_h - r * (pill_h + row_gap)
+        start_x = inner_x + max(0, (inner_w - row_w) / 2.0)
+        y_row = grid_top - r * (pill_h + row_gap)
 
         for j in range(count):
             cur_x = start_x + j * (pill_w + spinner_gap)
 
-            # Pastilla
-            c.setFillColor(colors.HexColor("#EEF2FF"))
-            c.setStrokeColor(colors.HexColor("#C7D2FE"))
+            c.setFillColor(colors.HexColor("#EEF4FF"))
+            c.setStrokeColor(colors.HexColor("#BFD0FF"))
             c.roundRect(cur_x, y_row, pill_w, pill_h, 7, stroke=1, fill=1)
 
-            # 4 cuadritos
             s = re.sub(r"\D", "", str(nums[idx]))[:4].rjust(4, "0")
-            xx = cur_x + pill_pad
-            yy = y_row + pill_pad
+            xx = cur_x + pill_pad_x
+            yy = y_row + pill_pad_y
             for ch in s:
                 c.setFillColor(colors.white)
-                c.setStrokeColor(colors.HexColor("#94A3B8"))
-                c.roundRect(xx, yy, box, box, 3, stroke=1, fill=1)
-
-                c.setFillColor(colors.HexColor("#111827"))
+                c.setStrokeColor(colors.HexColor("#8FA8FF"))
+                c.roundRect(xx, yy, box, box, 2.8, stroke=1, fill=1)
+                c.setFillColor(colors.HexColor("#14213D"))
+                c.setFont(font, fs)
                 tx = xx + (box - pdfmetrics.stringWidth(ch, font, fs)) / 2.0
-                ty = yy + (box - fs) / 2.0 - 0.5
+                ty = yy + (box - fs) / 2.0 + 0.2
                 c.drawString(tx, ty, ch)
-
                 xx += box + box_gap
 
             idx += 1
@@ -7058,12 +7358,42 @@ def api_resultados_upsert_ganador():
             or ""
         ).strip()
 
-        if not str(ganador.get("vendedor") or "").strip():
-            ganador["vendedor"] = vendedor_resuelto
-        if not str(ganador.get("sector") or "").strip():
-            ganador["sector"] = sector_resuelto
+        ganador["vendedor"] = vendedor_resuelto or str(ganador.get("vendedor") or "").strip()
+        ganador["sector"] = sector_resuelto or str(ganador.get("sector") or "").strip()
 
         _guardar_resultados(fecha, items, extras)
+
+        try:
+            data_g = _safe_json_read(GANADORES_JSON) or {}
+            raw_g = data_g.get(str(fecha), []) or []
+            enriquecidos = []
+            for ww in raw_g:
+                if not isinstance(ww, dict):
+                    continue
+                item_w = dict(ww)
+                try:
+                    item_w["figura"] = _tl_semantic_name(
+                        str(item_w.get("figura") or item_w.get("nombre_figura") or ""),
+                        str(item_w.get("fig_code") or "")
+                    )
+                except Exception:
+                    pass
+                enriquecidos.append(item_w)
+            _sync_resultados_from_juego(str(fecha), enriquecidos)
+            try:
+                ultimo_xml = 0
+                if os.path.exists(GANADORES_XML):
+                    rg = ET.parse(GANADORES_XML).getroot()
+                    ultimo_xml = _safe_int(rg.attrib.get("ultimo_marcado"), 0)
+                elif os.path.exists(GANADORES_XML_PUBLIC):
+                    rg = ET.parse(GANADORES_XML_PUBLIC).getroot()
+                    ultimo_xml = _safe_int(rg.attrib.get("ultimo_marcado"), 0)
+            except Exception:
+                ultimo_xml = 0
+            _write_ganadores_xml(str(fecha), ultimo_xml, enriquecidos)
+        except Exception:
+            pass
+
         return jsonify({"ok": True, "fecha": fecha, "ganador": ganador})
     except Exception as e:
         return jsonify({"ok": False, "msg": f"No se pudo guardar ganador: {e}"}), 500
@@ -7200,11 +7530,19 @@ def boletin_pdf():
                 draw_h *= f
             c.drawImage(img, L["x"], H - (L["y"] + draw_h), width=draw_w, height=draw_h, preserveAspectRatio=True, mask="auto")
 
-        c.setFillColor(colors.black)
+        # Título y fecha con mejor estética
+        date_card_w = 150
+        date_card_h = 28
+        date_card_x = (W - date_card_w) / 2.0
+        date_card_y = H - 68
+        c.setFillColor(colors.HexColor("#0F2A7A"))
+        c.setStrokeColor(colors.HexColor("#E5EDFF"))
+        c.roundRect(date_card_x, date_card_y, date_card_w, date_card_h, 10, stroke=1, fill=1)
+        c.setFillColor(colors.white)
         c.setFont(FONT, 18)
-        c.drawCentredString(W/2, H - 42, T("JUEGO HOY"))
+        c.drawCentredString(W/2, H - 34, T("JUEGO DEL DIA"))
         c.setFont(FONT, 11)
-        c.drawCentredString(W/2, H - 58, T(_es_corta(fecha_objetivo).capitalize()))
+        c.drawCentredString(W/2, date_card_y + 9, T(_es_largo(fecha_objetivo).capitalize()))
 
         TL = layout.get("total", {"x": W - 22, "y": 24, "size": 56, "align": "right"})
         c.setFillColor(colors.white)
@@ -7246,6 +7584,7 @@ def boletin_pdf():
         if y < MIN_Y_FIRST_PAGE:
             y = MIN_Y_FIRST_PAGE
 
+
         items_resultado = list(resultados.get("items") or [])
         items_con_ganador = [it for it in items_resultado if (it.get("ganadores") or [])]
         items_a_mostrar = items_con_ganador or items_resultado
@@ -7255,7 +7594,7 @@ def boletin_pdf():
         c.rect(0, y, W, 18, 0, 1)
         c.setFillColor(colors.white)
         c.setFont(FONT, 10)
-        c.drawCentredString(W/2, y + 5, T(f"RESULTADOS SORTEO { _es_largo(fecha) }"))
+        c.drawCentredString(W/2, y + 5, T(f"RESULTADOS DEL SORTEO · { _es_largo(fecha).upper() }"))
         y -= 8
 
         chip_y = y
@@ -7267,21 +7606,152 @@ def boletin_pdf():
         agenda = _figuras_de_fecha(fecha)
         premio_map = {a["nombre"].strip().lower(): (a.get("valor") or 0.0) for a in agenda}
 
-        def ensure_space(hmin=70, top_margin=16):
+        # ---------- Auto-ajuste del PDF: intenta 1 hoja y usa máximo 2 ----------
+        MAX_PAGES_PDF = 2
+
+        STYLE_NORMAL = {
+            "row_h": 16.0,
+            "box_top": 42.0,
+            "box_bottom": 14.0,
+            "gap_after": 10.0,
+            "title_font": 10.0,
+            "head_font": 8.0,
+            "body_font": 8.7,
+            "body_font_2": 8.5,
+            "name_max": 230.0,
+            "vend_max": 180.0,
+            "extras_h": 160.0,
+        }
+        STYLE_COMPACT = {
+            "row_h": 14.0,
+            "box_top": 38.0,
+            "box_bottom": 12.0,
+            "gap_after": 8.0,
+            "title_font": 9.2,
+            "head_font": 7.6,
+            "body_font": 8.0,
+            "body_font_2": 7.8,
+            "name_max": 245.0,
+            "vend_max": 195.0,
+            "extras_h": 145.0,
+        }
+        STYLE_MINI = {
+            "row_h": 12.4,
+            "box_top": 34.0,
+            "box_bottom": 10.0,
+            "gap_after": 6.0,
+            "title_font": 8.5,
+            "head_font": 7.0,
+            "body_font": 7.3,
+            "body_font_2": 7.1,
+            "name_max": 260.0,
+            "vend_max": 210.0,
+            "extras_h": 128.0,
+        }
+        STYLE_MICRO = {
+            "row_h": 11.2,
+            "box_top": 31.0,
+            "box_bottom": 9.0,
+            "gap_after": 5.0,
+            "title_font": 7.9,
+            "head_font": 6.6,
+            "body_font": 6.9,
+            "body_font_2": 6.7,
+            "name_max": 270.0,
+            "vend_max": 220.0,
+            "extras_h": 116.0,
+        }
+        STYLE_NANO = {
+            "row_h": 10.2,
+            "box_top": 28.0,
+            "box_bottom": 8.0,
+            "gap_after": 4.0,
+            "title_font": 7.3,
+            "head_font": 6.2,
+            "body_font": 6.4,
+            "body_font_2": 6.2,
+            "name_max": 280.0,
+            "vend_max": 230.0,
+            "extras_h": 102.0,
+        }
+
+        def _rows_of_item(it):
+            return max(1, len(it.get("ganadores") or []))
+
+        extras_cards = []
+        if bonus_data.get("nums") or bonus_data.get("texto"):
+            extras_cards.append("bonus")
+        if sp_data.get("nums") or (sp_data.get("valor") is not None):
+            extras_cards.append("spinners")
+        if rein_log.get("imagen") or rein_log.get("archivo"):
+            extras_cards.append("reintegro")
+
+        first_page_available = max(130.0, y - 22.0)
+        second_page_available = H - 40.0
+
+        def _fits(style):
+            items_h = 0.0
+            for it in items_a_mostrar:
+                rows = _rows_of_item(it)
+                box_h = style["box_top"] + (rows * style["row_h"]) + style["box_bottom"]
+                items_h += box_h + style["gap_after"]
+
+            extras_h = (style["extras_h"] + 26.0) if extras_cards else 0.0
+            total_h = items_h + extras_h
+
+            if total_h <= first_page_available:
+                return True
+
+            capacity_total = first_page_available + ((MAX_PAGES_PDF - 1) * second_page_available)
+            return total_h <= capacity_total
+
+        PDF_STYLE = STYLE_NANO
+        for candidate in (STYLE_NORMAL, STYLE_COMPACT, STYLE_MINI, STYLE_MICRO, STYLE_NANO):
+            if _fits(candidate):
+                PDF_STYLE = candidate
+                break
+
+        section_h = PDF_STYLE["extras_h"]
+        page_count = 1
+
+        def _draw_continue_header():
             nonlocal y
+            c.setFillColor(colors.HexColor("#2B2370"))
+            c.rect(0, H - 18, W, 18, 0, 1)
+            c.setFillColor(colors.white)
+            c.setFont(FONT, 10)
+            c.drawCentredString(W/2, H - 13, T(f"RESULTADOS DEL SORTEO · CONTINUA"))
+            y = H - 28
+
+        def ensure_space(hmin=70, top_margin=16):
+            nonlocal y, page_count
             if y - hmin < top_margin:
+                if page_count >= MAX_PAGES_PDF:
+                    return False
                 c.showPage()
-                y = H - top_margin
+                page_count += 1
+                _draw_continue_header()
+            return True
 
         def bloque(fig, ganadores, premio_total):
             nonlocal y
             rows = list(ganadores or [])
             if not rows:
-                rows = [{"boleto": "—", "nombre": "SIN GANADOR REGISTRADO", "vendedor": "—", "sector": "", "premio": 0.0, "_placeholder": True}]
+                rows = [{
+                    "boleto": "—",
+                    "nombre": "SIN GANADOR REGISTRADO",
+                    "vendedor": "—",
+                    "sector": "",
+                    "premio": 0.0,
+                    "_placeholder": True
+                }]
 
-            row_h = 16
-            box_h = 42 + (len(rows) * row_h) + 14
-            ensure_space(box_h + 12, top_margin=26)
+            row_h = PDF_STYLE["row_h"]
+            box_h = PDF_STYLE["box_top"] + (len(rows) * row_h) + PDF_STYLE["box_bottom"]
+
+            if not ensure_space(box_h + 12, top_margin=26):
+                return False
+
             y -= box_h
 
             bx = 14
@@ -7295,12 +7765,12 @@ def boletin_pdf():
             c.setFillColor(colors.HexColor("#203880"))
             c.roundRect(bx, by + box_h - 22, bw, 22, 10, stroke=0, fill=1)
             c.setFillColor(colors.white)
-            c.setFont(FONT, 10)
+            c.setFont(FONT, PDF_STYLE["title_font"])
             c.drawString(bx + 10, by + box_h - 15, T(fig.upper()))
             c.drawRightString(bx + bw - 10, by + box_h - 15, T(f"PREMIO TOTAL { _money(premio_total) }"))
 
             c.setFillColor(colors.HexColor("#64748B"))
-            c.setFont(FONT, 8)
+            c.setFont(FONT, PDF_STYLE["head_font"])
             c.drawString(bx + 8, by + box_h - 34, T("Boleto"))
             c.drawString(bx + 74, by + box_h - 34, T("Nombre / Observacion"))
             c.drawString(bx + 322, by + box_h - 34, T("Vendedor / Sector"))
@@ -7312,34 +7782,46 @@ def boletin_pdf():
             for i, g in enumerate(rows):
                 if i % 2 == 0:
                     c.setFillColor(colors.HexColor("#F1F5FF"))
-                    c.roundRect(bx + 6, row_y - 9, bw - 12, 14, 4, stroke=0, fill=1)
+                    c.roundRect(
+                        bx + 6,
+                        row_y - 9,
+                        bw - 12,
+                        max(10, row_h - 2),
+                        4,
+                        stroke=0,
+                        fill=1
+                    )
 
                 boleto = str(g.get("boleto") or "—")
                 nombre = str(g.get("nombre") or "—")
                 vendedor = str(g.get("vendedor") or "").strip()
                 sector = str(g.get("sector") or "").strip()
+
                 if not vendedor:
                     vendedor = (layout.get("sorteo") or layout.get("nombre_sorteo") or "GOLPE DE SUERTE")
+
                 vend_show = vendedor if not sector else f"{vendedor} · {sector}"
-                nombre = _fit_text_one_line(c, nombre, FONT, 8.7, 230)
-                vend_show = _fit_text_one_line(c, vend_show, FONT, 8.5, 180)
+                nombre = _fit_text_one_line(c, nombre, FONT, PDF_STYLE["body_font"], PDF_STYLE["name_max"])
+                vend_show = _fit_text_one_line(c, vend_show, FONT, PDF_STYLE["body_font_2"], PDF_STYLE["vend_max"])
 
                 try:
                     prem = float(g.get("premio") or 0.0)
                 except Exception:
                     prem = 0.0
+
                 if g.get("_placeholder") and premio_total:
                     prem = float(premio_total or 0.0)
 
                 c.setFillColor(colors.HexColor("#111827"))
-                c.setFont(FONT, 8.7)
+                c.setFont(FONT, PDF_STYLE["body_font"])
                 c.drawString(bx + 8, row_y - 5, T(boleto))
                 c.drawString(bx + 74, row_y - 5, T(nombre))
                 c.drawString(bx + 322, row_y - 5, T(vend_show))
                 c.drawRightString(bx + bw - 10, row_y - 5, T(_money(prem)))
                 row_y -= row_h
 
-            y -= 10
+            y -= PDF_STYLE["gap_after"]
+            return True
 
         for item in items_a_mostrar:
             nom = item.get("figura", "")
@@ -7347,20 +7829,13 @@ def boletin_pdf():
             premio = premio_map.get(nom.strip().lower(), 0.0)
             if premio == 0.0:
                 premio = sum((g.get("premio") or 0.0) for g in gan)
-            bloque(nom, gan, premio)
+
+            ok = bloque(nom, gan, premio)
+            if not ok:
+                break
 
         # ---------- Extras inferiores: BONUS, SPINNERS, REINTEGRO ----------
-        extras_cards = []
-        if bonus_data.get("nums") or bonus_data.get("texto"):
-            extras_cards.append("bonus")
-        if sp_data.get("nums") or (sp_data.get("valor") is not None):
-            extras_cards.append("spinners")
-        if rein_log.get("imagen") or rein_log.get("archivo"):
-            extras_cards.append("reintegro")
-
-        if extras_cards:
-            section_h = 160
-            ensure_space(section_h + 24, top_margin=24)
+        if extras_cards and ensure_space(section_h + 24, top_margin=24):
             c.setFillColor(colors.HexColor("#2B2370"))
             c.rect(0, y, W, 16, 0, 1)
             c.setFillColor(colors.white)
@@ -7393,21 +7868,21 @@ def boletin_pdf():
 
                     label = str((rein_log.get("archivo") or "")).rsplit('.', 1)[0].strip() or "SIN REINTEGRO"
                     c.setFillColor(colors.HexColor("#1F2937"))
-                    c.setFont(FONT, 9)
-                    txt = _fit_text_one_line(c, label, FONT, 9, slot_w - 16)
-                    c.drawCentredString(cur_x + slot_w/2, card_y + 22, T(txt))
+                    c.setFont(FONT, 8.5)
+                    txt = _fit_text_one_line(c, label, FONT, 8.5, slot_w - 20)
+                    c.drawCentredString(cur_x + slot_w/2, card_y + 18, T(txt))
 
                     if rein_log.get("imagen") and os.path.exists(str(rein_log.get("imagen"))):
                         try:
                             img = ImageReader(str(rein_log.get("imagen")))
                             iw, ih = img.getSize()
-                            max_w = slot_w - 22
-                            max_h = section_h - 54
+                            max_w = min(slot_w * 0.72, slot_w - 34)
+                            max_h = min(section_h * 0.52, section_h - 78)
                             s = min(max_w / float(iw), max_h / float(ih), 1.0)
                             draw_w = iw * s
                             draw_h = ih * s
                             ix = cur_x + (slot_w - draw_w) / 2.0
-                            iy = card_y + 30 + max(0, (max_h - draw_h) / 2.0)
+                            iy = card_y + 34 + max(0, (max_h - draw_h) / 2.0)
                             c.drawImage(img, ix, iy, width=draw_w, height=draw_h, preserveAspectRatio=True, mask='auto')
                         except Exception:
                             c.setFillColor(colors.HexColor("#9CA3AF"))
@@ -7417,9 +7892,9 @@ def boletin_pdf():
                         c.setFillColor(colors.HexColor("#9CA3AF"))
                         c.setFont(FONT, 10)
                         c.drawCentredString(cur_x + slot_w/2, card_y + section_h/2, "SIN IMAGEN")
+
                 cur_x += slot_w + gap
 
-        c.showPage()
         c.save()
         buf.seek(0)
         return send_file(buf, as_attachment=True, download_name=f"boletin_{fecha}.pdf", mimetype="application/pdf")
@@ -7972,9 +8447,12 @@ STD_SPINNERS_REL      = "spinners.xml"                # Fallback para Juego
 VMIX_REINTEGRO_REL    = "vmix_reintegro.xml"
 VMIX_REINTEGROS_REL   = "vmix_reintegros.xml"
 
-# Rutas reales de medios para reintegros (ajustables por variable de entorno)
-REINTEGRO_MEDIA_DIR  = os.getenv("REINTEGRO_MEDIA_DIR",  r"E:\MEDIA\REINTEGRO")
-REINTEGROS_MEDIA_DIR = os.getenv("REINTEGROS_MEDIA_DIR", r"E:\MEDIA\REINTEGROS")
+# Ruta base de medios local (ajustable por variable de entorno)
+VMIX_MEDIA_ROOT = (os.getenv("VMIX_MEDIA_ROOT") or r"D:\PRODUCCIONES\VENTANAS\MEDIA").strip().rstrip("\\/")
+
+# Rutas reales de medios para reintegros (heredan de VMIX_MEDIA_ROOT si no defines variables individuales)
+REINTEGRO_MEDIA_DIR  = (os.getenv("REINTEGRO_MEDIA_DIR")  or os.path.join(VMIX_MEDIA_ROOT, "REINTEGRO")).strip()
+REINTEGROS_MEDIA_DIR = (os.getenv("REINTEGROS_MEDIA_DIR") or os.path.join(VMIX_MEDIA_ROOT, "REINTEGROS")).strip()
 
 def _reintegro_stem(name: str) -> str:
     base = os.path.basename(str(name or "").strip())
@@ -8545,7 +9023,7 @@ def write_vmix_figuras_dia_resumen(fecha, figuras_dia, catalogo):
 # ======================== Panel 5xN para vMix (figura base + overlay de estado) ========================
 VMIX_FIG_PANEL_REL = "vmix_figuras_panel.xml"
 XML_FIG_PANEL_REL  = "xml_figuras_panel.xml"
-VMIX_ESTADOS_BASE  = (os.getenv("VMIX_ESTADOS_BASE") or r"E:\MEDIA\ESTADOS").strip() or r"E:\MEDIA\ESTADOS"
+VMIX_ESTADOS_BASE  = (os.getenv("VMIX_ESTADOS_BASE") or os.path.join(VMIX_MEDIA_ROOT, "ESTADOS")).strip() or os.path.join(VMIX_MEDIA_ROOT, "ESTADOS")
 
 def _panel_name_display(nombre: str) -> str:
     return _tl_semantic_name(str(nombre or ""), code_for(str(nombre or "")))
@@ -8882,6 +9360,7 @@ def _write_sorteo_activo_snapshot(info: dict | None):
         "estado": str(info.get("estado") or "").strip(),
         "activo": str(info.get("activo") or "0").strip(),
         "finalizado": str(info.get("finalizado") or "0").strip(),
+        "origen_finalizado": str(info.get("origen_finalizado") or info.get("historico") or "0").strip(),
         "actualizado_en": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
     }
     # compatibilidad: si viene activo=1 pero estado vacío, marcar activo
@@ -9046,6 +9525,16 @@ def _sorteo_build_defaults(fecha):
         "boletos_no_vendidos_qr_actualizado": "",
         "tl_programadas_activas": "0",
         "tl_programadas_cartones": "",
+        "tl_programada_llena": "",
+        "tl_programada_rellena": "",
+        "tl_programada_yapa": "",
+        "tl_objetivo_llena": "",
+        "tl_objetivo_rellena": "",
+        "tl_objetivo_yapa": "",
+        "tl_serie_llena": "",
+        "tl_serie_rellena": "",
+        "tl_serie_yapa": "",
+        "tl_serie_super_yapa": "",
     }
 
 def _sorteo_read_config(fecha):
@@ -9086,6 +9575,13 @@ def _sorteo_read_config(fecha):
                 cfg["tl_programadas_activas"] = tl.attrib.get("tl_programadas_activas")
             if tl.attrib.get("tl_programadas_cartones") not in (None, ""):
                 cfg["tl_programadas_cartones"] = tl.attrib.get("tl_programadas_cartones")
+            for k in (
+                "tl_programada_llena", "tl_programada_rellena", "tl_programada_yapa",
+                "tl_objetivo_llena", "tl_objetivo_rellena", "tl_objetivo_yapa",
+                "tl_serie_llena", "tl_serie_rellena", "tl_serie_yapa", "tl_serie_super_yapa",
+            ):
+                if tl.attrib.get(k) not in (None, ""):
+                    cfg[k] = tl.attrib.get(k)
 
         sp = d.find("spinners")
         if sp is not None:
@@ -9172,6 +9668,16 @@ def _sorteo_save_config(fecha, payload, *, activar=False, finalizar=False):
         if payload.get("tl_programadas_cartones") not in (None, "")
         else tln.attrib.get("tl_programadas_cartones", defaults.get("tl_programadas_cartones", ""))
     ).strip()
+    for _k in (
+        "tl_programada_llena", "tl_programada_rellena", "tl_programada_yapa",
+        "tl_objetivo_llena", "tl_objetivo_rellena", "tl_objetivo_yapa",
+        "tl_serie_llena", "tl_serie_rellena", "tl_serie_yapa", "tl_serie_super_yapa",
+    ):
+        tln.attrib[_k] = str(
+            payload.get(_k)
+            if payload.get(_k) not in (None, "")
+            else tln.attrib.get(_k, defaults.get(_k, ""))
+        ).strip()
 
     # figuras snapshot (resto)
     figs = _node(dia, "figuras")
@@ -9287,6 +9793,15 @@ def sorteo():
         boletos_no_vendidos_qr_actualizado=cfg.get("boletos_no_vendidos_qr_actualizado") or "",
         tl_programadas_activas=cfg.get("tl_programadas_activas") or "0",
         tl_programadas_cartones=cfg.get("tl_programadas_cartones") or "",
+        tl_programada_llena=cfg.get("tl_programada_llena") or "",
+        tl_programada_rellena=cfg.get("tl_programada_rellena") or "",
+        tl_programada_yapa=cfg.get("tl_programada_yapa") or "",
+        tl_objetivo_llena=cfg.get("tl_objetivo_llena") or "",
+        tl_objetivo_rellena=cfg.get("tl_objetivo_rellena") or "",
+        tl_objetivo_yapa=cfg.get("tl_objetivo_yapa") or "",
+        tl_serie_llena=cfg.get("tl_serie_llena") or "",
+        tl_serie_rellena=cfg.get("tl_serie_rellena") or "",
+        tl_serie_yapa=cfg.get("tl_serie_yapa") or "",
     )
 
 @app.route("/api/vendedor-por-boleto", methods=["GET","POST"])
@@ -9439,6 +9954,15 @@ def sorteo_activar():
         "tl1": _fmt_int(tl[0]), "tl2": _fmt_int(tl[1]), "tl3": _fmt_int(tl[2]), "tl4": _fmt_int(tl[3]),
         "tl_programadas_activas": base_cfg.get("tl_programadas_activas", prev.get("tl_programadas_activas", "0") if isinstance(prev, dict) else "0"),
         "tl_programadas_cartones": base_cfg.get("tl_programadas_cartones", prev.get("tl_programadas_cartones", "") if isinstance(prev, dict) else ""),
+        "tl_programada_llena": base_cfg.get("tl_programada_llena", prev.get("tl_programada_llena", "") if isinstance(prev, dict) else ""),
+        "tl_programada_rellena": base_cfg.get("tl_programada_rellena", prev.get("tl_programada_rellena", "") if isinstance(prev, dict) else ""),
+        "tl_programada_yapa": base_cfg.get("tl_programada_yapa", prev.get("tl_programada_yapa", "") if isinstance(prev, dict) else ""),
+        "tl_objetivo_llena": base_cfg.get("tl_objetivo_llena", prev.get("tl_objetivo_llena", "") if isinstance(prev, dict) else ""),
+        "tl_objetivo_rellena": base_cfg.get("tl_objetivo_rellena", prev.get("tl_objetivo_rellena", "") if isinstance(prev, dict) else ""),
+        "tl_objetivo_yapa": base_cfg.get("tl_objetivo_yapa", prev.get("tl_objetivo_yapa", "") if isinstance(prev, dict) else ""),
+        "tl_serie_llena": base_cfg.get("tl_serie_llena", prev.get("tl_serie_llena", "") if isinstance(prev, dict) else ""),
+        "tl_serie_rellena": base_cfg.get("tl_serie_rellena", prev.get("tl_serie_rellena", "") if isinstance(prev, dict) else ""),
+        "tl_serie_yapa": base_cfg.get("tl_serie_yapa", prev.get("tl_serie_yapa", "") if isinstance(prev, dict) else ""),
         "spinners": spins if isinstance(spins, list) else [],
         "premios_a_pagar_cantidad": base_cfg.get("premios_a_pagar_cantidad", 0),
         "premios_a_pagar_monto": base_cfg.get("premios_a_pagar_monto", 0),
@@ -9455,7 +9979,13 @@ def sorteo_activar():
             "estado": "activo",
             "activo": "1",
             "finalizado": "0",
+            "origen_finalizado": str((prev or {}).get("finalizado") or "0"),
         })
+    except Exception:
+        pass
+
+    try:
+        _restore_game_state_for_fecha(str(fecha), save_if_missing=True)
     except Exception:
         pass
 
@@ -9502,7 +10032,12 @@ def api_finalizar_sorteo():
             "estado": "finalizado",
             "activo": "0",
             "finalizado": "1",
+            "origen_finalizado": "1",
         })
+    except Exception:
+        pass
+    try:
+        _save_game_state_snapshot(str(fecha))
     except Exception:
         pass
     return jsonify(ok=True, mensaje="Sorteo finalizado, procesado y XMLs sincronizados.", sorteo=saved)
@@ -9873,6 +10408,8 @@ def _caja_iter_cobros_dia(root_dia: ET.Element):
                 "comision_vendedor": _safe_float(c.attrib.get('comision_vendedor', 0)),
                 "comision_extra_meta": _safe_float(c.attrib.get('comision_extra_meta', 0)),
                 "meta_boletos": _safe_int(c.attrib.get('meta_boletos', 0)),
+                "modo_comision": (c.attrib.get('modo_comision', 'normal') or 'normal'),
+                "comision_manual": _safe_float(c.attrib.get('comision_manual', 0)),
                 "pct_aplicado": _safe_float(c.attrib.get('pct_aplicado', 0)),
                 "valor_total_venta": _safe_float(c.attrib.get('valor_total_venta', 0)),
                 "gan_vendedor": _safe_float(c.attrib.get('gan_vendedor', 0)),
@@ -9894,6 +10431,8 @@ def _caja_iter_cobros_dia(root_dia: ET.Element):
             "comision_vendedor": 0.0,
             "comision_extra_meta": 0.0,
             "meta_boletos": 0,
+            "modo_comision": "normal",
+            "comision_manual": 0.0,
             "pct_aplicado": 0.0,
             "valor_total_venta": 0.0,
             "gan_vendedor": 0.0,
@@ -9931,19 +10470,18 @@ def _sum_caja(desde_iso, hasta_iso):
             caja = _safe_float(r.get('a_pagar_caja', 0))
 
             if total_venta <= 0 and vend > 0:
-                valor = _safe_float(r.get("valor_boleto", 0)) or _safe_float(cfg_dia.get("valor_boleto"), 0.0)
-                pct_base = _safe_float(r.get("comision_vendedor", 0)) or _safe_float(cfg_dia.get("comision_vendedor"), 0.0)
-                pct_extra = _safe_float(r.get("comision_extra_meta", 0)) or _safe_float(cfg_dia.get("comision_extra_meta"), 0.0)
-                meta = _safe_int(r.get("meta_boletos", 0))
-                if meta <= 0:
-                    meta = _safe_int(cfg_dia.get("meta_boletos"), 0)
-
-                pct = pct_base + (pct_extra if (meta > 0 and vend >= meta) else 0.0)
-                pct = max(0.0, min(100.0, pct))
-
-                total_venta = round(vend * valor, 2)
-                gan_v = round(total_venta * pct / 100.0, 2)
-                caja = round(total_venta - gan_v, 2)
+                cfg_calc = {
+                    "valor_boleto": _safe_float(r.get("valor_boleto", 0)) or _safe_float(cfg_dia.get("valor_boleto"), 0.0),
+                    "comision_vendedor": _safe_float(r.get("comision_vendedor", 0)) or _safe_float(cfg_dia.get("comision_vendedor"), 0.0),
+                    "comision_extra_meta": _safe_float(r.get("comision_extra_meta", 0)) or _safe_float(cfg_dia.get("comision_extra_meta"), 0.0),
+                    "meta_boletos": _safe_int(r.get("meta_boletos", 0)) or _safe_int(cfg_dia.get("meta_boletos"), 0),
+                    "modo_comision": r.get("modo_comision", "normal"),
+                    "comision_manual": _safe_float(r.get("comision_manual", 0), 0.0),
+                }
+                det = _calc_cobro_detalle(vend, cfg_calc)
+                total_venta = det["valor_total_venta"]
+                gan_v = det["gan_vendedor"]
+                caja = det["a_pagar_caja"]
 
             total_recaudado += total_venta
             gan_vendedores  += gan_v
@@ -9984,11 +10522,14 @@ def _sum_asignaciones(desde_iso, hasta_iso):
     return planillas, entregados
 
 # ---- Premios (pagados / por caducar / caducados) ----
+
+
 def _sum_premios(desde_iso, hasta_iso):
     pagos_map = _pp_leer_pagos_map()  # ya definido en tu módulo de premios
     hoy = date.today()
 
     total_pagado = 0.0
+    pagados_count = 0
     por_caducar = 0
     caducados   = 0
 
@@ -10000,6 +10541,7 @@ def _sum_premios(desde_iso, hasta_iso):
             pp = pagos_map.get(k)
             premio_val = _safe_float(g.get("premio", 0), 0)
             if pp:
+                pagados_count += 1
                 total_pagado += _safe_float(pp.get("premio", premio_val), premio_val)
             else:
                 if hoy > caduca:
@@ -10009,9 +10551,11 @@ def _sum_premios(desde_iso, hasta_iso):
 
     return {
         "premios_pagados_total": round(total_pagado, 2),
+        "premios_pagados_cantidad": int(pagados_count),
         "premios_por_caducar": por_caducar,
         "premios_caducados": caducados
     }
+
 
 def _premios_pagados_detalle(desde_iso, hasta_iso):
     pagos = _pp_leer_pagos_map()
@@ -10516,6 +11060,7 @@ def api_gastos_delete(gid):
     return jsonify({"ok": ok})
 
 # -------------------- API: RESUMEN CONTABLE --------------------
+
 @app.get("/api/contabilidad/resumen")
 def api_contabilidad_resumen():
     desde = (request.args.get("desde") or (date.today() - timedelta(days=30)).isoformat()).strip()
@@ -10539,6 +11084,11 @@ def api_contabilidad_resumen():
     banco_items = _bank_list(desde, hasta, "Empresa")
     planillas_asignadas, boletos_entregados = _sum_asignaciones(desde, hasta)
 
+    boletos_por_planilla = max(1, int(globals().get("BOLETOS_POR_PLANILLA", 20) or 20))
+    planillas_impresas = int((int(impresos or 0) + boletos_por_planilla - 1) // boletos_por_planilla) if int(impresos or 0) > 0 else 0
+    planillas_no_asignadas = max(planillas_impresas - int(planillas_asignadas or 0), 0)
+    boletos_no_asignados = max(int(impresos or 0) - int(boletos_entregados or 0), 0)
+
     gan_empresa   = round(caja["total_recaudado"] - caja["gan_vendedores"], 2)
     utilidad_neta = round(gan_empresa - premios["premios_pagados_total"] - gastos_total - sueldos_total, 2)
 
@@ -10550,8 +11100,11 @@ def api_contabilidad_resumen():
     return jsonify({
         "ok": True,
         "rango": {"desde": desde, "hasta": hasta},
+        "planillas_impresas": planillas_impresas,
         "planillas_asignadas": planillas_asignadas,
+        "planillas_no_asignadas": planillas_no_asignadas,
         "boletos_entregados": boletos_entregados,
+        "boletos_no_asignados": boletos_no_asignados,
         "boletos_impresos": impresos,
         "boletos_vendidos": caja["vendidos"],
         "boletos_devueltos": caja["devueltos"],
@@ -10559,6 +11112,7 @@ def api_contabilidad_resumen():
         "ganancia_vendedores": caja["gan_vendedores"],
         "ganancia_empresa": gan_empresa,
         "premios_pagados_total": premios["premios_pagados_total"],
+        "premios_pagados_cantidad": premios["premios_pagados_cantidad"],
         "premios_por_caducar": premios["premios_por_caducar"],
         "premios_caducados": premios["premios_caducados"],
         "gastos_total": gastos_total,
@@ -10726,6 +11280,96 @@ def api_contabilidad_export_csv():
         ])
     out = buff.getvalue()
     return Response(out, mimetype="text/csv", headers={"Content-Disposition": f"attachment; filename=contabilidad_{desde}_a_{hasta}.csv"})
+
+
+@app.get('/api/contabilidad/reporte.pdf')
+def api_contabilidad_reporte_pdf():
+    if 'usuario' not in session:
+        return jsonify({"ok": False, "error": "no-auth"}), 401
+
+    desde = (request.args.get('desde') or (date.today() - timedelta(days=30)).isoformat()).strip()
+    hasta = (request.args.get('hasta') or date.today().isoformat()).strip()
+    try:
+        if datetime.fromisoformat(desde) > datetime.fromisoformat(hasta):
+            desde, hasta = hasta, desde
+    except Exception:
+        pass
+
+    resumen_resp = api_contabilidad_resumen().get_json()
+    ranking_resp = api_vendedores_ranking().get_json() if 'api_vendedores_ranking' in globals() else {'items': []}
+    j = resumen_resp if isinstance(resumen_resp, dict) else {}
+    ranking = (ranking_resp or {}).get('items', [])[:12]
+
+    buf = io.BytesIO()
+    pdf = canvas.Canvas(buf, pagesize=A4)
+    w, h = A4
+    y = h - 34
+
+    pdf.setTitle(f"contabilidad_{desde}_a_{hasta}")
+    pdf.setFont('Helvetica-Bold', 18)
+    pdf.drawString(34, y, 'Reporte de Contabilidad')
+    y -= 16
+    pdf.setFont('Helvetica', 10)
+    pdf.drawString(34, y, f'Rango: {desde} a {hasta}')
+    pdf.drawRightString(w-34, y, f'Usuario: {session.get("usuario","") or "Sistema"}')
+    y -= 24
+
+    resumen_rows = [
+        ('Boletos impresos', j.get('boletos_impresos', 0)),
+        ('Boletos vendidos', j.get('boletos_vendidos', 0)),
+        ('Boletos devueltos', j.get('boletos_devueltos', 0)),
+        ('Boletos no asignados', j.get('boletos_no_asignados', 0)),
+        ('Planillas impresas', j.get('planillas_impresas', 0)),
+        ('Planillas asignadas', j.get('planillas_asignadas', 0)),
+        ('Planillas no asignadas', j.get('planillas_no_asignadas', 0)),
+        ('Ingresos brutos', f"${float(j.get('ingresos_brutos', 0) or 0):.2f}"),
+        ('Ganancia vendedores', f"${float(j.get('ganancia_vendedores', 0) or 0):.2f}"),
+        ('Ganancia empresa', f"${float(j.get('ganancia_empresa', 0) or 0):.2f}"),
+        ('Premios pagados (cantidad)', j.get('premios_pagados_cantidad', 0)),
+        ('Premios pagados (valor)', f"${float(j.get('premios_pagados_total', 0) or 0):.2f}"),
+        ('Premios por caducar', j.get('premios_por_caducar', 0)),
+        ('Premios caducados', j.get('premios_caducados', 0)),
+        ('Gastos', f"${float(j.get('gastos_total', 0) or 0):.2f}"),
+        ('Sueldos', f"${float(j.get('sueldos_total', 0) or 0):.2f}"),
+        ('Utilidad neta', f"${float(j.get('utilidad_neta', 0) or 0):.2f}"),
+    ]
+    tbl = Table(resumen_rows, colWidths=[210, 120])
+    tbl.setStyle(TableStyle([
+        ('GRID', (0,0), (-1,-1), .5, colors.HexColor('#CBD5E1')),
+        ('ROWBACKGROUNDS', (0,0), (-1,-1), [colors.white, colors.HexColor('#F8FAFC')]),
+        ('FONTNAME', (0,0), (0,-1), 'Helvetica-Bold'),
+        ('FONTNAME', (1,0), (1,-1), 'Helvetica'),
+        ('PADDING', (0,0), (-1,-1), 6),
+    ]))
+    tw, th = tbl.wrapOn(pdf, w-68, h)
+    tbl.drawOn(pdf, 34, y-th)
+    y = y - th - 18
+
+    pdf.setFont('Helvetica-Bold', 12)
+    pdf.drawString(34, y, 'Ranking de vendedores (vendidos / devueltos)')
+    y -= 14
+    ranking_rows = [['Vendedor', 'Vendidos', 'Devueltos']]
+    for it in ranking:
+        ranking_rows.append([str(it.get('vendedor') or '—'), str(it.get('vendidos') or 0), str(it.get('devueltos') or 0)])
+    if len(ranking_rows) == 1:
+        ranking_rows.append(['—', '0', '0'])
+    tbl2 = Table(ranking_rows, colWidths=[220, 80, 80])
+    tbl2.setStyle(TableStyle([
+        ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#E2E8F0')),
+        ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
+        ('GRID', (0,0), (-1,-1), .5, colors.HexColor('#CBD5E1')),
+        ('ROWBACKGROUNDS', (0,1), (-1,-1), [colors.white, colors.HexColor('#F8FAFC')]),
+        ('PADDING', (0,0), (-1,-1), 6),
+    ]))
+    tw2, th2 = tbl2.wrapOn(pdf, w-68, h)
+    if y - th2 < 40:
+        pdf.showPage(); y = h - 40
+    tbl2.drawOn(pdf, 34, y-th2)
+
+    pdf.showPage()
+    pdf.save()
+    buf.seek(0)
+    return send_file(buf, mimetype='application/pdf', as_attachment=True, download_name=f'contabilidad_{desde}_a_{hasta}.pdf')
 
 # ---- SUPER ADMIN: borrar/anular cobros y reset total ----
 
@@ -11228,7 +11872,7 @@ DB_DIR = DB_DIR_PERSIST
 BINGO_XML     = os.path.join(DB_DIR, "datos_bingo.xml")
 HIST_JSON     = os.path.join(DB_DIR, "historial.json")
 VMIX_NUMEROS_XML = os.path.join(DB_DIR, "vmix_numeros.xml")
-VMIX_NUMEROS_MEDIA_DIR = os.getenv("VMIX_NUMEROS_MEDIA_DIR", r"E:\MEDIA\NUMEROS")
+VMIX_NUMEROS_MEDIA_DIR = (os.getenv("VMIX_NUMEROS_MEDIA_DIR") or os.path.join(VMIX_MEDIA_ROOT, "NUMEROS")).strip()
 VMIX_NUMEROS_INACTIVA_FILE = os.getenv("VMIX_NUMEROS_INACTIVA_FILE", "INACTIVA")
 
 # Spinners (VMIX overlay + fallback XML)
@@ -11252,6 +11896,8 @@ FIGURAS_DEL_DIA_XML = os.path.join(DB_DIR, "figuras_del_dia.xml")
 DATOS_FIGURAS_XML   = os.path.join(DB_DIR, "datos_figuras.xml")
 os.makedirs(FIGURAS_DIR, exist_ok=True)
 FIG_ESTADOS_JSON = os.path.join(DB_DIR, "figuras_estado.json")
+GAME_STATES_DIR = os.path.join(DB_DIR, "juegos_estado")
+os.makedirs(GAME_STATES_DIR, exist_ok=True)
 
 # vMix API (HTTP) — opcional
 VMIX_HOST = os.getenv("VMIX_HOST", "127.0.0.1")
@@ -11300,6 +11946,146 @@ def _safe_json_write(path, data):
             json.dump(data, f, ensure_ascii=False, indent=2)
     except Exception:
         pass
+
+def _game_state_path(fecha_iso: str) -> str:
+    fecha = _norm_fecha_key(fecha_iso) or date.today().isoformat()
+    fecha = re.sub(r"[^0-9\-]", "_", str(fecha))[:32] or date.today().isoformat()
+    return os.path.join(GAME_STATES_DIR, f"{fecha}.json")
+
+
+def _sanitize_stack_values(values):
+    out = []
+    seen = set()
+    for x in (values or []):
+        try:
+            n = int(str(x).strip())
+        except Exception:
+            continue
+        if not (1 <= n <= 75):
+            continue
+        if n in seen:
+            continue
+        seen.add(n)
+        out.append(n)
+    return out
+
+
+def _read_game_state_snapshot(fecha_iso: str):
+    try:
+        data = _safe_json_read(_game_state_path(fecha_iso)) or {}
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+
+def _save_game_state_snapshot(fecha_iso: str | None = None, *, stinger=None):
+    try:
+        fecha = _norm_fecha_key(fecha_iso or (_get_sorteo_fecha() if callable(globals().get("_get_sorteo_fecha")) else date.today().isoformat())) or date.today().isoformat()
+    except Exception:
+        fecha = date.today().isoformat()
+
+    stack = _sanitize_stack_values(_read_stack() if callable(globals().get("_read_stack")) else [])
+    last = stack[-1] if stack else 0
+    stinger_txt = str(stinger).strip() if stinger not in (None, "") else (str(last) if last else "")
+
+    cfg = {}
+    try:
+        if callable(globals().get("_sorteo_read_config")):
+            cfg = _sorteo_read_config(fecha) or {}
+    except Exception:
+        cfg = {}
+
+    payload = {
+        "fecha": fecha,
+        "stack": stack,
+        "last": last,
+        "ultimos5": list(reversed(stack[-5:])),
+        "total": len(stack),
+        "stinger": stinger_txt,
+        "activo": str((cfg or {}).get("activo") or ""),
+        "finalizado": str((cfg or {}).get("finalizado") or ""),
+        "updated_at": datetime.utcnow().isoformat(),
+    }
+    _safe_json_write(_game_state_path(fecha), payload)
+    return payload
+
+
+def _restore_game_state_for_fecha(fecha_iso: str, *, save_if_missing: bool = False):
+    fecha = _norm_fecha_key(fecha_iso) or date.today().isoformat()
+    snap = _read_game_state_snapshot(fecha)
+    stack = _sanitize_stack_values(snap.get("stack") or [])
+    last = stack[-1] if stack else 0
+    stinger_txt = str(snap.get("stinger") or (str(last) if last else "")).strip()
+
+    _write_stack(stack)
+    _sync_bingo_xml_from_stack(stack)
+
+    try:
+        tree = ET.parse(BINGO_XML)
+        root = tree.getroot()
+        st = root.find("stinger") or ET.SubElement(root, "stinger")
+        st.text = stinger_txt
+        tree.write(BINGO_XML, encoding="utf-8", xml_declaration=True)
+    except Exception:
+        pass
+
+    ganadores_fecha = []
+    try:
+        data_g = _safe_json_read(GANADORES_JSON) or {}
+        raw_g = data_g.get(str(fecha), [])
+        if isinstance(raw_g, list):
+            ganadores_fecha = raw_g
+    except Exception:
+        ganadores_fecha = []
+
+    try:
+        if ganadores_fecha:
+            keys = []
+            for g in ganadores_fecha:
+                try:
+                    keys.append(_ganador_key(str(fecha), g))
+                except Exception:
+                    continue
+            keys = sorted(list(dict.fromkeys(keys)))
+            _safe_json_write(GANADORES_STATE_JSON, {"keys": keys})
+            _write_ganadores_xml(str(fecha), int(last or 0), ganadores_fecha)
+        elif stack:
+            ganadores_total, _ = _recalcular_ganadores(str(fecha), stack, int(last or 0))
+            ganadores_fecha = ganadores_total or []
+            if ganadores_fecha:
+                _sync_resultados_from_juego(str(fecha), ganadores_fecha)
+            else:
+                _safe_json_write(GANADORES_STATE_JSON, {"keys": []})
+                _write_ganadores_xml(str(fecha), int(last or 0), [])
+        else:
+            _safe_json_write(GANADORES_STATE_JSON, {"keys": []})
+            _write_ganadores_xml(str(fecha), int(last or 0), [])
+    except Exception:
+        try:
+            _safe_json_write(GANADORES_STATE_JSON, {"keys": []})
+            _write_ganadores_xml(str(fecha), int(last or 0), [])
+        except Exception:
+            pass
+
+    try:
+        _refresh_vmix_figuras_panel_for_fecha(str(fecha))
+    except Exception:
+        pass
+
+    if save_if_missing and not snap:
+        try:
+            _save_game_state_snapshot(str(fecha), stinger=stinger_txt)
+        except Exception:
+            pass
+
+    return {
+        "fecha": fecha,
+        "stack": stack,
+        "last": last,
+        "restored": bool(snap),
+        "snapshot_path": _game_state_path(fecha),
+    }
+
 
 def _write_game_xml_dual(tree: ET.ElementTree, filename: str):
     """Espeja XML en static/db y DATA/static/db para que vMix y Render lo lean igual."""
@@ -11816,13 +12602,21 @@ def _build_grid_from_row(row_lower: dict):
     return grid, pos_map
 
 def _required_positions_for_fig(code: str, catalogo: dict):
-    """Devuelve (required_pos_list, color_map_pos)"""
+    """Devuelve (required_pos_list, color_map_pos)."""
     pos_order = globals().get("POS_25_ROW") or []
     color_off = (globals().get("COLOR_OFF") or "#E8E8E8").upper()
 
-    # tabla llena / rellena si no está en catálogo
-    # ("RELL" y "LLEN" cubren figuras llamadas "Rellena" o "Llena")
-    if code in ("TL1","TL2","TL3","TL4","RELL","LLEN","COMP") and code not in catalogo:
+    # IMPORTANTE:
+    # Las TL programadas (TL1..TL4) y sus equivalentes semánticos
+    # LLEN / RELL / YAPA / COMP SIEMPRE se tratan como tabla completa.
+    # No debemos depender del catálogo porque, si allí existe una figura
+    # parcial con el mismo código/nombre, la programación terminaba usando
+    # solo algunas casillas y el boleto se veía "tal cual venía".
+    #
+    # Con esto, cuando una LLENA / RELLENA / YAPA programada dispare,
+    # la forzada reemplazará TODO lo que aún no haya salido usando solo
+    # números ya marcados y respetando B/I/N/G/O.
+    if code in ("TL1", "TL2", "TL3", "TL4", "RELL", "LLEN", "YAPA", "COMP"):
         color_on = (globals().get("COLOR_ON") or "#FF0000").upper()
         return list(pos_order), {p: (color_on if p else "#FFFFFF") for p in pos_order}
 
@@ -11890,6 +12684,58 @@ def _tl_prog_parse_cartones(raw) -> list:
     return out
 
 
+def _tl_prog_parse_int(v, default=0) -> int:
+    try:
+        s = str(v or "").strip()
+    except Exception:
+        s = ""
+    if not s:
+        return int(default)
+    m = re.search(r"\d+", s)
+    if not m:
+        return int(default)
+    try:
+        return int(m.group(0))
+    except Exception:
+        return int(default)
+
+
+def _tl_prog_semantic_code(code: str) -> str:
+    raw = str(code or "").strip().upper()
+    return {"TL1": "LLEN", "TL2": "RELL", "TL3": "YAPA", "TL4": "COMP"}.get(raw, raw)
+
+
+def _tl_prog_build_slots(cfg: dict) -> dict:
+    cfg = cfg or {}
+    slots = {
+        "TL1": {
+            "carton": _tl_prog_norm_carton(cfg.get("tl_programada_llena")),
+            "objetivo": _tl_prog_parse_int(cfg.get("tl_objetivo_llena"), 0),
+            "serie": str(cfg.get("tl_serie_llena") or "").strip(),
+        },
+        "TL2": {
+            "carton": _tl_prog_norm_carton(cfg.get("tl_programada_rellena")),
+            "objetivo": _tl_prog_parse_int(cfg.get("tl_objetivo_rellena"), 0),
+            "serie": str(cfg.get("tl_serie_rellena") or "").strip(),
+        },
+        "TL3": {
+            "carton": _tl_prog_norm_carton(cfg.get("tl_programada_yapa")),
+            "objetivo": _tl_prog_parse_int(cfg.get("tl_objetivo_yapa"), 0),
+            "serie": str(cfg.get("tl_serie_yapa") or "").strip(),
+        },
+        "TL4": {
+            "carton": _tl_prog_norm_carton(cfg.get("tl_programadas_super_yapa")),
+            "objetivo": _tl_prog_parse_int(cfg.get("tl_objetivo_super_yapa"), 0),
+            "serie": str(cfg.get("tl_serie_super_yapa") or "").strip(),
+        },
+    }
+    legacy = _tl_prog_parse_cartones(cfg.get("tl_programadas_cartones"))
+    for i, carton in enumerate(legacy[:4], start=1):
+        slot = f"TL{i}"
+        if not slots[slot]["carton"]:
+            slots[slot]["carton"] = _tl_prog_norm_carton(carton)
+    return {k: v for k, v in slots.items() if v.get("carton")}
+
 def _tl_prog_band_bounds(col_idx: int):
     bands = [(1,15), (16,30), (31,45), (46,60), (61,75)]
     try:
@@ -11916,21 +12762,19 @@ def _tl_prog_col_for_num(n: int) -> int:
     return -1
 
 
-def _tl_prog_force_grid_with_marked(original_grid, marked_stack, ultimo=0):
+def _tl_prog_force_grid_with_marked(original_grid, marked_stack, ultimo=0, required_pos=None, force_ultimo=False):
     """
-    Construye una grilla sintética para TL programadas:
-    - conserva números del cartón que ya salieron,
-    - reemplaza los NO salidos por números ya salidos,
-    - respeta la banda B/I/N/G/O por columna,
-    - no duplica números,
-    - fuerza la última balota dentro de su columna para que se vea azul.
+    Ajusta el cartón programado usando ÚNICAMENTE números YA marcados.
+
+    Reglas:
+    - Conserva todo número original del cartón que ya salió.
+    - Reemplaza solo las casillas objetivo que aún no han salido.
+    - Nunca mezcla bandas B/I/N/G/O.
+    - Para una tabla completa, la composición final debe quedar 5-5-4-5-5.
+    - No altera el historial real de balotas.
 
     Devuelve:
-      (grid_forzada, numeros_figura_en_orden, marcados_nums_forzados, completa)
-
-    completa=True solo cuando TODAS las casillas numéricas quedaron cubiertas con
-    números que ya salieron. Si alguna casilla no pudo reemplazarse por falta de
-    números marcados en su banda, NO debe premiarse todavía.
+      (grid_forzada, numeros_figura, marcados_nums_en_grid, completa)
     """
     grid = []
     for row in (original_grid or []):
@@ -11944,7 +12788,6 @@ def _tl_prog_force_grid_with_marked(original_grid, marked_stack, ultimo=0):
         while len(grid[r]) < 5:
             grid[r].append("")
 
-    # pila marcada, en orden, sin duplicados
     marked_seq = []
     seen_seq = set()
     for x in (marked_stack or []):
@@ -11963,53 +12806,101 @@ def _tl_prog_force_grid_with_marked(original_grid, marked_stack, ultimo=0):
         ultimo = 0
     ultimo_col = _tl_prog_col_for_num(ultimo) if ultimo else -1
 
-    used = set()
-    forced_marked = set()
-    replace_cells = {0: [], 1: [], 2: [], 3: [], 4: []}
-    ultimo_present = False
+    pos_order = globals().get("POS_25_ROW") or []
 
-    # 1) conservamos los números ya marcados; los demás van a reemplazo
+    def _req_pos_to_rc(pos):
+        raw = str(pos or "").strip().upper()
+        if not raw:
+            return None
+        if len(raw) == 2 and raw.isdigit():
+            rr = int(raw[0]); cc = int(raw[1])
+            if 0 <= rr < 5 and 0 <= cc < 5:
+                return (rr, cc)
+            return None
+        if raw in pos_order:
+            idx = pos_order.index(raw)
+            return (idx // 5, idx % 5)
+        if len(raw) >= 2 and raw[0] in "BINGO" and raw[1:].isdigit():
+            c_map = {"B": 0, "I": 1, "N": 2, "G": 3, "O": 4}
+            rr = int(raw[1:]) - 1
+            cc = c_map.get(raw[0], -1)
+            if 0 <= rr < 5 and 0 <= cc < 5:
+                return (rr, cc)
+        return None
+
+    target_positions = []
+    if required_pos:
+        for pos in (required_pos or []):
+            rc = _req_pos_to_rc(pos)
+            if not rc:
+                continue
+            rr, cc = rc
+            if not _is_free_cell(grid[rr][cc]):
+                target_positions.append((rr, cc))
+    else:
+        for rr in range(5):
+            for cc in range(5):
+                if not _is_free_cell(grid[rr][cc]):
+                    target_positions.append((rr, cc))
+
+    if required_pos and not target_positions:
+        marcados_en_grid = []
+        seen_grid = set()
+        for rr in range(5):
+            for cc in range(5):
+                v = str(grid[rr][cc]).strip()
+                if v.isdigit():
+                    n = int(v)
+                    if n in marked_set and n not in seen_grid:
+                        seen_grid.add(n)
+                        marcados_en_grid.append(n)
+        return grid, [], sorted(marcados_en_grid), False
+
+    target_set = set(target_positions)
+    target_counts = {0: 0, 1: 0, 2: 0, 3: 0, 4: 0}
+    for _rr, _cc in target_positions:
+        target_counts[_cc] = target_counts.get(_cc, 0) + 1
+
+    used = set()
+    replace_cells = {0: [], 1: [], 2: [], 3: [], 4: []}
+
     for r in range(5):
         for c in range(5):
             v = str(grid[r][c]).strip()
             if _is_free_cell(v):
                 continue
             if v.isdigit() and int(v) in marked_set:
-                n = int(v)
-                used.add(n)
-                forced_marked.add(n)
-                if ultimo and n == ultimo:
-                    ultimo_present = True
-            else:
-                replace_cells[c].append((r, c))
+                used.add(int(v))
+            if (r, c) not in target_set:
+                continue
+            if v.isdigit() and int(v) in marked_set:
+                continue
+            replace_cells[c].append((r, c))
 
-    # 2) si la última balota no está en la grilla, la forzamos en su columna
-    if ultimo and ultimo_col >= 0 and not ultimo_present:
-        target_cell = None
-        if replace_cells.get(ultimo_col):
-            target_cell = replace_cells[ultimo_col].pop(0)
-        else:
-            # si no hay huecos, sobreescribe la última celda NO libre de esa columna
-            for r in range(4, -1, -1):
-                v = str(grid[r][ultimo_col]).strip()
-                if _is_free_cell(v):
-                    continue
-                target_cell = (r, ultimo_col)
+    if force_ultimo and ultimo and ultimo_col >= 0:
+        ultimo_present = False
+        for rr, cc in target_positions:
+            v = str(grid[rr][cc]).strip()
+            if v.isdigit() and int(v) == ultimo:
+                ultimo_present = True
                 break
-        if target_cell is not None:
-            rr, cc = target_cell
-            old_v = str(grid[rr][cc]).strip()
-            if old_v.isdigit():
-                old_n = int(old_v)
-                if old_n in used:
-                    used.discard(old_n)
-                    forced_marked.discard(old_n)
-            grid[rr][cc] = str(ultimo)
-            used.add(ultimo)
-            forced_marked.add(ultimo)
-            ultimo_present = True
+        if not ultimo_present:
+            target_cell = None
+            if replace_cells.get(ultimo_col):
+                target_cell = replace_cells[ultimo_col].pop(0)
+            else:
+                for rr, cc in reversed(target_positions):
+                    if cc == ultimo_col:
+                        target_cell = (rr, cc)
+                        break
+            if target_cell is not None:
+                rr, cc = target_cell
+                old_v = str(grid[rr][cc]).strip()
+                if old_v.isdigit() and int(old_v) in used:
+                    used.discard(int(old_v))
+                grid[rr][cc] = str(ultimo)
+                used.add(ultimo)
 
-    # 3) rellena por columna respetando banda B/I/N/G/O
     pendientes = []
     for c in range(5):
         lo, hi = _tl_prog_band_bounds(c)
@@ -12021,28 +12912,47 @@ def _tl_prog_force_grid_with_marked(original_grid, marked_stack, ultimo=0):
             n = pool.pop(0)
             grid[rr][cc] = str(n)
             used.add(n)
-            forced_marked.add(n)
 
-    # 4) salida en orden visual (fila por fila)
     numeros_figura = []
-    for r in range(5):
-        for c in range(5):
-            v = str(grid[r][c]).strip()
-            if _is_free_cell(v):
-                continue
-            if v.isdigit():
-                numeros_figura.append(int(v))
+    completa = True
+    col_counts_ok = {0: 0, 1: 0, 2: 0, 3: 0, 4: 0}
+    for rr, cc in target_positions:
+        v = str(grid[rr][cc]).strip()
+        if _is_free_cell(v):
+            continue
+        if not (v.isdigit() and int(v) in marked_set):
+            completa = False
+            continue
+        col_counts_ok[cc] = col_counts_ok.get(cc, 0) + 1
+        numeros_figura.append(int(v))
 
-    completa = (len(pendientes) == 0)
-    # Si no está completa, NO fingimos que las casillas pendientes ya están marcadas.
-    return grid, numeros_figura, sorted(int(x) for x in forced_marked), completa
+    marcados_en_grid = []
+    seen_grid = set()
+    for rr in range(5):
+        for cc in range(5):
+            v = str(grid[rr][cc]).strip()
+            if v.isdigit():
+                n = int(v)
+                if n in marked_set and n not in seen_grid:
+                    seen_grid.add(n)
+                    marcados_en_grid.append(n)
+
+    if pendientes:
+        completa = False
+
+    for c in range(5):
+        if int(col_counts_ok.get(c, 0)) != int(target_counts.get(c, 0)):
+            completa = False
+            break
+
+    return grid, numeros_figura, sorted(marcados_en_grid), completa
 
 def _resolve_tl_programadas_for_day(fecha_iso: str, by_series: dict) -> dict:
     """
     Resuelve TL1..TL4 programadas a un cartón real del día.
-    - Si el número existe, usa ese cartón exacto.
-    - Si no existe, lo ajusta al más cercano (primero/último si queda fuera de rango).
-    Devuelve: {"TL1": {"serie": ..., "carton_id": ...}, ...}
+    Usa primero los campos explícitos por etapa y mantiene compatibilidad con
+    tl_programadas_cartones legado.
+    Devuelve: {"TL1": {"serie": ..., "carton_id": ..., "objetivo": ...}, ...}
     """
     try:
         cfg = _sorteo_read_config(str(fecha_iso))
@@ -12052,7 +12962,7 @@ def _resolve_tl_programadas_for_day(fecha_iso: str, by_series: dict) -> dict:
     if not _tl_prog_on((cfg or {}).get("tl_programadas_activas")):
         return {}
 
-    solicitados = _tl_prog_parse_cartones((cfg or {}).get("tl_programadas_cartones"))[:4]
+    solicitados = _tl_prog_build_slots(cfg)
     if not solicitados:
         return {}
 
@@ -12117,19 +13027,33 @@ def _resolve_tl_programadas_for_day(fecha_iso: str, by_series: dict) -> dict:
         return {}
 
     resolved = {}
-    for idx, req in enumerate(solicitados, start=1):
-        slot = f"TL{idx}"
-        req_norm = _tl_prog_norm_carton(req)
+    for slot, req in solicitados.items():
+        req_norm = _tl_prog_norm_carton(req.get("carton"))
+        if not req_norm:
+            continue
 
         chosen = None
-        # 1) exacto por id normalizado
-        for info in series_info:
-            real = info["norm_to_real"].get(req_norm)
-            if real:
-                chosen = {"serie": info["serie"], "carton_id": real}
-                break
+        wanted_serie = str(req.get("serie") or "").strip()
+        if wanted_serie:
+            for info in series_info:
+                try:
+                    same = _serie_equal(info["serie"], wanted_serie)
+                except Exception:
+                    same = (str(info["serie"]).strip() == wanted_serie)
+                if not same:
+                    continue
+                real = info["norm_to_real"].get(req_norm)
+                if real:
+                    chosen = {"serie": info["serie"], "carton_id": real}
+                    break
 
-        # 2) si no existe, el más cercano (o el primero si no es numérico)
+        if chosen is None:
+            for info in series_info:
+                real = info["norm_to_real"].get(req_norm)
+                if real:
+                    chosen = {"serie": info["serie"], "carton_id": real}
+                    break
+
         if chosen is None:
             req_num = int(req_norm) if req_norm.isdigit() else None
             best = None
@@ -12146,6 +13070,8 @@ def _resolve_tl_programadas_for_day(fecha_iso: str, by_series: dict) -> dict:
                 chosen = {"serie": info["serie"], "carton_id": info["valid_ids"][0]}
 
         if chosen:
+            chosen["objetivo"] = max(0, _tl_prog_parse_int(req.get("objetivo"), 0))
+            chosen["carton_solicitado"] = req_norm
             resolved[slot] = chosen
 
     return resolved
@@ -12203,18 +13129,39 @@ def _write_ganadores_xml(fecha_iso: str, ultimo_marcado: int, ganadores: list):
 
 
     for g in ganadores:
+        figura_sem = str(g.get("figura", ""))
+        boleto_sem = _norm_tabla_id(g.get("boleto") or g.get("tabla") or "")
+        meta = _resultado_meta_para_ganador(fecha_iso, figura_sem, boleto_sem)
+        premio_xml = _safe_float(meta.get("premio"), None)
+        if premio_xml is None:
+            premio_xml = _safe_float(g.get("premio"), None)
+        if premio_xml is None:
+            premio_xml = _safe_float(g.get("valor"), 0.0)
+        vendedor_xml = str(meta.get("vendedor") or g.get("vendedor") or "").strip()
+        sector_xml = str(meta.get("sector") or g.get("sector") or g.get("planilla") or g.get("rango") or "").strip()
+        nombre_xml = str(meta.get("nombre") or g.get("nombre") or g.get("nota") or "").strip()
+
         ga = ET.SubElement(root, "ganador", {
-            "figura": str(g.get("figura","")),
+            "figura": figura_sem,
             "fig_code": str(g.get("fig_code","")),
-            "valor": f'{float(g.get("valor",0) or 0):.2f}',
+            "valor": f'{float(premio_xml or 0):.2f}',
             "serie": str(g.get("serie","")),
-            "tabla": str(g.get("tabla","")),
-            "ultima_bola": str(g.get("ultima_bola",""))
+            "tabla": boleto_sem,
+            "ultima_bola": str(g.get("ultima_bola","")),
+            "vendedor": vendedor_xml,
+            "sector": sector_xml,
+            "planilla": sector_xml,
+            "nombre": nombre_xml
         })
 
         # resumen
         ET.SubElement(ga, "numeros_figura").text = ",".join(str(x) for x in (g.get("numeros_figura") or []))
         ET.SubElement(ga, "numero_ganador").text = str(g.get("numero_ganador","") or "")
+        ET.SubElement(ga, "nombre").text = nombre_xml
+        ET.SubElement(ga, "vendedor").text = vendedor_xml
+        ET.SubElement(ga, "sector").text = sector_xml
+        ET.SubElement(ga, "planilla").text = sector_xml
+        ET.SubElement(ga, "premio").text = f'{float(premio_xml or 0):.2f}'
 
         # grilla
         carton = ET.SubElement(ga, "carton", {"id": str(g.get("tabla",""))})
@@ -12367,6 +13314,8 @@ def _get_cartones_index_cached(fecha_iso: str, serie_archivo: str, merged, df, i
 
     tickets = []
     by_num = defaultdict(list)
+    by_id_exact = {}
+    by_id_num = {}
 
     for s, e in merged_sig:
         if s < 0: s = 0
@@ -12400,16 +13349,29 @@ def _get_cartones_index_cached(fecha_iso: str, serie_archivo: str, merged, df, i
                 "pos_map": pos_map,
                 "nums": nums_in_carton
             })
+            if carton_id:
+                by_id_exact[str(carton_id).strip()] = tidx
+                try:
+                    by_id_num[int(re.sub(r"\D", "", str(carton_id)) or 0)] = tidx
+                except Exception:
+                    pass
             for n in nums_in_carton:
                 by_num[n].append(tidx)
 
+    payload = {
+        "tickets": tickets,
+        "by_num": dict(by_num),
+        "by_id_exact": by_id_exact,
+        "by_id_num": by_id_num,
+    }
+
     with _CARTONES_INDEX_LOCK:
-        _CARTONES_INDEX_CACHE[key] = {"tickets": tickets, "by_num": dict(by_num)}
+        _CARTONES_INDEX_CACHE[key] = payload
         # límite simple para evitar crecimiento infinito
         if len(_CARTONES_INDEX_CACHE) > 20:
             _CARTONES_INDEX_CACHE.clear()
 
-    return tickets, dict(by_num)
+    return payload["tickets"], payload["by_num"]
 
 def _clear_juego_caches():
     """Útil si quieres limpiar manualmente la caché (por ejemplo al resetear)."""
@@ -12427,14 +13389,9 @@ def _clear_juego_caches():
 
 def _detectar_ganadores(fecha_iso: str, stack: list, ultimo_marcado: int, recalc: bool = False):
     """
-    Detecta ganadores reales (OPTIMIZADO):
-      - Solo tablas dentro de rangos impresos (boletos) del día.
-      - Solo figuras del día (figuras_por_fecha.xml).
-      - En modo normal (recalc=False): SOLO revisa tablas que contienen el ÚLTIMO número marcado
-        y SOLO figuras donde ese último número es parte de la figura (esto acelera muchísimo).
-      - En modo recalc=True: recalcula todo (para reversa/reset) y revisa todas las tablas/figuras.
+    Detecta ganadores reales respetando la estructura actual de lectura y, además,
+    permite LLENA/RELLENA/YAPA programadas sin alterar el historial de balotas.
     """
-    # normaliza marcados
     marked_nums = set()
     for x in (stack or []):
         try:
@@ -12443,17 +13400,15 @@ def _detectar_ganadores(fecha_iso: str, stack: list, ultimo_marcado: int, recalc
                 marked_nums.add(xi)
         except Exception:
             pass
+    marked_count = len(marked_nums)
 
-    # estado (para no repetir)
     state = _safe_json_read(GANADORES_STATE_JSON) or {}
     known = set(state.get("keys") or [])
     if recalc:
         known = set()
 
-    # ganadores existentes
     allj = _safe_json_read(GANADORES_JSON) or {}
     ganadores = allj.get(str(fecha_iso), []) if not recalc else []
-    # Dedupe + protege contra duplicados aunque se haya perdido ganadores_state.json
     ganadores = _dedupe_ganadores(str(fecha_iso), ganadores)
     for _g in (ganadores or []):
         try:
@@ -12467,46 +13422,40 @@ def _detectar_ganadores(fecha_iso: str, stack: list, ultimo_marcado: int, recalc
             t = str(v or "").strip().lower()
         except Exception:
             t = ""
-        t = re.sub(r"\s+", " ", t)
-        return t
+        return re.sub(r"\s+", " ", t)
 
-    # Figuras que ya tuvieron ganador en bolas anteriores (se cierran para próximos clicks)
+    def _semantic_stage(code: str) -> str:
+        raw = str(code or "").strip().upper()
+        return {"TL1": "LLEN", "TL2": "RELL", "TL3": "YAPA", "TL4": "COMP"}.get(raw, raw)
+
+    def _stage_order(code: str) -> int:
+        return {"LLEN": 1, "TL1": 1, "RELL": 2, "TL2": 2, "YAPA": 3, "TL3": 3, "COMP": 4, "TL4": 4}.get(str(code or "").strip().upper(), 0)
+
     figuras_cerradas_prev = set()
-    fig_codes_cerrados_prev = set()
     tl_codes_closed_prev = set()
+    semantic_closed_prev = set()
     if not recalc:
         for g in (ganadores or []):
             fk = _norm_fig_name((g or {}).get("figura") or (g or {}).get("nombre_figura") or "")
             if fk:
                 figuras_cerradas_prev.add(fk)
-            try:
-                gc = str((g or {}).get("fig_code") or code_for((g or {}).get("figura") or (g or {}).get("nombre_figura") or "")).strip().upper()
-            except Exception:
-                gc = ""
-            if gc:
-                fig_codes_cerrados_prev.add(gc)
-                if gc in ("TL1", "TL2", "TL3", "TL4"):
-                    tl_codes_closed_prev.add(gc)
+            gc = str((g or {}).get("fig_code") or "").strip().upper()
+            if gc in ("TL1", "TL2", "TL3", "TL4"):
+                tl_codes_closed_prev.add(gc)
+            sc = _semantic_stage(gc or code_for((g or {}).get("figura", "")))
+            if sc in ("LLEN", "RELL", "YAPA", "COMP"):
+                semantic_closed_prev.add(sc)
 
-    # figuras del día
     figuras = _load_figuras_por_fecha(fecha_iso)
     if not figuras:
         return ganadores, nuevos, sorted(known)
 
-    # configuración del sorteo (para inyectar TL1..TL4 aunque no estén en figuras_por_fecha.xml)
     try:
         sorteo_cfg = _sorteo_read_config(str(fecha_iso)) or {}
     except Exception:
         sorteo_cfg = {}
+    tl_slots_cfg = _tl_prog_build_slots(sorteo_cfg) if _tl_prog_on((sorteo_cfg or {}).get("tl_programadas_activas")) else {}
 
-    tl_prog_slots = 0
-    try:
-        if _tl_prog_on((sorteo_cfg or {}).get("tl_programadas_activas")):
-            tl_prog_slots = min(4, len(_tl_prog_parse_cartones((sorteo_cfg or {}).get("tl_programadas_cartones"))))
-    except Exception:
-        tl_prog_slots = 0
-
-    # estados de figuras (INACTIVO = no se juega)
     fig_states = {}
     if "FIG_ESTADOS_JSON" in globals():
         try:
@@ -12514,45 +13463,24 @@ def _detectar_ganadores(fecha_iso: str, stack: list, ultimo_marcado: int, recalc
         except Exception:
             fig_states = {}
 
-    # catálogo patrones
     catalogo = _load_catalogo_figuras_any()
-
-    # precompute patrones activos
-    # IMPORTANTE:
-    #   - Conservamos los códigos internos TL1..TL4 para la lógica.
-    #   - Pero mostramos / guardamos semánticamente:
-    #       TL1 -> LLENA
-    #       TL2 -> RELLENA
-    #       TL3 -> YAPA
-    #       TL4 -> SUPER YAPA
-    #   Así no aparece como "TABLA LLENA 1/2/3" en el ganador ni en resultados.
     patrones = []
-    _TL_DISPLAY_NAME = {
-        "TL1": "LLENA",
-        "TL2": "RELLENA",
-        "TL3": "YAPA",
-        "TL4": "SUPER YAPA",
-    }
+    _TL_DISPLAY_NAME = {"TL1": "LLENA", "TL2": "RELLENA", "TL3": "YAPA", "TL4": "SUPER YAPA"}
     for it in figuras:
         nombre_src = it.get("nombre", "")
         if not nombre_src:
             continue
         estado = str(fig_states.get(nombre_src, "") or "").strip().upper()
         estado = re.sub(r"\s+", " ", estado)
-        # Estado visual para boletín/XML: no bloquea la lectura del juego.
-        # Solo filtramos estados raros/no esperados para no dañar la lógica.
         if estado and estado not in ("ACTIVO", "INACTIVO", "SE FUE", "SE QUEDO"):
             continue
-
         code = globals().get("code_for")(nombre_src) if callable(globals().get("code_for")) else re.sub(r"[^A-Z0-9]", "", nombre_src.upper())[:4] or "FIG"
         nombre = _tl_semantic_name(nombre_src, code)
         required_pos, cmap = _required_positions_for_fig(code, catalogo)
-
         if not required_pos and not (code in ("TL1", "TL2", "TL3", "TL4")):
             any_on = any(v not in ("#FFFFFF", (globals().get("COLOR_OFF") or "#E8E8E8").upper(), "#E8E8E8") for v in (cmap.values() or []))
             if not any_on:
                 continue
-
         patrones.append({
             "nombre": nombre,
             "fig_key": _norm_fig_name(nombre),
@@ -12562,48 +13490,35 @@ def _detectar_ganadores(fecha_iso: str, stack: list, ultimo_marcado: int, recalc
             "color_map_pos": cmap
         })
 
-    # Inyecta TL1..TL4 desde la configuración del sorteo aunque no existan como <fig> en figuras_por_fecha.xml.
-    # Esto permite que las TL manuales/programadas sí participen en el juego sin tocar el catálogo.
     codes_present = {str(p.get("code") or "").strip().upper() for p in (patrones or [])}
-    for _slot in range(1, 5):
-        _code = f"TL{_slot}"
-        if _code in codes_present:
+    for _slot, _slot_cfg in (tl_slots_cfg or {}).items():
+        if _slot in codes_present:
             continue
+        slot_num = int(_slot[-1]) if _slot[-1:].isdigit() else 0
         try:
-            _valor_tl = float(str((sorteo_cfg or {}).get(f"tl{_slot}") or "0").replace(",", "."))
+            _valor_tl = float(str((sorteo_cfg or {}).get(f"tl{slot_num}") or "0").replace(",", "."))
         except Exception:
             _valor_tl = 0.0
-        # IMPORTANTE:
-        #   El valor tl1/tl2/tl3/tl4 solo define el PREMIO configurado.
-        #   NO debe inyectar una "tabla programada" por sí solo.
-        #   Solo jugamos TL1..TL4 cuando realmente están programadas/activas.
-        _debe_jugar = (_slot <= int(tl_prog_slots or 0))
-        if not _debe_jugar:
-            continue
-        _req_tl, _cmap_tl = _required_positions_for_fig(_code, catalogo)
-        _nombre_tl = f"TABLA LLENA {_slot}"
+        _req_tl, _cmap_tl = _required_positions_for_fig(_slot, catalogo)
         patrones.append({
-            "nombre": _nombre_tl,
-            "fig_key": _norm_fig_name(_nombre_tl),
-            "code": _code,
+            "nombre": _TL_DISPLAY_NAME.get(_slot, _slot),
+            "fig_key": _norm_fig_name(_TL_DISPLAY_NAME.get(_slot, _slot)),
+            "code": _slot,
             "valor": round(max(_valor_tl, 0.0), 2),
             "required_pos": _req_tl,
             "color_map_pos": _cmap_tl,
         })
-        codes_present.add(_code)
 
     if not patrones:
         return ganadores, nuevos, sorted(known)
 
-    non_tl_fig_keys = {
+    full_stage_codes = {"LLEN", "RELL", "YAPA", "COMP"}
+    tl_stage_codes = {"TL1", "TL2", "TL3", "TL4"}
+    figuras_base_keys = {
         p.get("fig_key") for p in (patrones or [])
-        if p.get("fig_key") and p.get("code") not in ("TL1", "TL2", "TL3", "TL4")
+        if p.get("fig_key") and p.get("code") not in tl_stage_codes and p.get("code") not in full_stage_codes
     }
-    all_non_tl_closed_prev = non_tl_fig_keys.issubset(figuras_cerradas_prev)
 
-    # Evita que LLENA / RELLENA / COMPLETA se premien sobre la MISMA tabla.
-    # LLENA podrá salir primero y RELLENA después, pero en otra tabla.
-    full_table_family_codes = {"LLEN", "RELL", "COMP"}
     full_table_claimed_prev = set()
     if not recalc:
         for _g in (ganadores or []):
@@ -12611,12 +13526,11 @@ def _detectar_ganadores(fecha_iso: str, stack: list, ultimo_marcado: int, recalc
                 _gc = str((_g or {}).get("fig_code") or code_for((_g or {}).get("figura", ""))).strip().upper()
             except Exception:
                 _gc = ""
-            if _gc in full_table_family_codes:
+            if _semantic_stage(_gc) in {"LLEN", "RELL", "YAPA", "COMP"}:
                 _tb = _norm_tabla_id((_g or {}).get("tabla", ""))
                 if _tb:
                     full_table_claimed_prev.add(_tb)
 
-    # rangos impresos (tablas en juego)
     rangos = _get_rangos_en_juego(fecha_iso)
     if not rangos:
         return ganadores, nuevos, sorted(known)
@@ -12627,52 +13541,41 @@ def _detectar_ganadores(fecha_iso: str, stack: list, ultimo_marcado: int, recalc
 
     tl_programadas_map = _resolve_tl_programadas_for_day(str(fecha_iso), by_series)
 
-    # Si hay TL programadas activas, esas semánticas dejan de jugar como figuras normales.
-    # Así la prioridad queda:
-    #   TL1 (LLENA programada) -> antes que LLENA normal
-    #   TL2 (RELLENA programada) -> después de TL1
-    #   TL3 (YAPA programada) -> después de TL2
-    #   TL4 (SUPER YAPA / COMPLETA programada) -> después de TL3
-    _TL_NORMAL_CODE = {"TL1": "LLEN", "TL2": "RELL", "TL3": "YAPA", "TL4": "COMP"}
-    _normal_codes_bloqueados = {
-        _TL_NORMAL_CODE.get(_slot)
-        for _slot in (tl_programadas_map or {}).keys()
-        if _TL_NORMAL_CODE.get(_slot)
-    }
-    if _normal_codes_bloqueados:
-        # Si existe una TL programada activa, la versión semántica normal
-        # (LLENA / RELLENA / YAPA / COMPLETA) NO debe jugar ese mismo día,
-        # porque el premio lo debe resolver únicamente la programada.
-        patrones = [
-            p for p in (patrones or [])
-            if p.get("code") not in _normal_codes_bloqueados
-        ]
-        non_tl_fig_keys = {
-            p.get("fig_key") for p in (patrones or [])
-            if p.get("fig_key")
-            and p.get("code") not in ("TL1", "TL2", "TL3", "TL4")
-            and p.get("code") not in _normal_codes_bloqueados
-        }
-
-    # Salvaguarda: cuando ya cerraron todas las figuras normales del día,
-    # desde ese punto solo deben participar los cierres finales (LLENA/RELLENA/YAPA/
-    # COMPLETA o sus TL programadas). Esto evita que una balota de cierre reabra por error
-    # figuras antiguas por alias de nombre o diferencias entre agenda/resultado.
-    final_family_codes = {"LLEN", "RELL", "YAPA", "COMP", "TL1", "TL2", "TL3", "TL4"}
-    if (not recalc) and all_non_tl_closed_prev:
-        pendientes_finales = [
-            p for p in (patrones or [])
-            if str(p.get("code") or "").strip().upper() in final_family_codes
-            and str(p.get("code") or "").strip().upper() not in fig_codes_cerrados_prev
-        ]
-        if pendientes_finales:
-            patrones = pendientes_finales
-
-    # normaliza último marcado (solo en modo normal)
     try:
         ultimo = int(ultimo_marcado) if ultimo_marcado else 0
     except Exception:
         ultimo = 0
+
+    non_tl_patterns = [p for p in patrones if p.get("code") not in tl_stage_codes]
+    tl_patterns = [p for p in patrones if p.get("code") in tl_stage_codes]
+
+    natural_stage_hits_now = set()
+
+    def _make_win(pat, serie_archivo, carton_id_raw, carton_id_norm, grid_out, marked_out, nums_fig_out):
+        numero_ganador = ultimo if ultimo else (nums_fig_out[-1] if nums_fig_out else "")
+        info_b = buscar_info_por_boleto(str(fecha_iso), carton_id_raw, serie_archivo)
+        vendedor_b = (info_b.get("vendedor") or "").strip()
+        planilla_b = (info_b.get("planilla") or "").strip()
+        rango_b = (info_b.get("rango") or "").strip()
+        return {
+            "fecha": str(fecha_iso),
+            "figura": pat["nombre"],
+            "fig_code": pat["code"],
+            "valor": round(float(pat["valor"]), 2),
+            "serie": serie_archivo,
+            "vendedor": vendedor_b,
+            "planilla": planilla_b,
+            "rango": rango_b,
+            "sector": (planilla_b or rango_b),
+            "tabla": carton_id_norm,
+            "ultima_bola": int(ultimo) if ultimo else "",
+            "numero_ganador": int(numero_ganador) if str(numero_ganador).isdigit() else str(numero_ganador),
+            "numeros_figura": nums_fig_out,
+            "grid": grid_out,
+            "required_pos": pat["required_pos"],
+            "color_map_pos": pat["color_map_pos"],
+            "marcados_nums": marked_out,
+        }
 
     for serie_archivo, spans in by_series.items():
         try:
@@ -12682,7 +13585,6 @@ def _detectar_ganadores(fecha_iso: str, stack: list, ultimo_marcado: int, recalc
         if df is None or df.empty:
             continue
 
-        # convierte spans a intervalos [s,e)
         intervals = []
         for desde, hasta in spans:
             if desde not in id_to_idx or hasta not in id_to_idx:
@@ -12695,7 +13597,6 @@ def _detectar_ganadores(fecha_iso: str, stack: list, ultimo_marcado: int, recalc
         if not intervals:
             continue
 
-        # merge intervals
         intervals.sort()
         merged = []
         for s, e in intervals:
@@ -12704,28 +13605,22 @@ def _detectar_ganadores(fecha_iso: str, stack: list, ultimo_marcado: int, recalc
             else:
                 merged[-1][1] = max(merged[-1][1], e)
 
-        # indexa tablas una sola vez por (fecha, serie, rango, mtime)
         tickets, by_num = _get_cartones_index_cached(str(fecha_iso), str(serie_archivo), merged, df, id_col, mtime)
-
-        # MODO NORMAL: solo tablas que contienen el último número
         if (not recalc) and (1 <= ultimo <= 75):
             cand_idxs = list(by_num.get(ultimo, []))
         else:
             cand_idxs = list(range(len(tickets)))
 
-        # Si hay TL programadas para esta serie, forzamos a revisar ese/eses cartones
-        # aunque la última bola no pertenezca a ellos (para que la TL "caiga" al programado).
+        idx_by_carton = {}
+        for _i, _t in enumerate(tickets):
+            idx_by_carton[_tl_prog_norm_carton(_t.get("carton_id", ""))] = _i
         if (not recalc) and tl_programadas_map:
-            idx_by_carton = {}
-            for _i, _t in enumerate(tickets):
-                idx_by_carton[_tl_prog_norm_carton(_t.get("carton_id", ""))] = _i
             for slot, target in (tl_programadas_map or {}).items():
                 if str(target.get("serie") or "") != str(serie_archivo):
                     continue
                 _ix = idx_by_carton.get(_tl_prog_norm_carton(target.get("carton_id", "")))
                 if _ix is not None and _ix not in cand_idxs:
                     cand_idxs.append(_ix)
-
         if not cand_idxs:
             continue
 
@@ -12736,164 +13631,133 @@ def _detectar_ganadores(fecha_iso: str, stack: list, ultimo_marcado: int, recalc
             carton_id = t.get("carton_id", "")
             grid = t.get("grid")
             pos_map = t.get("pos_map") or {}
-
-            for pat in patrones:
-                # Si la figura ya tuvo ganador en una bola anterior, ya no participa más.
-                if not recalc:
-                    _pat_code = str(pat.get("code") or "").strip().upper()
-                    if _pat_code and _pat_code in fig_codes_cerrados_prev:
-                        continue
-                    if pat.get("fig_key") and pat.get("fig_key") in figuras_cerradas_prev:
-                        continue
-
+            carton_id_norm = _norm_tabla_id(carton_id)
+            for pat in non_tl_patterns:
+                if (not recalc) and pat.get("fig_key") and pat.get("fig_key") in figuras_cerradas_prev:
+                    continue
                 fig_code = pat["code"]
-                carton_id_norm = _norm_tabla_id(carton_id)
                 key = f"{fecha_iso}|{fig_code}|{serie_archivo}|{carton_id_norm}"
                 if key in known:
                     continue
 
-                # Si existe una TL programada para esta semántica, la figura normal queda bloqueada
-                # hasta que la TL correspondiente ya haya caído. Esto evita que LLENA/RELLENA normales
-                # se adelanten a TABLA LLENA 1/2/3/4.
-                _slot_requerido = None
-                if fig_code == "LLEN" and "TL1" in (tl_programadas_map or {}):
-                    _slot_requerido = "TL1"
-                elif fig_code == "RELL" and "TL2" in (tl_programadas_map or {}):
-                    _slot_requerido = "TL2"
-                elif fig_code == "YAPA" and "TL3" in (tl_programadas_map or {}):
-                    _slot_requerido = "TL3"
-                elif fig_code == "COMP" and "TL4" in (tl_programadas_map or {}):
-                    _slot_requerido = "TL4"
-                if _slot_requerido and _slot_requerido not in tl_codes_closed_prev:
-                    continue
-
-                # LLENA / RELLENA / COMPLETA no deben premiar la misma tabla más de una vez.
-                if fig_code in full_table_family_codes and carton_id_norm in full_table_claimed_series:
-                    continue
+                stage_code = _semantic_stage(fig_code)
+                stage_idx = _stage_order(fig_code)
+                if stage_code in full_stage_codes:
+                    closed_fig_keys_now = set(figuras_cerradas_prev)
+                    if not recalc:
+                        for _g_now in (ganadores or []):
+                            _fk_now = _norm_fig_name((_g_now or {}).get("figura") or (_g_now or {}).get("nombre_figura") or "")
+                            if _fk_now:
+                                closed_fig_keys_now.add(_fk_now)
+                    if not figuras_base_keys.issubset(closed_fig_keys_now):
+                        continue
+                    prev_stage_ok = True
+                    if stage_idx >= 2 and "LLEN" not in semantic_closed_prev:
+                        prev_stage_ok = False
+                    if stage_idx >= 3 and "RELL" not in semantic_closed_prev:
+                        prev_stage_ok = False
+                    if stage_idx >= 4 and "YAPA" not in semantic_closed_prev:
+                        prev_stage_ok = False
+                    if not prev_stage_ok:
+                        continue
+                    if stage_code in {"LLEN", "RELL", "COMP"} and carton_id_norm in full_table_claimed_series:
+                        continue
 
                 needed = []
                 has_ultimo = False
-                tl_forzada_programada = False
-
-                # Si esta TL está programada, SOLO puede caer en su cartón programado
-                # y únicamente después de cerrar las demás figuras y respetando el orden TL1->TL4.
-                target_tl = tl_programadas_map.get(fig_code) if fig_code in ("TL1", "TL2", "TL3", "TL4") else None
-                if target_tl:
-                    # Cierre dinámico del MISMO click: si la última figura normal se cerró
-                    # justo ahora, la TL programada ya puede salir sin esperar otra bola.
-                    closed_fig_keys_now = set(figuras_cerradas_prev)
-                    closed_tl_codes_now = set(tl_codes_closed_prev)
-                    if not recalc:
-                        for _g_now in (ganadores or []):
-                            try:
-                                _fk_now = _norm_fig_name((_g_now or {}).get("figura") or (_g_now or {}).get("nombre_figura") or "")
-                            except Exception:
-                                _fk_now = ""
-                            if _fk_now:
-                                closed_fig_keys_now.add(_fk_now)
-                            try:
-                                _gc_now = str((_g_now or {}).get("fig_code") or code_for((_g_now or {}).get("figura", ""))).strip().upper()
-                            except Exception:
-                                _gc_now = ""
-                            if _gc_now in ("TL1", "TL2", "TL3", "TL4"):
-                                closed_tl_codes_now.add(_gc_now)
-
-                    slot_num = int(fig_code[-1]) if fig_code[-1:].isdigit() else 1
-                    prev_tl_ok = True
-                    if slot_num >= 2 and "TL1" not in closed_tl_codes_now:
-                        prev_tl_ok = False
-                    if slot_num >= 3 and "TL2" not in closed_tl_codes_now:
-                        prev_tl_ok = False
-                    if slot_num >= 4 and "TL3" not in closed_tl_codes_now:
-                        prev_tl_ok = False
-
-                    all_non_tl_closed_now = non_tl_fig_keys.issubset(closed_fig_keys_now)
-                    if (not all_non_tl_closed_now) or (not prev_tl_ok):
+                for pos in pat["required_pos"]:
+                    v = pos_map.get(pos, "")
+                    if _is_free_cell(v):
                         continue
+                    sv = str(v).strip()
+                    if sv.isdigit():
+                        n = int(sv)
+                        needed.append(n)
+                        if (not recalc) and (n == ultimo):
+                            has_ultimo = True
+                if not needed:
+                    continue
+                if (not recalc) and (1 <= ultimo <= 75) and (not has_ultimo):
+                    continue
+                if any(n not in marked_nums for n in needed):
+                    continue
 
-                    if str(target_tl.get("serie") or "") != str(serie_archivo):
-                        continue
-                    if _tl_prog_norm_carton(carton_id) != _tl_prog_norm_carton(target_tl.get("carton_id", "")):
-                        continue
+                known.add(key)
+                win = _make_win(pat, serie_archivo, carton_id, carton_id_norm, grid, sorted(list(marked_nums)), needed)
+                ganadores.append(win)
+                nuevos.append(win)
+                if stage_code in full_stage_codes:
+                    natural_stage_hits_now.add(stage_code)
+                if stage_code in {"LLEN", "RELL", "COMP"} and carton_id_norm:
+                    full_table_claimed_series.add(carton_id_norm)
+                    full_table_claimed_prev.add(carton_id_norm)
 
-                    tl_forzada_programada = True
-                    grid_forzada, needed_forzados, marked_forzados, tl_grid_completa = _tl_prog_force_grid_with_marked(
-                        grid, stack, ultimo
-                    )
-                    needed = list(needed_forzados)
-                    has_ultimo = bool(ultimo)
-                else:
-                    for pos in pat["required_pos"]:
-                        v = pos_map.get(pos, "")
-                        if _is_free_cell(v):
-                            continue
-                        sv = str(v).strip()
-                        if sv.isdigit():
-                            n = int(sv)
-                            needed.append(n)
-                            if (not recalc) and (n == ultimo):
-                                has_ultimo = True
+        for pat in tl_patterns:
+            fig_code = pat["code"]
+            target_tl = tl_programadas_map.get(fig_code)
+            if not target_tl:
+                continue
+            if str(target_tl.get("serie") or "") != str(serie_archivo):
+                continue
+            _ix = idx_by_carton.get(_tl_prog_norm_carton(target_tl.get("carton_id", "")))
+            if _ix is None:
+                continue
+            t = tickets[_ix]
+            carton_id = t.get("carton_id", "")
+            grid = t.get("grid")
+            carton_id_norm = _norm_tabla_id(carton_id)
+            key = f"{fecha_iso}|{fig_code}|{serie_archivo}|{carton_id_norm}"
+            if key in known:
+                continue
+            # NO bloquear la TL programada por coincidencia semántica de nombre ("LLENA", "RELLENA", etc.).
+            # Solo se evita repetirla por key única y por estado real ya guardado en known / tl_codes_closed_prev.
 
-                    if not needed:
-                        continue
+            closed_fig_keys_now = set(figuras_cerradas_prev)
+            if not recalc:
+                for _g_now in (ganadores or []):
+                    _fk_now = _norm_fig_name((_g_now or {}).get("figura") or (_g_now or {}).get("nombre_figura") or "")
+                    if _fk_now:
+                        closed_fig_keys_now.add(_fk_now)
+            if not figuras_base_keys.issubset(closed_fig_keys_now):
+                continue
 
-                    # En modo normal: si la figura NO incluye el último número, NO puede "aparecer" en este click
-                    if (not recalc) and (1 <= ultimo <= 75) and (not has_ultimo):
-                        continue
+            slot_num = int(fig_code[-1]) if fig_code[-1:].isdigit() else 1
+            prev_tl_ok = True
+            if slot_num >= 2 and "TL1" not in tl_codes_closed_prev:
+                prev_tl_ok = False
+            if slot_num >= 3 and "TL2" not in tl_codes_closed_prev:
+                prev_tl_ok = False
+            if slot_num >= 4 and "TL3" not in tl_codes_closed_prev:
+                prev_tl_ok = False
+            if not prev_tl_ok:
+                continue
 
-                ok = True
-                if tl_forzada_programada:
-                    # TL programada solo debe caer cuando la grilla quedó COMPLETA con
-                    # números ya marcados y la última balota realmente participa.
-                    ok = bool(tl_grid_completa and ((not ultimo) or (int(ultimo) in set(marked_forzados))))
-                else:
-                    for n in needed:
-                        if n not in marked_nums:
-                            ok = False
-                            break
+            semantic_code = _tl_prog_semantic_code(fig_code)
+            natural_trigger = semantic_code in natural_stage_hits_now
+            objetivo = max(0, _tl_prog_parse_int(target_tl.get("objetivo"), 0))
+            count_trigger = (marked_count >= objetivo) if objetivo > 0 else True
+            if not (natural_trigger or count_trigger):
+                continue
 
-                if ok:
-                    known.add(key)
-                    numero_ganador = ultimo if ultimo else (needed[-1] if needed else "")
+            grid_forzada, needed_forzados, marked_forzados, tl_grid_completa = _tl_prog_force_grid_with_marked(
+                grid, stack, ultimo, required_pos=pat["required_pos"], force_ultimo=True
+            )
+            if not tl_grid_completa:
+                continue
 
-                    info_b = buscar_info_por_boleto(str(fecha_iso), carton_id, serie_archivo)
-                    vendedor_b = (info_b.get("vendedor") or "").strip()
-                    planilla_b = (info_b.get("planilla") or "").strip()
-                    rango_b    = (info_b.get("rango") or "").strip()
-                    grid_out = grid_forzada if tl_forzada_programada else grid
-                    marked_out = marked_forzados if tl_forzada_programada else sorted(list(marked_nums))
-                    nums_fig_out = needed if tl_forzada_programada else needed
-                    win = {
-                        "fecha": str(fecha_iso),
-                        "figura": pat["nombre"],
-                        "fig_code": fig_code,
-                        "valor": round(float(pat["valor"]), 2),
-                        "serie": serie_archivo,
-                        "vendedor": vendedor_b,
-                        "planilla": planilla_b,
-                        "rango": rango_b,
-                        "sector": (planilla_b or rango_b),
-                        "tabla": carton_id_norm,
-                        "ultima_bola": int(ultimo) if ultimo else "",
-                        "numero_ganador": int(numero_ganador) if str(numero_ganador).isdigit() else str(numero_ganador),
-                        "numeros_figura": nums_fig_out,
-                        "grid": grid_out,
-                        "required_pos": pat["required_pos"],
-                        "color_map_pos": pat["color_map_pos"],
-                        "marcados_nums": marked_out,
-                    }
-                    ganadores.append(win)
-                    nuevos.append(win)
-                    if fig_code in full_table_family_codes and carton_id_norm:
-                        full_table_claimed_series.add(carton_id_norm)
-                        full_table_claimed_prev.add(carton_id_norm)
+            known.add(key)
+            win = _make_win(pat, serie_archivo, carton_id, carton_id_norm, grid_forzada, marked_forzados, needed_forzados)
+            ganadores.append(win)
+            nuevos.append(win)
+            if semantic_code in {"LLEN", "RELL", "COMP"} and carton_id_norm:
+                full_table_claimed_series.add(carton_id_norm)
+                full_table_claimed_prev.add(carton_id_norm)
 
     return ganadores, nuevos, sorted(known)
 
-
 @juego_bp.get("/ganadores")
 def juego_ganadores_list():
-    """Lista ganadores detectados (JSON), normalizando TL programadas a nombres semánticos para la UI."""
+    """Lista ganadores detectados (JSON), normalizando TL programadas y enriqueciendo datos de planilla/resultados."""
     fecha = _get_sorteo_fecha()
     data = _safe_json_read(GANADORES_JSON) or {}
     raw = data.get(str(fecha), []) or []
@@ -12909,6 +13773,26 @@ def juego_ganadores_list():
             )
         except Exception:
             pass
+
+        try:
+            boleto = _norm_tabla_id(item.get("boleto") or item.get("tabla") or "")
+            meta = _resultado_meta_para_ganador(fecha, item.get("figura") or "", boleto)
+            item["boleto"] = boleto
+            item["tabla"] = boleto
+            item["nombre"] = str(meta.get("nombre") or item.get("nombre") or item.get("nota") or "").strip()
+            item["vendedor"] = str(meta.get("vendedor") or item.get("vendedor") or "").strip()
+            item["sector"] = str(meta.get("sector") or item.get("sector") or item.get("planilla") or item.get("rango") or "").strip()
+            item["planilla"] = item["sector"]
+            premio_res = _safe_float(meta.get("premio"), None)
+            if premio_res is None:
+                premio_res = _safe_float(item.get("premio"), None)
+            if premio_res is None:
+                premio_res = _safe_float(item.get("valor"), 0.0)
+            item["premio"] = premio_res
+            item["valor"] = premio_res
+        except Exception:
+            pass
+
         out.append(item)
     return jsonify(ok=True, fecha=fecha, ganadores=out)
 
@@ -13033,36 +13917,67 @@ def _sync_bingo_xml_from_stack(stack):
       - ultimo="X" SOLO en <balota numero="1">, X = último marcado; todas las demás "", incluida la balota X
       - ultimos5: más reciente → más antiguo
       - ultimoMarcado: último marcado
+
+    HOTFIX:
+      - si datos_bingo.xml existe pero le faltan nodos, se recrean en caliente
+      - así el reset no se cae por AttributeError sobre .text
     """
     _ensure_bingo_xml()
-    tree = ET.parse(BINGO_XML); root = tree.getroot()
-    balotas_el = root.find("balotas")
+    tree = ET.parse(BINGO_XML)
+    root = tree.getroot()
 
-    marked = set(int(x) for x in stack)
+    balotas_el = root.find("balotas")
+    if balotas_el is None:
+        balotas_el = ET.SubElement(root, "balotas")
+
+    existentes = {str(b.get("numero") or "").strip() for b in balotas_el.findall("balota")}
+    for n in range(1, 76):
+        if str(n) not in existentes:
+            ET.SubElement(balotas_el, "balota", numero=str(n), estado="", ultimo="")
+
+    ult5_el = root.find("ultimos5")
+    if ult5_el is None:
+        ult5_el = ET.SubElement(root, "ultimos5")
+
+    total_el = root.find("totalMarcadas")
+    if total_el is None:
+        total_el = ET.SubElement(root, "totalMarcadas")
+
+    ultimo_el = root.find("ultimoMarcado")
+    if ultimo_el is None:
+        ultimo_el = ET.SubElement(root, "ultimoMarcado")
+
+    stinger_el = root.find("stinger")
+    if stinger_el is None:
+        stinger_el = ET.SubElement(root, "stinger")
+    if stinger_el.text is None:
+        stinger_el.text = ""
+
+    stack = [int(x) for x in (stack or []) if 1 <= int(x) <= 75]
+    marked = set(stack)
     last = stack[-1] if stack else None
 
-    # Limpia 'estado' y 'ultimo'
     for b in balotas_el.findall("balota"):
         b.set("estado", "")
         b.set("ultimo", "")
 
-    # Marca presentes
     for b in balotas_el.findall("balota"):
-        n = int(b.get("numero"))
+        try:
+            n = int(b.get("numero"))
+        except Exception:
+            continue
         if n in marked:
             b.set("estado", str(n))
 
-    # 👉 "ultimo" solo en la balota numero="1"
     first = balotas_el.find(".//balota[@numero='1']")
-    if first is not None:
-        first.set("ultimo", str(last) if last is not None else "")
+    if first is None:
+        first = ET.SubElement(balotas_el, "balota", numero="1", estado="", ultimo="")
+    first.set("ultimo", str(last) if last is not None else "")
 
-    # ultimos5 (más reciente primero)
     ult5 = list(reversed(stack[-5:])) if stack else []
-    root.find("ultimos5").text = ",".join(str(x) for x in ult5)
-
-    root.find("totalMarcadas").text = str(len(marked))
-    root.find("ultimoMarcado").text = (str(last) if last is not None else "")
+    ult5_el.text = ",".join(str(x) for x in ult5)
+    total_el.text = str(len(marked))
+    ultimo_el.text = (str(last) if last is not None else "")
 
     tree.write(BINGO_XML, encoding="utf-8", xml_declaration=True)
     try:
@@ -13137,6 +14052,7 @@ def _get_sorteo_activo_info() -> dict:
                     "estado": "activo",
                     "activo": "1",
                     "finalizado": "0",
+                    "origen_finalizado": str(snap.get("origen_finalizado") or "0").strip(),
                     "fuente": pjson,
                 }
     except Exception:
@@ -13940,10 +14856,22 @@ def _vmix_build_carton_ganador_table_xml(action=None, index_override=None):
     ET.SubElement(fila, "FIGURA").text = fig_name
     ET.SubElement(fila, "VALOR").text = val_raw
     ET.SubElement(fila, "VALOR_FMT").text = _vmix_money_fmt(val_raw)
-    ET.SubElement(fila, "BOLETO").text = (sel_g.attrib.get("tabla", "") if sel_g is not None else "")
-    ET.SubElement(fila, "TABLA").text = (sel_g.attrib.get("tabla", "") if sel_g is not None else "")
+    boleto_sel = (sel_g.attrib.get("tabla", "") if sel_g is not None else "")
+    vendedor_sel = (sel_g.attrib.get("vendedor", "") if sel_g is not None else "")
+    sector_sel = (sel_g.attrib.get("sector", "") if sel_g is not None else "")
+    nombre_sel = (sel_g.attrib.get("nombre", "") if sel_g is not None else "")
+    ET.SubElement(fila, "BOLETO").text = boleto_sel
+    ET.SubElement(fila, "TABLA").text = boleto_sel
+    ET.SubElement(fila, "NUMERO_CARTON_GANADOR").text = boleto_sel
     ET.SubElement(fila, "SERIE").text = (sel_g.attrib.get("serie", "") if sel_g is not None else "")
     ET.SubElement(fila, "ULTIMA_BOLA").text = (sel_g.attrib.get("ultima_bola", "") if sel_g is not None else "")
+    ET.SubElement(fila, "VENDEDOR").text = vendedor_sel
+    ET.SubElement(fila, "NOMBRE_VENDEDOR").text = vendedor_sel
+    ET.SubElement(fila, "SECTOR").text = sector_sel
+    ET.SubElement(fila, "PLANILLA").text = sector_sel
+    ET.SubElement(fila, "PLANILLA_ASIGNADA").text = sector_sel
+    ET.SubElement(fila, "NOMBRE_BOLETIN").text = nombre_sel
+    ET.SubElement(fila, "OBSERVACION").text = nombre_sel
     ET.SubElement(fila, "GANADORES_FIGURA").text = str(sum(1 for g in ganadores if (g.attrib.get("figura","") == fig_name)))
     ET.SubElement(fila, "GANADORES_TOTAL").text = str(total)
 
@@ -14327,6 +15255,10 @@ def juego_marcar():
     except Exception:
         pass
 
+    try:
+        _save_game_state_snapshot(str(fecha), stinger=n)
+    except Exception:
+        pass
 
     return jsonify(
         success=True,
@@ -14372,6 +15304,11 @@ def juego_reversa():
     except Exception:
         gcount = 0
 
+    try:
+        _save_game_state_snapshot(str(fecha), stinger=last)
+    except Exception:
+        pass
+
     return jsonify(
         success=True,
         stack=stack,
@@ -14384,46 +15321,164 @@ def juego_reversa():
 
 @juego_bp.post("/reset")
 def juego_reset():
-    _write_stack([])
-    _sync_bingo_xml_from_stack([])
+    fecha = _get_sorteo_fecha()
     try:
-        tree = ET.parse(BINGO_XML); root = tree.getroot()
-        st = root.find("stinger") or ET.SubElement(root, "stinger"); st.text = ""
+        info_activa = _get_sorteo_activo_info() or {}
+    except Exception:
+        info_activa = {}
+    try:
+        cfg_fecha = _sorteo_read_config(str(fecha)) if callable(globals().get("_sorteo_read_config")) else {}
+    except Exception:
+        cfg_fecha = {}
+
+    preserve_flags = [
+        str((info_activa or {}).get("finalizado") or "").strip().lower(),
+        str((info_activa or {}).get("origen_finalizado") or "").strip().lower(),
+        str((cfg_fecha or {}).get("finalizado") or "").strip().lower(),
+    ]
+    preserve_history = any(v in ("1", "true", "si", "sí", "yes") for v in preserve_flags)
+
+    # Si el día ya estaba finalizado, guarda snapshot ANTES de limpiar,
+    # pero el reset operativo igual debe dejar el juego en cero.
+    if preserve_history:
+        try:
+            _save_game_state_snapshot(str(fecha))
+        except Exception:
+            pass
+
+    # 1) limpiar tablero / stack / stinger
+    _write_stack([])
+    try:
+        _sync_bingo_xml_from_stack([])
+    except Exception:
+        try:
+            _ensure_bingo_xml()
+            tree = ET.parse(BINGO_XML)
+            root = tree.getroot()
+
+            balotas_el = root.find("balotas")
+            if balotas_el is None:
+                balotas_el = ET.SubElement(root, "balotas")
+            existentes = {str(b.get("numero") or "").strip() for b in balotas_el.findall("balota")}
+            for n in range(1, 76):
+                if str(n) not in existentes:
+                    ET.SubElement(balotas_el, "balota", numero=str(n), estado="", ultimo="")
+            for b in balotas_el.findall("balota"):
+                b.set("estado", "")
+                b.set("ultimo", "")
+
+            ult5_el = root.find("ultimos5") or ET.SubElement(root, "ultimos5")
+            total_el = root.find("totalMarcadas") or ET.SubElement(root, "totalMarcadas")
+            ultimo_el = root.find("ultimoMarcado") or ET.SubElement(root, "ultimoMarcado")
+            st = root.find("stinger") or ET.SubElement(root, "stinger")
+
+            ult5_el.text = ""
+            total_el.text = "0"
+            ultimo_el.text = ""
+            st.text = ""
+
+            tree.write(BINGO_XML, encoding="utf-8", xml_declaration=True)
+        except Exception:
+            pass
+    try:
+        tree = ET.parse(BINGO_XML)
+        root = tree.getroot()
+        st = root.find("stinger") or ET.SubElement(root, "stinger")
+        st.text = ""
         tree.write(BINGO_XML, encoding="utf-8", xml_declaration=True)
     except Exception:
         pass
 
-    # apaga overlay/spinner
-    _overlay_off()
-    _write_spinner_state(running=False, locked=False, overlay_on=False)
-
-    # limpia estados visuales de figuras (overlay)
+    # 2) apagar overlay/spinner
     try:
-        fecha = _get_sorteo_fecha()
-        cache = _json_read(FIG_ESTADOS_JSON) or {}
-        cache[str(fecha)] = {}
-        _json_write(FIG_ESTADOS_JSON, cache)
-        try:
-            _refresh_vmix_figuras_panel_for_fecha(str(fecha))
-        except Exception:
-            pass
+        _overlay_off()
+    except Exception:
+        pass
+    try:
+        _write_spinner_state(running=False, locked=False, overlay_on=False)
     except Exception:
         pass
 
-    # limpia ganadores
+    # 3) limpiar SIEMPRE estados visuales del juego actual
     try:
-        fecha = _get_sorteo_fecha()
-        # borra lista del día en ganadores.json
+        cache = _json_read(FIG_ESTADOS_JSON) or {}
+        cache[str(fecha)] = {}
+        _json_write(FIG_ESTADOS_JSON, cache)
+    except Exception:
+        pass
+
+    # 4) dejar en cero resultados/ganadores del día actual
+    corrections_cleared = False
+    vmix_carton_reset = False
+    resultados_reset = False
+    figuras_refresh_ok = False
+
+    try:
+        # ganadores.json + state + xml
         data = _safe_json_read(GANADORES_JSON) or {}
         data[str(fecha)] = []
         _safe_json_write(GANADORES_JSON, data)
         _safe_json_write(GANADORES_STATE_JSON, {"keys": []})
         _write_ganadores_xml(str(fecha), 0, [])
-        _sync_resultados_from_juego(str(fecha), [])
+
+        # resultados_sorteo.xml: conservar filas base/extras, pero SIN ganadores
+        try:
+            actual = _cargar_resultados(str(fecha)) or {"items": [], "extras": {"comodin": {}, "gran_bonus": {}}}
+            items_reset = []
+            for item in list(actual.get("items") or []):
+                figura = str(item.get("figura") or item.get("nombre") or "").strip()
+                if not figura:
+                    continue
+                items_reset.append({"figura": figura, "ganadores": []})
+            extras_reset = dict(actual.get("extras") or {})
+            _guardar_resultados(str(fecha), items_reset, extras=extras_reset)
+            resultados_reset = True
+        except Exception:
+            try:
+                _sync_resultados_from_juego(str(fecha), [])
+                resultados_reset = True
+            except Exception:
+                resultados_reset = False
+
+        # correcciones + puntero de cartón ganador
+        try:
+            corrections_cleared = bool(_corr_clear_fecha(str(fecha))) if callable(globals().get('_corr_clear_fecha')) else False
+        except Exception:
+            corrections_cleared = False
+        try:
+            vmix_carton_reset = bool(_reset_vmix_carton_state_for_fecha(str(fecha))) if callable(globals().get('_reset_vmix_carton_state_for_fecha')) else False
+        except Exception:
+            vmix_carton_reset = False
+
+        # refrescar panel/xml de figuras ya sin premios jugados
+        try:
+            _refresh_vmix_figuras_panel_for_fecha(str(fecha))
+            figuras_refresh_ok = True
+        except Exception:
+            figuras_refresh_ok = False
+
+        # snapshot final del estado limpio
+        try:
+            _save_game_state_snapshot(str(fecha), stinger="")
+        except Exception:
+            pass
     except Exception:
         pass
 
-    return jsonify(success=True)
+    return jsonify(
+        success=True,
+        preserve_history=preserve_history,
+        fecha=str(fecha),
+        corrections_cleared=corrections_cleared,
+        vmix_carton_reset=vmix_carton_reset,
+        resultados_reset=resultados_reset,
+        figuras_refresh_ok=figuras_refresh_ok,
+        ganadores_total=0,
+        stack=[],
+        ultimos5=[],
+        last=None,
+        force_reload=True,
+    )
 
 
 @juego_bp.post("/activar_stinger")
@@ -14930,29 +15985,6 @@ def juego_xml_figuras_estado_2col():
     except Exception:
         pass
     return _vmix_xml_response(root)
-
-
-# ============================================================
-#  REGISTRO BP + INICIALIZACIÓN
-# ============================================================
-def register_juego(app):
-    app.register_blueprint(juego_bp)
-    _ensure_bingo_xml()
-    _ensure_hist()
-    _ensure_vmix_xml()
-    _write_spinner_state(running=False, locked=False, overlay_on=False)
-    try:
-        _refresh_vmix_figuras_panel_for_fecha()
-    except Exception:
-        pass
-
-try:
-    app  # noqa
-    if "juego" not in [bp.name for bp in app.blueprints.values()]:
-        register_juego(app)
-except Exception:
-    pass
-
 
 
 # ================== FIN JUEGO ==================
@@ -15715,16 +16747,56 @@ except Exception as _e:
 
 CORRECCIONES_BOLETOS_JSON = _hf_abs(BASE_DIR, "DATA", "static", "db", "correcciones_boletos.json")
 
+try:
+    _CORR_JSON_CACHE  # noqa
+except NameError:
+    _CORR_JSON_CACHE = {"path": "", "mtime": None, "data": {}}
+    _CORR_JSON_LOCK = RLock()
+    _CORR_VERSION = 0
+    _CARTONES_CORR_CACHE = {}
+    _CARTONES_CORR_LOCK = RLock()
+
 def _corr_paths():
     return _hf_db_file_candidates(CORRECCIONES_BOLETOS_JSON) or [CORRECCIONES_BOLETOS_JSON]
+
+def _corr_cache_bump():
+    global _CORR_VERSION
+    try:
+        with _CORR_JSON_LOCK:
+            _CORR_VERSION += 1
+            _CORR_JSON_CACHE["mtime"] = None
+    except Exception:
+        pass
+    try:
+        with _CARTONES_CORR_LOCK:
+            _CARTONES_CORR_CACHE.clear()
+    except Exception:
+        pass
 
 def _read_correcciones():
     srcp = _hf_pick_newest_file(_corr_paths())
     if not srcp:
         return {}
     try:
+        mtime = os.path.getmtime(srcp)
+    except Exception:
+        mtime = None
+    try:
+        with _CORR_JSON_LOCK:
+            if _CORR_JSON_CACHE.get("path") == srcp and _CORR_JSON_CACHE.get("mtime") == mtime:
+                data = _CORR_JSON_CACHE.get("data") or {}
+                return data if isinstance(data, dict) else {}
+    except Exception:
+        pass
+    try:
         data = _safe_json_read(srcp) or {}
-        return data if isinstance(data, dict) else {}
+        data = data if isinstance(data, dict) else {}
+        try:
+            with _CORR_JSON_LOCK:
+                _CORR_JSON_CACHE.update({"path": srcp, "mtime": mtime, "data": data})
+        except Exception:
+            pass
+        return data
     except Exception:
         return {}
 
@@ -15732,10 +16804,21 @@ def _write_correcciones(data):
     try:
         cands = _corr_paths()
         can = cands[0]
-        _safe_json_write(can, data if isinstance(data, dict) else {})
+        payload = data if isinstance(data, dict) else {}
+        _safe_json_write(can, payload)
         srcp = _hf_pick_newest_file(cands) or can
         for p in cands:
             _hf_copy_file(srcp, p)
+        try:
+            with _CORR_JSON_LOCK:
+                _CORR_JSON_CACHE.update({
+                    "path": srcp,
+                    "mtime": (os.path.getmtime(srcp) if os.path.exists(srcp) else None),
+                    "data": payload,
+                })
+        except Exception:
+            pass
+        _corr_cache_bump()
     except Exception:
         pass
 
@@ -15749,6 +16832,44 @@ def _corr_set(fecha, serie_archivo, carton_id, payload):
     ss = fs.setdefault(str(serie_archivo), {})
     ss[str(carton_id)] = payload
     _write_correcciones(data)
+
+
+def _corr_clear_fecha(fecha):
+    """Limpia todas las correcciones de boletos de una fecha completa."""
+    try:
+        key = str(fecha or "").strip()
+        if not key:
+            return False
+        data = _read_correcciones()
+        if not isinstance(data, dict):
+            data = {}
+        if key in data:
+            data.pop(key, None)
+            _write_correcciones(data)
+        else:
+            _corr_cache_bump()
+        return True
+    except Exception:
+        return False
+
+
+def _reset_vmix_carton_state_for_fecha(fecha_iso):
+    """Reinicia el índice/puntero del XML de cartón ganador para una fecha."""
+    try:
+        state = _vmix_carton_state_read() or {}
+        if not isinstance(state, dict):
+            state = {}
+        by_fecha = state.get("por_fecha") if isinstance(state.get("por_fecha"), dict) else {}
+        by_fecha.pop(str(fecha_iso), None)
+        state["por_fecha"] = by_fecha
+        if str(state.get("fecha") or "") == str(fecha_iso):
+            state["fecha"] = str(fecha_iso)
+            state["actual"] = 0
+            state["total"] = 0
+        _vmix_carton_state_write(state)
+        return True
+    except Exception:
+        return False
 
 def _corr_norm_grid5(grid):
     if not isinstance(grid, list) or len(grid) != 5:
@@ -15806,43 +16927,67 @@ try:
         """
         Wrapper de correcciones de boletos SIN romper la firma original.
         Soporta tanto la versión optimizada (6 args) como una versión simple (2 args).
+        Ahora reutiliza caché corregida para no reconstruir todos los cartones en cada consulta/recálculo.
         """
         tickets, by_num = _orig_get_cartones_index_cached(*args, **kwargs)
 
-        # Extrae fecha y serie desde args/kwargs de forma compatible
         fecha_iso = kwargs.get("fecha_iso") if isinstance(kwargs, dict) else None
         serie_archivo = kwargs.get("serie_archivo") if isinstance(kwargs, dict) else None
+        merged = kwargs.get("merged") if isinstance(kwargs, dict) else None
+        mtime = kwargs.get("mtime") if isinstance(kwargs, dict) else None
         if fecha_iso is None and len(args) >= 1:
             fecha_iso = args[0]
         if serie_archivo is None and len(args) >= 2:
             serie_archivo = args[1]
+        if merged is None and len(args) >= 3:
+            merged = args[2]
+        if mtime is None and len(args) >= 6:
+            mtime = args[5]
 
         try:
             corr_all = ((_read_correcciones().get(str(fecha_iso), {}) or {}).get(str(serie_archivo), {}) or {})
             if not corr_all:
                 return tickets, by_num
 
+            merged_sig = tuple((int(s), int(e)) for s, e in (merged or [])) if merged is not None else ()
+            corr_key = (str(fecha_iso), str(serie_archivo), merged_sig, float(mtime or 0.0), int(_CORR_VERSION))
+            try:
+                with _CARTONES_CORR_LOCK:
+                    cc = _CARTONES_CORR_CACHE.get(corr_key)
+                    if cc:
+                        return cc["tickets"], cc["by_num"]
+            except Exception:
+                pass
+
             new_tickets = []
-            for t in (tickets or []):
+            new_by = {}
+            for idx, t in enumerate(tickets or []):
                 tc = dict(t)
-                cid = str(tc.get("carton_id", ""))
+                cid = str(tc.get("carton_id", "")).strip()
                 corr = corr_all.get(cid) or {}
                 if corr:
-                    g2, pm = _corr_apply_to_grid(tc.get("grid"), tc.get("pos_map") or {}, corr)
+                    base_grid = tc.get("grid") or []
+                    base_pos = tc.get("pos_map") or {}
+                    g2, pm = _corr_apply_to_grid(base_grid, base_pos, corr)
                     tc["grid"] = g2
                     tc["pos_map"] = pm
                     tc["nums"] = _ticket_nums_from_grid(g2)
                     tc["__corregido__"] = True
                 new_tickets.append(tc)
-
-            new_by = {}
-            for idx, t in enumerate(new_tickets):
-                for n in (t.get("nums") or set()):
+                for n in (tc.get("nums") or set()):
                     try:
                         nn = int(n)
                     except Exception:
                         continue
                     new_by.setdefault(nn, []).append(idx)
+
+            try:
+                with _CARTONES_CORR_LOCK:
+                    _CARTONES_CORR_CACHE[corr_key] = {"tickets": new_tickets, "by_num": new_by}
+                    if len(_CARTONES_CORR_CACHE) > 20:
+                        _CARTONES_CORR_CACHE.clear()
+            except Exception:
+                pass
 
             return new_tickets, new_by
         except Exception as _corr_e:
@@ -15963,17 +17108,33 @@ def _juego_ticket_info(fecha, serie_archivo, carton_id):
     found = None
     try:
         tickets, _ = _get_cartones_index_cached(str(fecha), str(serie_archivo), merged, df, idcol, mtime)
-        for t in (tickets or []):
-            tid = str(t.get("carton_id", "")).strip()
-            if tid == cid:
-                found = t
-                break
-            try:
-                if int(re.sub(r"\D", "", tid) or 0) == int(re.sub(r"\D", "", cid) or 0):
+        cache_key = (str(fecha), str(serie_archivo), tuple((int(s), int(e)) for s, e in merged), float(mtime))
+        idx = None
+        try:
+            with _CARTONES_INDEX_LOCK:
+                base_cache = _CARTONES_INDEX_CACHE.get(cache_key) or {}
+                idx = (base_cache.get("by_id_exact") or {}).get(cid)
+                if idx is None:
+                    try:
+                        idx = (base_cache.get("by_id_num") or {}).get(int(re.sub(r"\D", "", cid) or 0))
+                    except Exception:
+                        idx = None
+        except Exception:
+            idx = None
+        if idx is not None and 0 <= idx < len(tickets or []):
+            found = tickets[idx]
+        else:
+            for t in (tickets or []):
+                tid = str(t.get("carton_id", "")).strip()
+                if tid == cid:
                     found = t
                     break
-            except Exception:
-                pass
+                try:
+                    if int(re.sub(r"\D", "", tid) or 0) == int(re.sub(r"\D", "", cid) or 0):
+                        found = t
+                        break
+                except Exception:
+                    pass
     except Exception:
         found = None
 
@@ -16086,6 +17247,63 @@ def _hf_admin_check_key(key):
     real = str(os.getenv("GL_SUPERADMIN_KEY") or os.getenv("SUPERADMIN_KEY") or "TLA1299")
     return str(key or "") == real
 
+
+def _hf_programar_tl_key_ok(key):
+    try:
+        ok, _msg = _verify_scope_password('programar_tablas', key)
+        if ok:
+            return True
+    except Exception:
+        pass
+    try:
+        if _hf_admin_check_key(key):
+            return True
+    except Exception:
+        pass
+    return False
+
+
+def _juego_by_series_from_rangos(fecha_iso: str) -> dict:
+    by_series = {}
+    for rg in (_get_rangos_en_juego(str(fecha_iso)) or []):
+        serie = str((rg or {}).get('serie_archivo') or '').strip()
+        desde = _norm_tabla_id((rg or {}).get('desde') or '')
+        hasta = _norm_tabla_id((rg or {}).get('hasta') or '')
+        if not serie or not desde or not hasta:
+            continue
+        by_series.setdefault(serie, []).append((desde, hasta))
+    return by_series
+
+
+def _sorteo_tl_programadas_payload(cfg: dict | None, fecha_iso: str) -> dict:
+    cfg = dict(cfg or {})
+    slots = _tl_prog_build_slots(cfg)
+    resolved = {}
+    try:
+        resolved = _resolve_tl_programadas_for_day(str(fecha_iso), _juego_by_series_from_rangos(str(fecha_iso))) or {}
+    except Exception:
+        resolved = {}
+
+    def _slot(slot_code: str, carton_key: str, objetivo_key: str, serie_key: str):
+        raw_serie = str(cfg.get(serie_key) or '').strip()
+        raw_carton = _tl_prog_norm_carton(cfg.get(carton_key))
+        raw_obj = _tl_prog_parse_int(cfg.get(objetivo_key), 0)
+        resolved_item = dict(resolved.get(slot_code) or {})
+        serie_final = raw_serie or str(resolved_item.get('serie') or '').strip()
+        return {
+            'serie_archivo': serie_final,
+            'carton_id': raw_carton,
+            'objetivo': raw_obj,
+            'carton_resuelto': str(resolved_item.get('carton_id') or '').strip(),
+        }
+
+    return {
+        'activas': '1' if _tl_prog_on(cfg.get('tl_programadas_activas')) else '0',
+        'llena': _slot('TL1', 'tl_programada_llena', 'tl_objetivo_llena', 'tl_serie_llena'),
+        'rellena': _slot('TL2', 'tl_programada_rellena', 'tl_objetivo_rellena', 'tl_serie_rellena'),
+        'yapa': _slot('TL3', 'tl_programada_yapa', 'tl_objetivo_yapa', 'tl_serie_yapa'),
+    }
+
 @app.post("/juego/admin/boletos/meta")
 def _hf_admin_boletos_meta():
     data = request.get_json(silent=True) or request.form or {}
@@ -16097,6 +17315,190 @@ def _hf_admin_boletos_meta():
         fecha = _get_sorteo_fecha() if callable(globals().get("_get_sorteo_fecha")) else datetime.now().strftime("%Y-%m-%d")
     series = _juego_series_en_juego(fecha)
     return jsonify(ok=True, fecha=fecha, series=series)
+
+
+@juego_bp.post("/admin/programacion_manual/meta")
+def _hf_programacion_manual_meta():
+    data = request.get_json(silent=True) or request.form or {}
+    key = data.get('key')
+    if not _hf_programar_tl_key_ok(key):
+        return jsonify(ok=False, error='Clave inválida'), 403
+    fecha = str(data.get('fecha') or '').strip() or _get_sorteo_fecha()
+    cfg = _sorteo_read_config(fecha) if callable(globals().get('_sorteo_read_config')) else {}
+    series = _juego_series_en_juego(fecha)
+    return jsonify(
+        ok=True,
+        fecha=fecha,
+        series=series,
+        programacion=_sorteo_tl_programadas_payload(cfg, fecha),
+        sorteo={
+            'nombre_sorteo': str((cfg or {}).get('nombre_sorteo') or f'Sorteo {fecha}').strip(),
+            'estado': str((cfg or {}).get('estado') or '').strip(),
+            'activo': str((cfg or {}).get('activo') or '0').strip(),
+        },
+    )
+
+
+@juego_bp.post("/admin/programacion_manual/save")
+def _hf_programacion_manual_save():
+    data = request.get_json(silent=True) or request.form or {}
+    key = data.get('key')
+    if not _hf_programar_tl_key_ok(key):
+        return jsonify(ok=False, error='Clave inválida'), 403
+    fecha = str(data.get('fecha') or '').strip() or _get_sorteo_fecha()
+    prev = _sorteo_read_config(fecha) if callable(globals().get('_sorteo_read_config')) else {}
+    cfg = dict(prev or {})
+
+    def _clean_carton(v):
+        return _tl_prog_norm_carton(v)
+
+    def _clean_obj(v):
+        n = _tl_prog_parse_int(v, 0)
+        return str(n) if n > 0 else ''
+
+    def _clean_serie(v):
+        return str(v or '').strip()
+
+    activas_raw = data.get('activas')
+    if activas_raw in (None, ''):
+        activas_raw = '1' if any(str(data.get(k) or '').strip() for k in (
+            'llena_carton', 'rellena_carton', 'yapa_carton',
+            'llena_objetivo', 'rellena_objetivo', 'yapa_objetivo',
+        )) else '0'
+
+    cfg['tl_programadas_activas'] = '1' if _tl_prog_on(activas_raw) else '0'
+    cfg['tl_programada_llena'] = _clean_carton(data.get('llena_carton'))
+    cfg['tl_programada_rellena'] = _clean_carton(data.get('rellena_carton'))
+    cfg['tl_programada_yapa'] = _clean_carton(data.get('yapa_carton'))
+    cfg['tl_objetivo_llena'] = _clean_obj(data.get('llena_objetivo'))
+    cfg['tl_objetivo_rellena'] = _clean_obj(data.get('rellena_objetivo'))
+    cfg['tl_objetivo_yapa'] = _clean_obj(data.get('yapa_objetivo'))
+    cfg['tl_serie_llena'] = _clean_serie(data.get('llena_serie')) if cfg['tl_programada_llena'] else ''
+    cfg['tl_serie_rellena'] = _clean_serie(data.get('rellena_serie')) if cfg['tl_programada_rellena'] else ''
+    cfg['tl_serie_yapa'] = _clean_serie(data.get('yapa_serie')) if cfg['tl_programada_yapa'] else ''
+    cfg['tl_programadas_cartones'] = ','.join([x for x in [
+        cfg.get('tl_programada_llena') or '',
+        cfg.get('tl_programada_rellena') or '',
+        cfg.get('tl_programada_yapa') or '',
+    ] if x])
+
+    saved = _sorteo_save_config(fecha, cfg, activar=False, finalizar=False)
+    return jsonify(
+        ok=True,
+        fecha=fecha,
+        series=_juego_series_en_juego(fecha),
+        programacion=_sorteo_tl_programadas_payload(saved, fecha),
+        sorteo={
+            'nombre_sorteo': str((saved or {}).get('nombre_sorteo') or f'Sorteo {fecha}').strip(),
+            'estado': str((saved or {}).get('estado') or '').strip(),
+            'activo': str((saved or {}).get('activo') or '0').strip(),
+        },
+    )
+
+
+@juego_bp.post("/admin/programacion_manual/clear")
+def _hf_programacion_manual_clear():
+    data = request.get_json(silent=True) or request.form or {}
+    key = data.get('key')
+    if not _hf_programar_tl_key_ok(key):
+        return jsonify(ok=False, error='Clave inválida'), 403
+    fecha = str(data.get('fecha') or '').strip() or _get_sorteo_fecha()
+    prev = _sorteo_read_config(fecha) if callable(globals().get('_sorteo_read_config')) else {}
+    cfg = dict(prev or {})
+    for k in (
+        'tl_programadas_cartones',
+        'tl_programada_llena', 'tl_programada_rellena', 'tl_programada_yapa',
+        'tl_objetivo_llena', 'tl_objetivo_rellena', 'tl_objetivo_yapa',
+        'tl_serie_llena', 'tl_serie_rellena', 'tl_serie_yapa',
+    ):
+        cfg[k] = ''
+    cfg['tl_programadas_activas'] = '0'
+    saved = _sorteo_save_config(fecha, cfg, activar=False, finalizar=False)
+    return jsonify(
+        ok=True,
+        fecha=fecha,
+        series=_juego_series_en_juego(fecha),
+        programacion=_sorteo_tl_programadas_payload(saved, fecha),
+        sorteo={
+            'nombre_sorteo': str((saved or {}).get('nombre_sorteo') or f'Sorteo {fecha}').strip(),
+            'estado': str((saved or {}).get('estado') or '').strip(),
+            'activo': str((saved or {}).get('activo') or '0').strip(),
+        },
+    )
+
+
+# ============================================================
+#  REGISTRO BP + INICIALIZACIÓN
+# ============================================================
+def register_juego(app):
+    app.register_blueprint(juego_bp)
+    _ensure_bingo_xml()
+    _ensure_hist()
+    _ensure_vmix_xml()
+    _write_spinner_state(running=False, locked=False, overlay_on=False)
+    try:
+        _refresh_vmix_figuras_panel_for_fecha()
+    except Exception:
+        pass
+
+try:
+    app  # noqa
+    if "juego" not in [bp.name for bp in app.blueprints.values()]:
+        register_juego(app)
+except Exception:
+    pass
+
+def _ticket_original_grid_fast(serie_archivo, carton_id):
+    """Obtiene la grilla ORIGINAL del boleto usando la caché de la serie, sin tocar el motor de juego."""
+    cid = str(carton_id or "").strip()
+    if not cid:
+        return None
+    try:
+        df, idcol, ids, id_to_idx, _mtime = _get_series_meta_cached(serie_archivo)
+        idx = id_to_idx.get(cid)
+        if idx is None:
+            try:
+                cid_num = int(re.sub(r"\D", "", cid) or 0)
+            except Exception:
+                cid_num = None
+            if cid_num is not None:
+                for i, vv in enumerate(ids or []):
+                    try:
+                        if int(re.sub(r"\D", "", str(vv)) or 0) == cid_num:
+                            idx = i
+                            break
+                    except Exception:
+                        continue
+        if idx is None:
+            return None
+        row = df.iloc[int(idx)]
+        row_lower = {str(c).strip().lower(): row[c] for c in df.columns}
+        grid, _ = _build_grid_from_row(row_lower)
+        return grid
+    except Exception:
+        return None
+
+
+def _ticket_has_winner_for_day(fecha_iso, serie_archivo, carton_id):
+    """True si ese boleto ya figura como ganador hoy."""
+    fecha_iso = str(fecha_iso)
+    serie_archivo = str(serie_archivo or "").strip()
+    tabla = _norm_tabla_id(carton_id)
+    try:
+        data = _safe_json_read(GANADORES_JSON) or {}
+        for g in (data.get(fecha_iso) or []):
+            if not isinstance(g, dict):
+                continue
+            try:
+                gserie = str(g.get('serie') or '').strip()
+                gtabla = _norm_tabla_id(g.get('tabla') or g.get('boleto') or '')
+                if gtabla == tabla and (_serie_equal(gserie, serie_archivo) if gserie and serie_archivo else gserie == serie_archivo):
+                    return True
+            except Exception:
+                continue
+    except Exception:
+        pass
+    return False
 
 @app.post("/juego/admin/boletos/get")
 def _hf_admin_boletos_get():
@@ -16118,18 +17520,7 @@ def _hf_admin_boletos_get():
         return jsonify(ok=False, error=err), 404
     corr = _corr_get(fecha, serie_archivo, carton_id) or {}
     try:
-        df = _read_df_for_series(serie_archivo)
-        idcol = str(df.columns[0])
-        m = df[df[idcol].astype(str).str.strip() == str(carton_id).strip()]
-        if m is None or m.empty:
-            n = int(re.sub(r"\D", "", str(carton_id)) or 0)
-            m = df[pd.to_numeric(df[idcol], errors="coerce").fillna(-1).astype(int) == n]
-        if m is not None and not m.empty:
-            row = m.iloc[0]
-            row_lower = {str(c).strip().lower(): row[c] for c in df.columns}
-            orig_grid, _ = _build_grid_from_row(row_lower)
-        else:
-            orig_grid = payload.get("grid")
+        orig_grid = _ticket_original_grid_fast(serie_archivo, carton_id) or payload.get("grid")
     except Exception:
         orig_grid = payload.get("grid")
     stack = _read_stack() or []
@@ -16182,6 +17573,11 @@ def _hf_admin_boletos_save():
     except Exception:
         pass
 
+    prev_corr = _corr_get(fecha, serie_archivo, carton_id) or {}
+    old_grid = prev_corr.get("grid") if isinstance(prev_corr, dict) else None
+    if not old_grid:
+        old_grid = _ticket_original_grid_fast(serie_archivo, carton_id)
+
     payload = {
         "grid": grid,
         "motivo": motivo,
@@ -16190,12 +17586,31 @@ def _hf_admin_boletos_save():
     }
     _corr_set(fecha, serie_archivo, carton_id, payload)
 
+    # Fast path seguro: si no cambió ningún número YA marcado del boleto y ese boleto no figura
+    # hoy como ganador, no hace falta recalcular todo el juego.
     try:
-        _clear_juego_caches()
-    except Exception:
-        pass
-    try:
+        old_nums = _ticket_nums_from_grid(old_grid or [])
+        new_nums = _ticket_nums_from_grid(grid or [])
         stack = _read_stack() or []
+        marked_now = set()
+        for _n in (stack or []):
+            try:
+                _ni = int(str(_n).strip())
+                if 1 <= _ni <= 75:
+                    marked_now.add(_ni)
+            except Exception:
+                pass
+        touched_marked = bool((old_nums ^ new_nums) & marked_now)
+        impacted_winner = _ticket_has_winner_for_day(str(fecha), str(serie_archivo), str(carton_id))
+        if (not touched_marked) and (not impacted_winner):
+            return jsonify(ok=True, msg="Corrección guardada", fecha=fecha, fast_path=True)
+    except Exception:
+        stack = _read_stack() or []
+
+    # No limpiamos las caches base de series/cartones: las correcciones se aplican por overlay
+    # y eso evita reconstruir miles de cartones innecesariamente en cada guardado.
+    try:
+        stack = stack if 'stack' in locals() else (_read_stack() or [])
         ultimo = int(stack[-1]) if stack else 0
         ganadores_total, _ = _recalcular_ganadores(str(fecha), stack, ultimo)
         _sync_resultados_from_juego(str(fecha), ganadores_total)
@@ -16215,7 +17630,7 @@ def _hf_admin_boletos_save():
     except Exception as _e:
         return jsonify(ok=True, warning=f"Corrección guardada, pero no se pudo recalcular: {_e}")
 
-    return jsonify(ok=True, msg="Corrección guardada y juego recalculado", fecha=fecha)
+    return jsonify(ok=True, msg="Corrección guardada y juego recalculado", fecha=fecha, fast_path=False)
 
 @app.get("/juego/admin/boletos/estado")
 def _hf_admin_boletos_estado():
@@ -16910,6 +18325,38 @@ def _gdx_build_line_rows(row: dict, has_winner: bool) -> list:
         line_rows.append({"campo": field, "texto": txt})
     return line_rows
 
+def _gdx_current_row_from_state(rows: list, fecha_iso: str, action=None, index_override=None) -> dict:
+    """Mantiene el XML de planillas sincronizado con el mismo índice usado por cartón ganador."""
+    if not rows:
+        return {f: "" for f in _GDX_FIELDS}
+
+    idx0 = len(rows) - 1
+    try:
+        if "_vmix_carton_pick_index" in globals() and callable(_vmix_carton_pick_index):
+            idx0, _idx1 = _vmix_carton_pick_index(len(rows), str(fecha_iso), action=action, index_override=index_override)
+        elif "_vmix_carton_state_read" in globals() and callable(_vmix_carton_state_read):
+            state = _vmix_carton_state_read() or {}
+            by_fecha = state.get("por_fecha") if isinstance(state.get("por_fecha"), dict) else {}
+            raw = by_fecha.get(str(fecha_iso), state.get("actual", len(rows)))
+            try:
+                idx1 = int(raw)
+            except Exception:
+                idx1 = len(rows)
+            if idx1 < 1:
+                idx1 = 1
+            if idx1 > len(rows):
+                idx1 = len(rows)
+            idx0 = idx1 - 1
+    except Exception:
+        idx0 = len(rows) - 1
+
+    if idx0 < 0:
+        idx0 = 0
+    if idx0 >= len(rows):
+        idx0 = len(rows) - 1
+    return rows[idx0]
+
+
 def _gdx_build_root(fecha_iso: str = "") -> ET.Element:
     fecha_iso = _gdx_str(fecha_iso) or (_get_sorteo_fecha() if callable(globals().get("_get_sorteo_fecha")) else date.today().isoformat())
     idx_map = _gdx_num_fig_map(fecha_iso)
@@ -16927,7 +18374,14 @@ def _gdx_build_root(fecha_iso: str = "") -> ET.Element:
         if any(_gdx_str(row.get(k)) for k in ("figura", "boleto", "vendedor", "cliente_nombre", "sector")):
             rows.append(row)
 
-    last = rows[-1] if rows else {f: "" for f in _GDX_FIELDS}
+    action = _gdx_str(request.args.get("accion") or request.args.get("a") or request.args.get("action")) if request else ""
+    idx_raw = _gdx_str(request.args.get("index") or request.args.get("idx")) if request else ""
+    try:
+        idx_override = int(idx_raw) if idx_raw else None
+    except Exception:
+        idx_override = None
+
+    last = _gdx_current_row_from_state(rows, fecha_iso, action=action, index_override=idx_override) if rows else {f: "" for f in _GDX_FIELDS}
     if not _gdx_str(last.get("texto_completo")):
         last["texto_completo"] = "SIN GANADOR AUN"
 
